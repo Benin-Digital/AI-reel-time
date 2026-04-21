@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from time import monotonic
+from time import monotonic, time
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -41,7 +41,7 @@ class DebouncedHandler(FileSystemEventHandler):
             WatchEvent(
                 path=event_path,
                 event_type=event.event_type,
-                observed_at=now,
+                observed_at=time(),
             )
         )
 

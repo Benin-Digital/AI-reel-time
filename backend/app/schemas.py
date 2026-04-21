@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -21,3 +22,9 @@ class EventRead(BaseModel):
     fingerprint: str | None
     observed_at: float
     created_at: datetime
+
+
+class WatcherSimulateRequest(BaseModel):
+    folder: Literal["cv", "job"] = "cv"
+    filename: str
+    content: str = "sample content"
