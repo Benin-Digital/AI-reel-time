@@ -90,3 +90,22 @@ scripts/vm/verify_stack.sh
 ## 8. Etape suivante conseillee
 
 Une fois ce setup valide, creer un `docker-compose.yml` unique pour standardiser les environnements preprod/prod avec le minimum d'ecart possible.
+
+## 9. Smoke test Docker (API + watcher + persistence)
+
+Depuis la racine du projet:
+
+```bash
+docker compose up -d --build
+curl -sS http://localhost:8000/health
+curl -sS -X POST http://localhost:8000/watcher/simulate \
+	-H 'content-type: application/json' \
+	-d '{"folder":"cv","filename":"cv_demo.txt","content":"python fastapi sql"}'
+curl -sS 'http://localhost:8000/events?limit=10'
+```
+
+Si tu veux nettoyer l'environnement local:
+
+```bash
+docker compose down -v
+```
