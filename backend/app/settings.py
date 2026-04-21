@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "AI Real-Time API"
     environment: str = "local"
+    database_url: str = "postgresql+psycopg://airealtime:airealtime@localhost:5432/airealtime"
+    redis_url: str = "redis://localhost:6379/0"
     watch_cv_dir: str = "/srv/ai-realtime/storage/cv"
     watch_job_dir: str = "/srv/ai-realtime/storage/job"
 
