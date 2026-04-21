@@ -1,0 +1,58 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: airealtime-api
+    environment:
+      AI_REALTIME_ENVIRONMENT: docker-local
+      AI_REALTIME_DATABASE_URL: postgresql+psycopg://airealtime:airealtime@postgres:5432/airealtime
+      AI_REALTIME_REDIS_URL: redis://redis:6379/0
+      AI_REALTIME_WATCH_CV_DIR: /srv/ai-realtime/storage/cv
+      AI_REALTIME_WATCH_JOB_DIR: /srv/ai-realtime/storage/job
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./storage/cv:/srv/ai-realtime/storage/cv
+      - ./storage/job:/srv/ai-realtime/storage/job
+      - ./storage/archive:/srv/ai-realtime/storage/archive
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: airealtime-postgres
+    environment:
+      POSTGRES_DB: airealtime
+      POSTGRES_USER: airealtime
+      POSTGRES_PASSWORD: airealtime
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airealtime -d airealtime"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    container_name: airealtime-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres_data:
+  redis_data:
