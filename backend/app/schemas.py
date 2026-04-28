@@ -28,3 +28,27 @@ class WatcherSimulateRequest(BaseModel):
     folder: Literal["cv", "job"] = "cv"
     filename: str
     content: str = "sample content"
+
+
+class ExtractedTextCreate(BaseModel):
+    file_path: str
+    content_hash: str | None = None
+    extracted_text: str | None = None
+    extraction_method: str = "unknown"
+    extraction_success: bool = False
+    error_message: str | None = None
+
+
+class ExtractedTextRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    file_path: str
+    content_hash: str | None
+    extracted_text: str | None
+    extraction_method: str
+    extraction_success: bool
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
+
