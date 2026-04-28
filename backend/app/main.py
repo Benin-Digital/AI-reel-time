@@ -7,9 +7,9 @@ from fastapi import FastAPI
 from sqlalchemy import select
 
 from .db import SessionLocal, init_db
-from .models import EventLog
-from .schemas import EventCreate, EventRead, WatcherSimulateRequest
-from .services import LocalFolderWatcher, WatchEvent, file_sha256
+from .models import EventLog, ExtractedText
+from .schemas import EventCreate, EventRead, WatcherSimulateRequest, ExtractedTextCreate, ExtractedTextRead
+from .services import LocalFolderWatcher, WatchEvent, file_sha256, extract_text
 from .settings import get_settings
 
 settings = get_settings()
@@ -29,6 +29,22 @@ def _insert_event(payload: EventCreate) -> EventRead:
         session.commit()
         session.refresh(event)
         return EventRead.model_validate(event)
+
+
+def _insert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead:
+    with SessionLocal() as session:
+        extraction = ExtractedText(
+            file_path=payload.file_path,
+            content_hash=payload.content_hash,
+            extracted_text=payload.extracted_text,
+            extraction_method=payload.extraction_method,
+            extraction_success=payload.extraction_success,
+            error_message=payload.error_message,
+        )
+        session.add(extraction)
+        session.commit()
+        session.refresh(extraction)
+        return ExtractedTextRead.model_validate(extraction)
 
 
 def _on_watch_event(event: WatchEvent) -> None:
@@ -105,3 +121,53 @@ def simulate_watcher_event(payload: WatcherSimulateRequest) -> dict[str, str]:
         "path": str(target),
         "timestamp": str(time()),
     }
+
+
+@app.post("/extract", response_model=ExtractedTextRead)
+def ingest_and_extract(file_path: str) -> ExtractedTextRead:
+    """Extract text from a file by path."""
+    path = Path(file_path)
+
+    if not path.exists():
+        logger.warning(f"File not found for extraction: {file_path}")
+        return _insert_extraction_result(
+            ExtractedTextCreate(
+                file_path=file_path,
+                extraction_success=False,
+                error_message="File not found",
+            )
+        )
+
+    try:
+        # Extract text
+        extracted = extract_text(path)
+        
+        # Calculate content hash
+        content_hash = file_sha256(path) if path.is_file() else None
+
+        # Determine extraction method by file extension
+        method = path.suffix.lower().lstrip(".")
+        if not method:
+            method = "unknown"
+
+        success = bool(extracted and extracted.strip())
+
+        return _insert_extraction_result(
+            ExtractedTextCreate(
+                file_path=file_path,
+                content_hash=content_hash,
+                extracted_text=extracted,
+                extraction_method=method,
+                extraction_success=success,
+                error_message=None if success else "No text extracted",
+            )
+        )
+    except Exception as exc:
+        logger.exception(f"Extraction failed for {file_path}: {exc}")
+        return _insert_extraction_result(
+            ExtractedTextCreate(
+                file_path=file_path,
+                extraction_success=False,
+                error_message=str(exc),
+            )
+        )
