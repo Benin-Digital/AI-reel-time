@@ -31,8 +31,22 @@ def _insert_event(payload: EventCreate) -> EventRead:
         return EventRead.model_validate(event)
 
 
-def _insert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead:
+def _upsert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead:
     with SessionLocal() as session:
+        existing = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == payload.file_path)
+        )
+
+        if existing:
+            existing.content_hash = payload.content_hash
+            existing.extracted_text = payload.extracted_text
+            existing.extraction_method = payload.extraction_method
+            existing.extraction_success = payload.extraction_success
+            existing.error_message = payload.error_message
+            session.commit()
+            session.refresh(existing)
+            return ExtractedTextRead.model_validate(existing)
+
         extraction = ExtractedText(
             file_path=payload.file_path,
             content_hash=payload.content_hash,
@@ -125,12 +139,11 @@ def simulate_watcher_event(payload: WatcherSimulateRequest) -> dict[str, str]:
 
 @app.post("/extract", response_model=ExtractedTextRead)
 def ingest_and_extract(file_path: str) -> ExtractedTextRead:
-    """Extract text from a file by path."""
     path = Path(file_path)
 
     if not path.exists():
-        logger.warning(f"File not found for extraction: {file_path}")
-        return _insert_extraction_result(
+        logger.warning("File not found for extraction: %s", file_path)
+        return _upsert_extraction_result(
             ExtractedTextCreate(
                 file_path=file_path,
                 extraction_success=False,
@@ -139,20 +152,16 @@ def ingest_and_extract(file_path: str) -> ExtractedTextRead:
         )
 
     try:
-        # Extract text
         extracted = extract_text(path)
-        
-        # Calculate content hash
         content_hash = file_sha256(path) if path.is_file() else None
 
-        # Determine extraction method by file extension
         method = path.suffix.lower().lstrip(".")
         if not method:
             method = "unknown"
 
         success = bool(extracted and extracted.strip())
 
-        return _insert_extraction_result(
+        return _upsert_extraction_result(
             ExtractedTextCreate(
                 file_path=file_path,
                 content_hash=content_hash,
@@ -163,8 +172,8 @@ def ingest_and_extract(file_path: str) -> ExtractedTextRead:
             )
         )
     except Exception as exc:
-        logger.exception(f"Extraction failed for {file_path}: {exc}")
-        return _insert_extraction_result(
+        logger.exception("Extraction failed for %s: %s", file_path, exc)
+        return _upsert_extraction_result(
             ExtractedTextCreate(
                 file_path=file_path,
                 extraction_success=False,
