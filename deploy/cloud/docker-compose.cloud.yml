@@ -1,0 +1,74 @@
+services:
+  traefik:
+    image: traefik:v3.3
+    container_name: airealtime-traefik
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --certificatesresolvers.le.acme.email=${TRAEFIK_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+
+  api:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    container_name: airealtime-api
+    environment:
+      AI_REALTIME_ENVIRONMENT: cloud
+      AI_REALTIME_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AI_REALTIME_REDIS_URL: redis://redis:6379/0
+      AI_REALTIME_WATCH_CV_DIR: /srv/ai-realtime/storage/cv
+      AI_REALTIME_WATCH_JOB_DIR: /srv/ai-realtime/storage/job
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.airealtime.rule=Host(`${AIREALTIME_DOMAIN}`)
+      - traefik.http.routers.airealtime.entrypoints=websecure
+      - traefik.http.routers.airealtime.tls.certresolver=le
+      - traefik.http.services.airealtime.loadbalancer.server.port=8000
+    volumes:
+      - /srv/ai-realtime/storage:/srv/ai-realtime/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: airealtime-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    container_name: airealtime-redis
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres_data:
+  redis_data:
