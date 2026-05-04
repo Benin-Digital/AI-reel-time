@@ -18,3 +18,9 @@ Ce dossier contient une proposition d'architecture complete pour un nouveau proj
 1. Lire `HYBRID_STACK_SETUP.md`.
 2. Dans la VM Ubuntu, lancer `scripts/vm/bootstrap_ubuntu.sh` (sudo).
 3. Verifier l'environnement avec `scripts/vm/verify_stack.sh`.
+
+## Deploiement (Option B - Cloud)
+
+- Compose local: deploy/local/docker-compose.local.yml
+- Compose cloud: deploy/cloud/docker-compose.cloud.yml
+- Guide cloud: deploy/cloud/README.md
