@@ -2,20 +2,27 @@ import re
 from collections.abc import Iterable
 
 
-def _tokenize(text: str) -> set[str]:
+def _tokenize(text: str) -> list[str]:
     tokens = re.findall(r"[a-zA-Z0-9]+", text.lower())
-    return {token for token in tokens if len(token) >= 3}
+    return [token for token in tokens if len(token) >= 3]
+
+
+def _token_set(text: str) -> set[str]:
+    return set(_tokenize(text))
 
 
 def score_texts(cv_text: str, job_text: str) -> tuple[float, list[str]]:
-    cv_tokens = _tokenize(cv_text)
-    job_tokens = _tokenize(job_text)
+    cv_tokens = _token_set(cv_text)
+    job_tokens = _token_set(job_text)
 
     if not cv_tokens or not job_tokens:
         return 0.0, []
 
     common = sorted(cv_tokens.intersection(job_tokens))
-    score = (2 * len(common)) / (len(cv_tokens) + len(job_tokens))
+    overlap = (2 * len(common)) / (len(cv_tokens) + len(job_tokens))
+
+    keyword_bonus = min(0.2, len(common) * 0.02)
+    score = min(1.0, overlap + keyword_bonus)
     return round(score * 100, 2), common
 
 
