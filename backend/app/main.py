@@ -3,13 +3,13 @@ import logging
 from pathlib import Path
 from time import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from sqlalchemy import select
 
 from .db import SessionLocal, init_db
-from .models import EventLog, ExtractedText
-from .schemas import EventCreate, EventRead, WatcherSimulateRequest, ExtractedTextCreate, ExtractedTextRead
-from .services import LocalFolderWatcher, WatchEvent, file_sha256, extract_text
+from .models import EventLog, ExtractedText, ScoreResult
+from .schemas import EventCreate, EventRead, WatcherSimulateRequest, ExtractedTextCreate, ExtractedTextRead, ScoreRequest, ScoreRead
+from .services import LocalFolderWatcher, WatchEvent, file_sha256, extract_text, score_texts, serialize_keywords, deserialize_keywords
 from .settings import get_settings
 
 settings = get_settings()
@@ -59,6 +59,27 @@ def _upsert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead
         session.commit()
         session.refresh(extraction)
         return ExtractedTextRead.model_validate(extraction)
+
+
+def _insert_score_result(cv_path: Path, job_path: Path, score: float, common: list[str]) -> ScoreRead:
+    with SessionLocal() as session:
+        result = ScoreResult(
+            cv_path=str(cv_path),
+            job_path=str(job_path),
+            score=score,
+            common_keywords=serialize_keywords(common),
+        )
+        session.add(result)
+        session.commit()
+        session.refresh(result)
+        return ScoreRead(
+            id=result.id,
+            cv_path=result.cv_path,
+            job_path=result.job_path,
+            score=result.score,
+            common_keywords=deserialize_keywords(result.common_keywords),
+            created_at=result.created_at,
+        )
 
 
 def _on_watch_event(event: WatchEvent) -> None:
@@ -147,6 +168,23 @@ def list_extractions(limit: int = 50) -> list[ExtractedTextRead]:
             select(ExtractedText).order_by(ExtractedText.id.desc()).limit(safe_limit)
         ).all()
         return [ExtractedTextRead.model_validate(row) for row in rows]
+
+
+
+@app.post("/score", response_model=ScoreRead)
+def score_match(payload: ScoreRequest) -> ScoreRead:
+    cv_path = Path(payload.cv_path)
+    job_path = Path(payload.job_path)
+
+    if not cv_path.exists():
+        raise HTTPException(status_code=404, detail="CV file not found")
+    if not job_path.exists():
+        raise HTTPException(status_code=404, detail="JOB file not found")
+
+    cv_text = extract_text(cv_path)
+    job_text = extract_text(job_path)
+    score, common = score_texts(cv_text, job_text)
+    return _insert_score_result(cv_path, job_path, score, common)
 
 @app.post("/extract", response_model=ExtractedTextRead)
 def ingest_and_extract(file_path: str) -> ExtractedTextRead:
