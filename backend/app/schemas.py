@@ -52,3 +52,18 @@ class ExtractedTextRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+class ScoreRequest(BaseModel):
+    cv_path: str
+    job_path: str
+
+
+class ScoreRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    cv_path: str
+    job_path: str
+    score: float
+    common_keywords: list[str]
+    created_at: datetime

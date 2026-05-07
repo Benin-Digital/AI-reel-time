@@ -42,3 +42,17 @@ class ExtractedText(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+class ScoreResult(Base):
+    __tablename__ = "score_results"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    cv_path: Mapped[str] = mapped_column(String(1024))
+    job_path: Mapped[str] = mapped_column(String(1024))
+    score: Mapped[float] = mapped_column(Float)
+    common_keywords: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
