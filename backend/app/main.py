@@ -137,6 +137,17 @@ def simulate_watcher_event(payload: WatcherSimulateRequest) -> dict[str, str]:
     }
 
 
+
+
+@app.get("/extractions", response_model=list[ExtractedTextRead])
+def list_extractions(limit: int = 50) -> list[ExtractedTextRead]:
+    safe_limit = max(1, min(limit, 200))
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(ExtractedText).order_by(ExtractedText.id.desc()).limit(safe_limit)
+        ).all()
+        return [ExtractedTextRead.model_validate(row) for row in rows]
+
 @app.post("/extract", response_model=ExtractedTextRead)
 def ingest_and_extract(file_path: str) -> ExtractedTextRead:
     path = Path(file_path)
