@@ -186,6 +186,26 @@ def score_match(payload: ScoreRequest) -> ScoreRead:
     score, common = score_texts(cv_text, job_text)
     return _insert_score_result(cv_path, job_path, score, common)
 
+
+@app.get("/scores", response_model=list[ScoreRead])
+def list_scores(limit: int = 50) -> list[ScoreRead]:
+    safe_limit = max(1, min(limit, 200))
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(ScoreResult).order_by(ScoreResult.id.desc()).limit(safe_limit)
+        ).all()
+        return [
+            ScoreRead(
+                id=row.id,
+                cv_path=row.cv_path,
+                job_path=row.job_path,
+                score=row.score,
+                common_keywords=deserialize_keywords(row.common_keywords),
+                created_at=row.created_at,
+            )
+            for row in rows
+        ]
+
 @app.post("/extract", response_model=ExtractedTextRead)
 def ingest_and_extract(file_path: str) -> ExtractedTextRead:
     path = Path(file_path)
