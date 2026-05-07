@@ -30,9 +30,7 @@ class ExtractedText(Base):
     file_path: Mapped[str] = mapped_column(String(1024), unique=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=True)
     extracted_text: Mapped[str] = mapped_column(Text, nullable=True)
-    extraction_method: Mapped[str] = mapped_column(
-        String(32), default="unknown"
-    )  # "pdf", "docx", "txt", "ocr"
+    extraction_method: Mapped[str] = mapped_column(String(32), default="unknown")
     extraction_success: Mapped[bool] = mapped_column(default=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -44,4 +42,3 @@ class ExtractedText(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-
