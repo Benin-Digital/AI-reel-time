@@ -3,17 +3,39 @@ import logging
 from pathlib import Path
 from time import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from .db import SessionLocal, init_db
 from .models import EventLog, ExtractedText, ScoreResult
 from .schemas import EventCreate, EventRead, WatcherSimulateRequest, ExtractedTextCreate, ExtractedTextRead, ScoreRequest, ScoreRead
 from .services import LocalFolderWatcher, WatchEvent, file_sha256, extract_text, score_texts, serialize_keywords, deserialize_keywords
+from .security import enforce_security, validate_security_settings
 from .settings import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+def _parse_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _configure_cors(app: FastAPI) -> None:
+    origins = _parse_csv(settings.cors_allow_origins)
+    if not origins:
+        return
+
+    methods = _parse_csv(settings.cors_allow_methods)
+    headers = _parse_csv(settings.cors_allow_headers)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_methods=methods or ["*"],
+        allow_headers=headers or ["*"],
+    )
 
 
 def _insert_event(payload: EventCreate) -> EventRead:
@@ -103,6 +125,7 @@ def _on_watch_event(event: WatchEvent) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_security_settings()
     init_db()
     watched_folders = [Path(settings.watch_cv_dir), Path(settings.watch_job_dir)]
     watcher = LocalFolderWatcher(folders=watched_folders, callback=_on_watch_event)
@@ -115,6 +138,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+_configure_cors(app)
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    enforce_security(request)
+    return await call_next(request)
 
 
 @app.get("/health")
