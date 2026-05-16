@@ -10,4 +10,5 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def init_db() -> None:
-    Base.metadata.create_all(bind=engine)
+    if settings.database_auto_create:
+        Base.metadata.create_all(bind=engine)
