@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     cors_allow_origins: str = ""
     cors_allow_methods: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
     cors_allow_headers: str = "Authorization,Content-Type,X-API-Key"
+    scoring_skill_keywords: str = "python,sql,postgresql,fastapi,docker,kubernetes,aws,azure,linux,git"
+    scoring_skill_weight: float = 1.5
+    scoring_synonyms: str = "js=javascript,ts=typescript,nodejs=node,postgres=postgresql,py=python"
+    scoring_stopwords_languages: str = "fr,en"
+    scoring_stopwords: str = ""
+    scoring_phrase_bonus: float = 0.05
+    scoring_max_bonus: float = 0.25
+    scoring_experience_bonus: float = 0.1
+    scoring_experience_penalty: float = 0.05
 
     model_config = SettingsConfigDict(env_prefix="AI_REALTIME_", extra="ignore")
 
