@@ -5,8 +5,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "AI Real-Time API"
+    app_version: str = "0.1.0"
     environment: str = "local"
     database_url: str = "postgresql+psycopg://airealtime:airealtime@localhost:5432/airealtime"
+    database_auto_create: bool = True
     redis_url: str = "redis://localhost:6379/0"
     watch_cv_dir: str = "/srv/ai-realtime/storage/cv"
     watch_job_dir: str = "/srv/ai-realtime/storage/job"
@@ -18,6 +20,11 @@ class Settings(BaseSettings):
     cors_allow_origins: str = ""
     cors_allow_methods: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
     cors_allow_headers: str = "Authorization,Content-Type,X-API-Key"
+    log_level: str = "INFO"
+    log_json: bool = False
+    retention_event_days: int = 30
+    retention_extraction_days: int = 30
+    retention_score_days: int = 60
     scoring_skill_keywords: str = "python,sql,postgresql,fastapi,docker,kubernetes,aws,azure,linux,git"
     scoring_skill_weight: float = 1.5
     scoring_synonyms: str = "js=javascript,ts=typescript,nodejs=node,postgres=postgresql,py=python"

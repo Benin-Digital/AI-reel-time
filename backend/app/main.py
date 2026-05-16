@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
+import json
 import logging
 from pathlib import Path
-from time import time
+from time import perf_counter, time
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+import redis
+from sqlalchemy import delete, func, select, text
 
 from .db import SessionLocal, init_db
 from .models import EventLog, ExtractedText, ScoreResult
@@ -16,6 +19,41 @@ from .settings import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "logger": record.name,
+            "time": self.formatTime(record, datefmt="%Y-%m-%dT%H:%M:%SZ"),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        for key in ("request_id", "path", "method", "status", "duration_ms"):
+            value = getattr(record, key, None)
+            if value is not None:
+                payload[key] = value
+        return json.dumps(payload)
+
+
+def _configure_logging() -> None:
+    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    handler = logging.StreamHandler()
+    if settings.log_json:
+        handler.setFormatter(_JsonFormatter())
+    else:
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+        )
+    root = logging.getLogger()
+    root.handlers = [handler]
+    root.setLevel(level)
+
+
+def _get_redis_client() -> redis.Redis:
+    return redis.Redis.from_url(settings.redis_url, decode_responses=True)
 
 
 def _parse_csv(value: str) -> list[str]:
@@ -127,6 +165,7 @@ def _on_watch_event(event: WatchEvent) -> None:
 async def lifespan(app: FastAPI):
     validate_security_settings()
     init_db()
+    app.state.started_at = time()
     watched_folders = [Path(settings.watch_cv_dir), Path(settings.watch_job_dir)]
     watcher = LocalFolderWatcher(folders=watched_folders, callback=_on_watch_event)
     watcher.start()
@@ -137,14 +176,31 @@ async def lifespan(app: FastAPI):
         watcher.stop()
 
 
-app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+_configure_logging()
+app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
 _configure_cors(app)
 
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id", str(uuid4()))
+    request.state.request_id = request_id
+    start = perf_counter()
     enforce_security(request)
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers["x-request-id"] = request_id
+    duration_ms = (perf_counter() - start) * 1000
+    logger.info(
+        "request",
+        extra={
+            "request_id": request_id,
+            "path": request.url.path,
+            "method": request.method,
+            "status": response.status_code,
+            "duration_ms": round(duration_ms, 2),
+        },
+    )
+    return response
 
 
 @app.get("/health")
@@ -152,6 +208,41 @@ def healthcheck() -> dict[str, str]:
     return {
         "status": "ok",
         "environment": settings.environment,
+        "version": settings.app_version,
+    }
+
+
+@app.get("/ready")
+def readiness() -> dict[str, str]:
+    try:
+        with SessionLocal() as session:
+            session.execute(text("SELECT 1"))
+    except Exception as exc:  # pragma: no cover
+        logger.error("db readiness failed: %s", exc)
+        raise HTTPException(status_code=503, detail="database unavailable")
+
+    try:
+        client = _get_redis_client()
+        client.ping()
+    except Exception as exc:  # pragma: no cover
+        logger.error("redis readiness failed: %s", exc)
+        raise HTTPException(status_code=503, detail="redis unavailable")
+
+    return {"status": "ready"}
+
+
+@app.get("/metrics")
+def metrics() -> dict[str, float | int]:
+    uptime = int(time() - app.state.started_at)
+    with SessionLocal() as session:
+        events = session.scalar(select(func.count()).select_from(EventLog))
+        extractions = session.scalar(select(func.count()).select_from(ExtractedText))
+        scores = session.scalar(select(func.count()).select_from(ScoreResult))
+    return {
+        "uptime_seconds": uptime,
+        "event_count": int(events or 0),
+        "extraction_count": int(extractions or 0),
+        "score_count": int(scores or 0),
     }
 
 
@@ -235,6 +326,46 @@ def list_scores(limit: int = 50) -> list[ScoreRead]:
             )
             for row in rows
         ]
+
+
+@app.post("/maintenance/cleanup")
+def cleanup_retention() -> dict[str, int]:
+    deleted_events = 0
+    deleted_extractions = 0
+    deleted_scores = 0
+
+    with SessionLocal() as session:
+        if settings.retention_event_days > 0:
+            cutoff = text(
+                f"now() - interval '{int(settings.retention_event_days)} days'"
+            )
+            deleted_events = session.execute(
+                delete(EventLog).where(EventLog.created_at < cutoff)
+            ).rowcount or 0
+
+        if settings.retention_extraction_days > 0:
+            cutoff = text(
+                f"now() - interval '{int(settings.retention_extraction_days)} days'"
+            )
+            deleted_extractions = session.execute(
+                delete(ExtractedText).where(ExtractedText.created_at < cutoff)
+            ).rowcount or 0
+
+        if settings.retention_score_days > 0:
+            cutoff = text(
+                f"now() - interval '{int(settings.retention_score_days)} days'"
+            )
+            deleted_scores = session.execute(
+                delete(ScoreResult).where(ScoreResult.created_at < cutoff)
+            ).rowcount or 0
+
+        session.commit()
+
+    return {
+        "deleted_events": deleted_events,
+        "deleted_extractions": deleted_extractions,
+        "deleted_scores": deleted_scores,
+    }
 
 @app.post("/extract", response_model=ExtractedTextRead)
 def ingest_and_extract(file_path: str) -> ExtractedTextRead:
