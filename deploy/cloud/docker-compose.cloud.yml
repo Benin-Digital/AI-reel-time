@@ -29,6 +29,12 @@ services:
       AI_REALTIME_REDIS_URL: redis://redis:6379/0
       AI_REALTIME_WATCH_CV_DIR: /srv/ai-realtime/storage/cv
       AI_REALTIME_WATCH_JOB_DIR: /srv/ai-realtime/storage/job
+      AI_REALTIME_LOG_LEVEL: INFO
+      AI_REALTIME_LOG_JSON: "true"
+      AI_REALTIME_DATABASE_AUTO_CREATE: "false"
+      AI_REALTIME_REQUIRE_API_KEY: "true"
+      AI_REALTIME_API_KEYS: ${AIREALTIME_API_KEYS}
+      AI_REALTIME_CORS_ALLOW_ORIGINS: ${AIREALTIME_CORS_ALLOW_ORIGINS}
     labels:
       - traefik.enable=true
       - traefik.http.routers.airealtime.rule=Host(`${AIREALTIME_DOMAIN}`)
@@ -42,6 +48,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\").read()'" ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
   postgres:
     image: pgvector/pgvector:pg16

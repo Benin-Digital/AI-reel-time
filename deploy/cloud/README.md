@@ -34,6 +34,19 @@ docker compose --env-file deploy/cloud/.env.cloud -f deploy/cloud/docker-compose
 curl -sS https://$AIREALTIME_DOMAIN/health
 ```
 
+## Migrations DB
+
+```bash
+docker compose --env-file deploy/cloud/.env.cloud -f deploy/cloud/docker-compose.cloud.yml run --rm api \
+	alembic -c /app/alembic.ini upgrade head
+```
+
+## Retention (nettoyage)
+
+```bash
+curl -X POST -H "X-API-Key: <key>" https://$AIREALTIME_DOMAIN/maintenance/cleanup
+```
+
 ## Mise a jour
 
 ```bash

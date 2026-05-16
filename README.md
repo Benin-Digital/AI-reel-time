@@ -24,3 +24,16 @@ Ce dossier contient une proposition d'architecture complete pour un nouveau proj
 - Compose local: deploy/local/docker-compose.local.yml
 - Compose cloud: deploy/cloud/docker-compose.cloud.yml
 - Guide cloud: deploy/cloud/README.md
+
+## Tests (backend)
+
+```bash
+pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+pytest backend/tests
+```
+
+## Migrations (backend)
+
+```bash
+alembic -c backend/alembic.ini upgrade head
+```
