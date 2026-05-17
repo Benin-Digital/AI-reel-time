@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text, func
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -132,6 +133,50 @@ class MatchResult(Base):
     job_id: Mapped[int] = mapped_column(ForeignKey("job_documents.id"))
     score: Mapped[float] = mapped_column(Float)
     common_keywords: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class CvEmbedding(Base):
+    __tablename__ = "cv_embeddings"
+    __table_args__ = (
+        Index("ux_cv_embeddings_doc", "cv_id", unique=True),
+        Index("ix_cv_embeddings_updated_at", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    cv_id: Mapped[int] = mapped_column(ForeignKey("cv_documents.id"))
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    embedding: Mapped[list[float]] = mapped_column(Vector(384))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class JobEmbedding(Base):
+    __tablename__ = "job_embeddings"
+    __table_args__ = (
+        Index("ux_job_embeddings_doc", "job_id", unique=True),
+        Index("ix_job_embeddings_updated_at", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job_documents.id"))
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    embedding: Mapped[list[float]] = mapped_column(Vector(384))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
