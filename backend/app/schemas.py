@@ -115,6 +115,9 @@ class DocumentDetailBase(BaseModel):
     last_error: str | None
     created_at: datetime
     updated_at: datetime
+    match_count: int
+    average_score: float | None
+    top_keywords: list[str]
     extraction: ExtractedTextRead | None
     top_matches: list[MatchRead]
 

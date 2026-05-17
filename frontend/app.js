@@ -155,6 +155,9 @@ const renderDocumentDetails = (doc, target) => {
     </div>
     <div class="meta">ID ${doc.id} • Updated ${new Date(doc.updated_at).toLocaleString()}</div>
     ${doc.last_error ? `<div class="meta">Error: ${doc.last_error}</div>` : ""}
+    <div class="meta">Matches: ${doc.match_count}</div>
+    ${doc.average_score !== null && doc.average_score !== undefined ? `<div class="meta">Average score: ${doc.average_score}%</div>` : ""}
+    ${doc.top_keywords && doc.top_keywords.length ? `<div class="meta">Top keywords: ${doc.top_keywords.slice(0, 10).join(", ")}</div>` : ""}
     <div class="meta">Extraction method: ${extraction.extraction_method || "unknown"}</div>
     <div class="meta">Content hash: ${extraction.content_hash || "n/a"}</div>
     <div class="meta">Text preview:</div>

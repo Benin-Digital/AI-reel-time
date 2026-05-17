@@ -693,6 +693,27 @@ def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead
             .order_by(MatchResult.score.desc())
             .limit(safe_limit)
         ).all()
+
+        match_count = session.scalar(
+            select(func.count()).select_from(MatchResult).where(MatchResult.cv_id == doc_id)
+        ) or 0
+        average_score = session.scalar(
+            select(func.avg(MatchResult.score)).where(MatchResult.cv_id == doc_id)
+        )
+
+        keyword_counts: dict[str, int] = {}
+        for row in match_rows:
+            for keyword in deserialize_keywords(row.common_keywords):
+                keyword_counts[keyword] = keyword_counts.get(keyword, 0) + 1
+
+        top_keywords = [
+            keyword
+            for keyword, _ in sorted(
+                keyword_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:12]
+        ]
+
         return CvDocumentDetailRead(
             id=doc.id,
             path=doc.path,
@@ -701,6 +722,9 @@ def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead
             last_error=doc.last_error,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
+            match_count=match_count,
+            average_score=round(float(average_score), 2) if average_score is not None else None,
+            top_keywords=top_keywords,
             extraction=ExtractedTextRead.model_validate(extraction) if extraction else None,
             top_matches=[
                 MatchRead(
@@ -773,6 +797,27 @@ def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRe
             .order_by(MatchResult.score.desc())
             .limit(safe_limit)
         ).all()
+
+        match_count = session.scalar(
+            select(func.count()).select_from(MatchResult).where(MatchResult.job_id == doc_id)
+        ) or 0
+        average_score = session.scalar(
+            select(func.avg(MatchResult.score)).where(MatchResult.job_id == doc_id)
+        )
+
+        keyword_counts: dict[str, int] = {}
+        for row in match_rows:
+            for keyword in deserialize_keywords(row.common_keywords):
+                keyword_counts[keyword] = keyword_counts.get(keyword, 0) + 1
+
+        top_keywords = [
+            keyword
+            for keyword, _ in sorted(
+                keyword_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:12]
+        ]
+
         return JobDocumentDetailRead(
             id=doc.id,
             path=doc.path,
@@ -781,6 +826,9 @@ def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRe
             last_error=doc.last_error,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
+            match_count=match_count,
+            average_score=round(float(average_score), 2) if average_score is not None else None,
+            top_keywords=top_keywords,
             extraction=ExtractedTextRead.model_validate(extraction) if extraction else None,
             top_matches=[
                 MatchRead(
