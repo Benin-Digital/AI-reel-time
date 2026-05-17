@@ -32,6 +32,19 @@ pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 pytest backend/tests
 ```
 
+## UI (MVP)
+
+Le dossier `frontend/` contient une UI statique pour lire les documents et les scores.
+
+Lancer un serveur local simple:
+
+```bash
+cd frontend
+python -m http.server 5173
+```
+
+Ouvrir http://localhost:5173 puis renseigner l'API base (ex: http://localhost:8000).
+
 ## Migrations (backend)
 
 ```bash
