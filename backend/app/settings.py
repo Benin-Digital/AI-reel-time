@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     scoring_max_bonus: float = 0.25
     scoring_experience_bonus: float = 0.1
     scoring_experience_penalty: float = 0.05
+    queue_memory_max_size: int = 1000
+    queue_memory_warn_threshold: int = 250
+    worker_retry_base_delay: float = 0.5
+    worker_retry_max_delay: float = 10.0
+    worker_max_retries: int = 3
 
     model_config = SettingsConfigDict(env_prefix="AI_REALTIME_", extra="ignore")
 

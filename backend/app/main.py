@@ -36,6 +36,7 @@ from .services import (
     score_texts,
     serialize_keywords,
     deserialize_keywords,
+    get_queue_status,
 )
 from .security import enforce_security, validate_security_settings
 from .settings import get_settings
@@ -474,7 +475,12 @@ async def lifespan(app: FastAPI):
     watched_folders = [Path(settings.watch_cv_dir), Path(settings.watch_job_dir)]
     watcher = LocalFolderWatcher(folders=watched_folders, callback=_on_watch_event)
     watcher.start()
-    worker = EventWorker(handler=_process_watch_event)
+    worker = EventWorker(
+        handler=_process_watch_event,
+        max_retries=settings.worker_max_retries,
+        retry_base_delay=settings.worker_retry_base_delay,
+        retry_max_delay=settings.worker_retry_max_delay,
+    )
     worker.start()
     app.state.watcher = watcher
     app.state.worker = worker
@@ -541,8 +547,9 @@ def readiness() -> dict[str, str]:
 
 
 @app.get("/metrics")
-def metrics() -> dict[str, float | int]:
+def metrics() -> dict[str, float | int | bool]:
     uptime = int(time() - app.state.started_at)
+    queue_status = get_queue_status()
     with SessionLocal() as session:
         events = session.scalar(select(func.count()).select_from(EventLog))
         extractions = session.scalar(select(func.count()).select_from(ExtractedText))
@@ -552,6 +559,9 @@ def metrics() -> dict[str, float | int]:
         "event_count": int(events or 0),
         "extraction_count": int(extractions or 0),
         "score_count": int(scores or 0),
+        "redis_available": bool(queue_status.get("redis_available", False)),
+        "redis_queue_length": int(queue_status.get("redis_queue_length", 0)),
+        "memory_queue_length": int(queue_status.get("memory_queue_length", 0)),
     }
 
 
