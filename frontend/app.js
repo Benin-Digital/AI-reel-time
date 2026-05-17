@@ -24,13 +24,26 @@ const maxScore = document.getElementById("maxScore");
 const sortMatches = document.getElementById("sortMatches");
 const applyFilters = document.getElementById("applyFilters");
 const clearFilters = document.getElementById("clearFilters");
+const matchSearch = document.getElementById("matchSearch");
+const matchesPage = document.getElementById("matchesPage");
+const matchesPageSize = document.getElementById("matchPageSize");
+const matchesPrev = document.getElementById("matchesPrev");
+const matchesNext = document.getElementById("matchesNext");
 
 const cvQuery = document.getElementById("cvQuery");
 const cvStatus = document.getElementById("cvStatus");
+const cvPage = document.getElementById("cvPage");
+const cvPageSize = document.getElementById("cvPageSize");
+const cvPrev = document.getElementById("cvPrev");
+const cvNext = document.getElementById("cvNext");
 const applyCvFilters = document.getElementById("applyCvFilters");
 
 const jobQuery = document.getElementById("jobQuery");
 const jobStatus = document.getElementById("jobStatus");
+const jobPage = document.getElementById("jobPage");
+const jobPageSize = document.getElementById("jobPageSize");
+const jobPrev = document.getElementById("jobPrev");
+const jobNext = document.getElementById("jobNext");
 const applyJobFilters = document.getElementById("applyJobFilters");
 
 let apiBase = localStorage.getItem("apiBase") || "";
@@ -197,13 +210,22 @@ const buildParams = (params) => {
   return search.toString() ? `?${search.toString()}` : "";
 };
 
+const updatePageElement = (element, value) => {
+  element.textContent = String(Math.max(1, value));
+};
+
+const getPageNumber = (element) => Math.max(1, Number(element.textContent || 1));
+
 const loadMatches = async () => {
   const query = buildParams({
+    page: getPageNumber(matchesPage),
+    page_size: matchesPageSize.value,
     cv_id: filterCv.value,
     job_id: filterJob.value,
     min_score: minScore.value,
     max_score: maxScore.value,
     sort_by: sortMatches.value,
+    search: matchSearch.value,
   });
   const data = await safeFetch(`/matches${query}`);
   renderMatches(data, matchList);
@@ -211,6 +233,8 @@ const loadMatches = async () => {
 
 const loadCvDocuments = async () => {
   const query = buildParams({
+    page: getPageNumber(cvPage),
+    page_size: cvPageSize.value,
     status: cvStatus.value,
     query: cvQuery.value,
   });
@@ -220,6 +244,8 @@ const loadCvDocuments = async () => {
 
 const loadJobDocuments = async () => {
   const query = buildParams({
+    page: getPageNumber(jobPage),
+    page_size: jobPageSize.value,
     status: jobStatus.value,
     query: jobQuery.value,
   });
@@ -229,17 +255,11 @@ const loadJobDocuments = async () => {
 
 const loadAll = async () => {
   try {
-    const [metrics, cvDocs, jobDocs, matches] = await Promise.all([
-      safeFetch("/metrics"),
-      safeFetch("/cv-documents"),
-      safeFetch("/job-documents"),
-      safeFetch("/matches"),
-    ]);
+    const metrics = await safeFetch("/metrics");
     renderMetrics(metrics);
-    renderDocuments(cvDocs, cvList, "cv");
-    renderDocuments(jobDocs, jobList, "job");
-    renderMatches(matches.slice(0, 6), recentMatches);
-    renderMatches(matches, matchList);
+    await Promise.all([loadCvDocuments(), loadJobDocuments(), loadMatches()]);
+    const recent = await safeFetch("/matches?page=1&page_size=6&sort_by=created_at_desc");
+    renderMatches(recent, recentMatches);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     recentMatches.innerHTML = formatEmpty(message);
@@ -255,6 +275,45 @@ navButtons.forEach((button) => {
   });
 });
 
+cvPrev.addEventListener("click", () => {
+  const nextPage = getPageNumber(cvPage) - 1;
+  if (nextPage >= 1) {
+    updatePageElement(cvPage, nextPage);
+    loadCvDocuments();
+  }
+});
+
+cvNext.addEventListener("click", () => {
+  updatePageElement(cvPage, getPageNumber(cvPage) + 1);
+  loadCvDocuments();
+});
+
+jobPrev.addEventListener("click", () => {
+  const nextPage = getPageNumber(jobPage) - 1;
+  if (nextPage >= 1) {
+    updatePageElement(jobPage, nextPage);
+    loadJobDocuments();
+  }
+});
+
+jobNext.addEventListener("click", () => {
+  updatePageElement(jobPage, getPageNumber(jobPage) + 1);
+  loadJobDocuments();
+});
+
+matchesPrev.addEventListener("click", () => {
+  const nextPage = getPageNumber(matchesPage) - 1;
+  if (nextPage >= 1) {
+    updatePageElement(matchesPage, nextPage);
+    loadMatches();
+  }
+});
+
+matchesNext.addEventListener("click", () => {
+  updatePageElement(matchesPage, getPageNumber(matchesPage) + 1);
+  loadMatches();
+});
+
 applyApiButton.addEventListener("click", () => {
   apiBase = apiBaseInput.value.trim();
   localStorage.setItem("apiBase", apiBase);
@@ -266,6 +325,7 @@ refreshButton.addEventListener("click", () => {
 });
 
 applyFilters.addEventListener("click", () => {
+  updatePageElement(matchesPage, 1);
   loadMatches();
 });
 
@@ -274,15 +334,19 @@ clearFilters.addEventListener("click", () => {
   filterJob.value = "";
   minScore.value = "";
   maxScore.value = "";
+  matchSearch.value = "";
   sortMatches.value = "score_desc";
+  updatePageElement(matchesPage, 1);
   loadMatches();
 });
 
 applyCvFilters.addEventListener("click", () => {
+  updatePageElement(cvPage, 1);
   loadCvDocuments();
 });
 
 applyJobFilters.addEventListener("click", () => {
+  updatePageElement(jobPage, 1);
   loadJobDocuments();
 });
 

@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import redis
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, or_, select, text
 
 from .db import SessionLocal, init_db
 from .models import EventLog, ExtractedText, ScoreResult, CvDocument, JobDocument, MatchResult
@@ -639,17 +639,29 @@ def list_scores(limit: int = 50) -> list[ScoreRead]:
 
 @app.get("/cv-documents", response_model=list[CvDocumentRead])
 def list_cv_documents(
-    limit: int = 50,
+    page: int = 1,
+    page_size: int = 25,
     status: str | None = None,
     query: str | None = None,
 ) -> list[CvDocumentRead]:
-    safe_limit = max(1, min(limit, 200))
+    safe_size = max(1, min(page_size, 100))
+    safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(CvDocument)
     if status:
         stmt = stmt.where(CvDocument.status == status)
     if query:
-        stmt = stmt.where(CvDocument.path.ilike(f"%{query}%"))
-    stmt = stmt.order_by(CvDocument.id.desc()).limit(safe_limit)
+        search_expr = f"%{query}%"
+        stmt = stmt.join(
+            ExtractedText,
+            ExtractedText.file_path == CvDocument.path,
+            isouter=True,
+        ).where(
+            or_(
+                CvDocument.path.ilike(search_expr),
+                ExtractedText.extracted_text.ilike(search_expr),
+            )
+        )
+    stmt = stmt.order_by(CvDocument.id.desc()).offset(safe_offset).limit(safe_size)
     with SessionLocal() as session:
         rows = session.scalars(stmt).all()
         return [CvDocumentRead.model_validate(row) for row in rows]
@@ -707,17 +719,29 @@ def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead
 
 @app.get("/job-documents", response_model=list[JobDocumentRead])
 def list_job_documents(
-    limit: int = 50,
+    page: int = 1,
+    page_size: int = 25,
     status: str | None = None,
     query: str | None = None,
 ) -> list[JobDocumentRead]:
-    safe_limit = max(1, min(limit, 200))
+    safe_size = max(1, min(page_size, 100))
+    safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(JobDocument)
     if status:
         stmt = stmt.where(JobDocument.status == status)
     if query:
-        stmt = stmt.where(JobDocument.path.ilike(f"%{query}%"))
-    stmt = stmt.order_by(JobDocument.id.desc()).limit(safe_limit)
+        search_expr = f"%{query}%"
+        stmt = stmt.join(
+            ExtractedText,
+            ExtractedText.file_path == JobDocument.path,
+            isouter=True,
+        ).where(
+            or_(
+                JobDocument.path.ilike(search_expr),
+                ExtractedText.extracted_text.ilike(search_expr),
+            )
+        )
+    stmt = stmt.order_by(JobDocument.id.desc()).offset(safe_offset).limit(safe_size)
     with SessionLocal() as session:
         rows = session.scalars(stmt).all()
         return [JobDocumentRead.model_validate(row) for row in rows]
@@ -834,15 +858,17 @@ def list_matches_for_job(doc_id: int, limit: int = 50) -> list[MatchRead]:
 
 @app.get("/matches", response_model=list[MatchRead])
 def list_matches(
-    limit: int = 50,
+    page: int = 1,
+    page_size: int = 25,
     cv_id: int | None = None,
     job_id: int | None = None,
     min_score: float | None = None,
     max_score: float | None = None,
     sort_by: str = "score_desc",
-    offset: int = 0,
+    search: str | None = None,
 ) -> list[MatchRead]:
-    safe_limit = max(1, min(limit, 200))
+    safe_size = max(1, min(page_size, 100))
+    safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(MatchResult)
     if cv_id is not None:
         stmt = stmt.where(MatchResult.cv_id == cv_id)
@@ -852,6 +878,17 @@ def list_matches(
         stmt = stmt.where(MatchResult.score >= min_score)
     if max_score is not None:
         stmt = stmt.where(MatchResult.score <= max_score)
+    if search:
+        search_expr = f"%{search}%"
+        stmt = stmt.join(CvDocument, MatchResult.cv_id == CvDocument.id)
+        stmt = stmt.join(JobDocument, MatchResult.job_id == JobDocument.id)
+        stmt = stmt.where(
+            or_(
+                MatchResult.common_keywords.ilike(search_expr),
+                CvDocument.path.ilike(search_expr),
+                JobDocument.path.ilike(search_expr),
+            )
+        )
 
     if sort_by == "score_asc":
         stmt = stmt.order_by(MatchResult.score.asc())
@@ -863,7 +900,7 @@ def list_matches(
         stmt = stmt.order_by(MatchResult.score.desc())
 
     with SessionLocal() as session:
-        rows = session.scalars(stmt.offset(max(0, offset)).limit(safe_limit)).all()
+        rows = session.scalars(stmt.offset(safe_offset).limit(safe_size)).all()
         return [
             MatchRead(
                 id=row.id,

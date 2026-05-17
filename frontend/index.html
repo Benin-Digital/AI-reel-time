@@ -79,14 +79,24 @@
           <p>Tracked CV documents with processing status.</p>
         </div>
         <div class="filters">
-          <input id="cvQuery" type="text" placeholder="Search CV path" />
+          <input id="cvQuery" type="text" placeholder="Search CV path or content" />
           <select id="cvStatus">
             <option value="">All statuses</option>
             <option value="ready">Ready</option>
             <option value="failed">Failed</option>
             <option value="pending">Pending</option>
           </select>
+          <select id="cvPageSize">
+            <option value="10">10 / page</option>
+            <option value="25" selected>25 / page</option>
+            <option value="50">50 / page</option>
+          </select>
           <button id="applyCvFilters" class="ghost">Apply</button>
+        </div>
+        <div class="pagination-controls">
+          <button id="cvPrev" class="ghost">Previous</button>
+          <span>Page <strong id="cvPage">1</strong></span>
+          <button id="cvNext" class="ghost">Next</button>
         </div>
         <div id="cvList" class="stack"></div>
         <div id="cvDetails" class="item details-panel hidden"></div>
@@ -98,14 +108,24 @@
           <p>Tracked job descriptions with processing status.</p>
         </div>
         <div class="filters">
-          <input id="jobQuery" type="text" placeholder="Search job path" />
+          <input id="jobQuery" type="text" placeholder="Search job path or content" />
           <select id="jobStatus">
             <option value="">All statuses</option>
             <option value="ready">Ready</option>
             <option value="failed">Failed</option>
             <option value="pending">Pending</option>
           </select>
+          <select id="jobPageSize">
+            <option value="10">10 / page</option>
+            <option value="25" selected>25 / page</option>
+            <option value="50">50 / page</option>
+          </select>
           <button id="applyJobFilters" class="ghost">Apply</button>
+        </div>
+        <div class="pagination-controls">
+          <button id="jobPrev" class="ghost">Previous</button>
+          <span>Page <strong id="jobPage">1</strong></span>
+          <button id="jobNext" class="ghost">Next</button>
         </div>
         <div id="jobList" class="stack"></div>
         <div id="jobDetails" class="item details-panel hidden"></div>
@@ -117,10 +137,16 @@
           <p>Filter scores by CV, Job, rating or sort order.</p>
         </div>
         <div class="filters">
+          <input id="matchSearch" type="text" placeholder="Search by keyword or path" />
           <input id="filterCv" type="number" placeholder="Filter by CV id" />
           <input id="filterJob" type="number" placeholder="Filter by Job id" />
           <input id="minScore" type="number" placeholder="Min score" min="0" max="100" />
           <input id="maxScore" type="number" placeholder="Max score" min="0" max="100" />
+          <select id="matchPageSize">
+            <option value="10">10 / page</option>
+            <option value="25" selected>25 / page</option>
+            <option value="50">50 / page</option>
+          </select>
           <select id="sortMatches">
             <option value="score_desc">Score desc</option>
             <option value="score_asc">Score asc</option>
@@ -129,6 +155,11 @@
           </select>
           <button id="applyFilters" class="ghost">Apply Filter</button>
           <button id="clearFilters" class="ghost">Clear</button>
+        </div>
+        <div class="pagination-controls">
+          <button id="matchesPrev" class="ghost">Previous</button>
+          <span>Page <strong id="matchesPage">1</strong></span>
+          <button id="matchesNext" class="ghost">Next</button>
         </div>
         <div id="matchList" class="stack"></div>
       </section>

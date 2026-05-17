@@ -293,7 +293,20 @@ body {
   margin-bottom: 16px;
 }
 
-.filters input {
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.pagination-controls button {
+  min-width: 90px;
+}
+
+.filters input,
+.filters select {
   border-radius: 999px;
   border: 1px solid var(--stroke);
   padding: 10px 14px;
