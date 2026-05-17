@@ -11,8 +11,8 @@ import redis
 from sqlalchemy import delete, func, select, text
 
 from .db import SessionLocal, init_db
-from .models import EventLog, ExtractedText, ScoreResult
-from .schemas import EventCreate, EventRead, WatcherSimulateRequest, ExtractedTextCreate, ExtractedTextRead, ScoreRequest, ScoreRead
+from .models import EventLog, ExtractedText, ScoreResult, CvDocument, JobDocument, MatchResult
+from .schemas import EventCreate, EventRead, WatcherSimulateRequest, ExtractedTextCreate, ExtractedTextRead, ScoreRequest, ScoreRead, CvDocumentRead, JobDocumentRead, MatchRead
 from .services import LocalFolderWatcher, WatchEvent, EventWorker, enqueue_event, file_sha256, extract_text, score_texts, serialize_keywords, deserialize_keywords
 from .security import enforce_security, validate_security_settings
 from .settings import get_settings
@@ -143,6 +143,107 @@ def _insert_score_result(cv_path: Path, job_path: Path, score: float, common: li
         )
 
 
+def _document_status(result: ExtractedTextRead) -> tuple[str, str | None]:
+    if result.extraction_success:
+        return "ready", None
+    return "failed", result.error_message or "extraction failed"
+
+
+def _upsert_cv_document(path: Path, extraction: ExtractedTextRead) -> CvDocumentRead:
+    status, last_error = _document_status(extraction)
+    with SessionLocal() as session:
+        existing = session.scalar(
+            select(CvDocument).where(CvDocument.path == str(path))
+        )
+        if existing:
+            existing.content_hash = extraction.content_hash
+            existing.status = status
+            existing.last_error = last_error
+            session.commit()
+            session.refresh(existing)
+            return CvDocumentRead.model_validate(existing)
+
+        doc = CvDocument(
+            path=str(path),
+            content_hash=extraction.content_hash,
+            status=status,
+            last_error=last_error,
+        )
+        session.add(doc)
+        session.commit()
+        session.refresh(doc)
+        return CvDocumentRead.model_validate(doc)
+
+
+def _upsert_job_document(path: Path, extraction: ExtractedTextRead) -> JobDocumentRead:
+    status, last_error = _document_status(extraction)
+    with SessionLocal() as session:
+        existing = session.scalar(
+            select(JobDocument).where(JobDocument.path == str(path))
+        )
+        if existing:
+            existing.content_hash = extraction.content_hash
+            existing.status = status
+            existing.last_error = last_error
+            session.commit()
+            session.refresh(existing)
+            return JobDocumentRead.model_validate(existing)
+
+        doc = JobDocument(
+            path=str(path),
+            content_hash=extraction.content_hash,
+            status=status,
+            last_error=last_error,
+        )
+        session.add(doc)
+        session.commit()
+        session.refresh(doc)
+        return JobDocumentRead.model_validate(doc)
+
+
+def _upsert_match_result(cv_id: int, job_id: int, score: float, common: list[str]) -> MatchRead:
+    with SessionLocal() as session:
+        existing = session.scalar(
+            select(MatchResult).where(
+                MatchResult.cv_id == cv_id,
+                MatchResult.job_id == job_id,
+            )
+        )
+        if existing:
+            existing.score = score
+            existing.common_keywords = serialize_keywords(common)
+            session.commit()
+            session.refresh(existing)
+            return MatchRead(
+                id=existing.id,
+                cv_id=existing.cv_id,
+                job_id=existing.job_id,
+                score=existing.score,
+                common_keywords=deserialize_keywords(existing.common_keywords),
+                created_at=existing.created_at,
+                updated_at=existing.updated_at,
+            )
+
+        match = MatchResult(
+            cv_id=cv_id,
+            job_id=job_id,
+            score=score,
+            common_keywords=serialize_keywords(common),
+        )
+        session.add(match)
+        session.commit()
+        session.refresh(match)
+        return MatchRead(
+            id=match.id,
+            cv_id=match.cv_id,
+            job_id=match.job_id,
+            score=match.score,
+            common_keywords=deserialize_keywords(match.common_keywords),
+            created_at=match.created_at,
+            updated_at=match.updated_at,
+        )
+
+
 def _is_supported_file(path: Path) -> bool:
     return path.suffix.lower() in SUPPORTED_SUFFIXES
 
@@ -216,32 +317,50 @@ def _cleanup_removed_file(path: Path, role: str) -> None:
             delete(ExtractedText).where(ExtractedText.file_path == str(path))
         )
         if role == "cv":
+            doc = session.scalar(select(CvDocument).where(CvDocument.path == str(path)))
+            if doc:
+                session.execute(delete(MatchResult).where(MatchResult.cv_id == doc.id))
+                session.delete(doc)
             session.execute(delete(ScoreResult).where(ScoreResult.cv_path == str(path)))
         else:
+            doc = session.scalar(select(JobDocument).where(JobDocument.path == str(path)))
+            if doc:
+                session.execute(delete(MatchResult).where(MatchResult.job_id == doc.id))
+                session.delete(doc)
             session.execute(delete(ScoreResult).where(ScoreResult.job_path == str(path)))
         session.commit()
 
 
 def _score_against_counterparts(changed_path: Path, role: str) -> None:
     changed_result = _extract_and_persist(changed_path)
-    if not changed_result.extraction_success:
-        return
-
-    changed_text = changed_result.extracted_text or ""
     if role == "cv":
+        cv_doc = _upsert_cv_document(changed_path, changed_result)
+        if not changed_result.extraction_success:
+            return
+
+        changed_text = changed_result.extracted_text or ""
         for job_path in _list_candidate_files(Path(settings.watch_job_dir)):
             job_result = _extract_and_persist(job_path)
+            job_doc = _upsert_job_document(job_path, job_result)
             if not job_result.extraction_success:
                 continue
             score, common = score_texts(changed_text, job_result.extracted_text or "")
             _insert_score_result(changed_path, job_path, score, common)
+            _upsert_match_result(cv_doc.id, job_doc.id, score, common)
     else:
+        job_doc = _upsert_job_document(changed_path, changed_result)
+        if not changed_result.extraction_success:
+            return
+
+        changed_text = changed_result.extracted_text or ""
         for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
             cv_result = _extract_and_persist(cv_path)
+            cv_doc = _upsert_cv_document(cv_path, cv_result)
             if not cv_result.extraction_success:
                 continue
             score, common = score_texts(cv_result.extracted_text or "", changed_text)
             _insert_score_result(cv_path, changed_path, score, common)
+            _upsert_match_result(cv_doc.id, job_doc.id, score, common)
 
 
 def _process_watch_event(event: WatchEvent) -> None:
@@ -455,6 +574,90 @@ def list_scores(limit: int = 50) -> list[ScoreRead]:
             )
             for row in rows
         ]
+
+
+@app.get("/cv-documents", response_model=list[CvDocumentRead])
+def list_cv_documents(limit: int = 50) -> list[CvDocumentRead]:
+    safe_limit = max(1, min(limit, 200))
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(CvDocument).order_by(CvDocument.id.desc()).limit(safe_limit)
+        ).all()
+        return [CvDocumentRead.model_validate(row) for row in rows]
+
+
+@app.get("/cv-documents/{doc_id}", response_model=CvDocumentRead)
+def get_cv_document(doc_id: int) -> CvDocumentRead:
+    with SessionLocal() as session:
+        doc = session.get(CvDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="CV document not found")
+        return CvDocumentRead.model_validate(doc)
+
+
+@app.get("/job-documents", response_model=list[JobDocumentRead])
+def list_job_documents(limit: int = 50) -> list[JobDocumentRead]:
+    safe_limit = max(1, min(limit, 200))
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(JobDocument).order_by(JobDocument.id.desc()).limit(safe_limit)
+        ).all()
+        return [JobDocumentRead.model_validate(row) for row in rows]
+
+
+@app.get("/job-documents/{doc_id}", response_model=JobDocumentRead)
+def get_job_document(doc_id: int) -> JobDocumentRead:
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+        return JobDocumentRead.model_validate(doc)
+
+
+@app.get("/matches", response_model=list[MatchRead])
+def list_matches(
+    limit: int = 50,
+    cv_id: int | None = None,
+    job_id: int | None = None,
+) -> list[MatchRead]:
+    safe_limit = max(1, min(limit, 200))
+    stmt = select(MatchResult)
+    if cv_id is not None:
+        stmt = stmt.where(MatchResult.cv_id == cv_id)
+    if job_id is not None:
+        stmt = stmt.where(MatchResult.job_id == job_id)
+
+    with SessionLocal() as session:
+        rows = session.scalars(stmt.order_by(MatchResult.id.desc()).limit(safe_limit)).all()
+        return [
+            MatchRead(
+                id=row.id,
+                cv_id=row.cv_id,
+                job_id=row.job_id,
+                score=row.score,
+                common_keywords=deserialize_keywords(row.common_keywords),
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        ]
+
+
+@app.get("/matches/{match_id}", response_model=MatchRead)
+def get_match(match_id: int) -> MatchRead:
+    with SessionLocal() as session:
+        match = session.get(MatchResult, match_id)
+        if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+        return MatchRead(
+            id=match.id,
+            cv_id=match.cv_id,
+            job_id=match.job_id,
+            score=match.score,
+            common_keywords=deserialize_keywords(match.common_keywords),
+            created_at=match.created_at,
+            updated_at=match.updated_at,
+        )
 
 
 @app.post("/maintenance/cleanup")

@@ -67,3 +67,39 @@ class ScoreRead(BaseModel):
     score: float
     common_keywords: list[str]
     created_at: datetime
+
+
+class CvDocumentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    path: str
+    content_hash: str | None
+    status: str
+    last_error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobDocumentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    path: str
+    content_hash: str | None
+    status: str
+    last_error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MatchRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    cv_id: int
+    job_id: int
+    score: float
+    common_keywords: list[str]
+    created_at: datetime
+    updated_at: datetime
