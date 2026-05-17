@@ -35,6 +35,11 @@ class IngestDeleteRequest(BaseModel):
     filename: str
 
 
+class IngestDeleteBatchRequest(BaseModel):
+    folder: Literal["cv", "job"] = "cv"
+    filenames: list[str]
+
+
 class ExtractedTextCreate(BaseModel):
     file_path: str
     content_hash: str | None = None

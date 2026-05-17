@@ -19,6 +19,7 @@ from .schemas import (
     EventRead,
     WatcherSimulateRequest,
     IngestDeleteRequest,
+    IngestDeleteBatchRequest,
     ExtractedTextCreate,
     ExtractedTextRead,
     ScoreRequest,
@@ -703,6 +704,45 @@ def ingest_delete(payload: IngestDeleteRequest) -> dict[str, str]:
         "status": status,
         "path": str(target_path),
     }
+
+
+@app.post("/ingest/delete-batch")
+def ingest_delete_batch(payload: IngestDeleteBatchRequest) -> dict[str, list[dict[str, str]]]:
+    folder = payload.folder
+    target_dir = Path(settings.watch_cv_dir if folder == "cv" else settings.watch_job_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    results: list[dict[str, str]] = []
+    for raw_name in payload.filenames:
+        safe_name = Path(raw_name).name
+        if not safe_name:
+            results.append({"filename": raw_name, "status": "invalid"})
+            continue
+
+        suffix = Path(safe_name).suffix.lower()
+        if suffix not in SUPPORTED_SUFFIXES:
+            results.append({"filename": safe_name, "status": "unsupported"})
+            continue
+
+        target_path = target_dir / safe_name
+        status = "missing"
+        if target_path.exists():
+            target_path.unlink()
+            status = "deleted"
+
+        delete_event = WatchEvent(
+            path=target_path,
+            event_type="deleted",
+            observed_at=time(),
+        )
+        try:
+            _on_watch_event(delete_event)
+        except Exception as exc:  # pragma: no cover
+            logger.warning("ingest delete enqueue failed: %s", exc)
+
+        results.append({"filename": safe_name, "status": status})
+
+    return {"status": "ok", "results": results}
 
 
 
