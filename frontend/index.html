@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Real-Time - RH Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <header class="hero">
+      <div class="brand">
+        <span class="brand-mark">AI</span>
+        <div>
+          <p class="brand-title">Real-Time</p>
+          <p class="brand-subtitle">RH Matching Console</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn is-active" data-target="dashboard">Dashboard</button>
+        <button class="nav-btn" data-target="cv">CV Library</button>
+        <button class="nav-btn" data-target="job">Job Library</button>
+        <button class="nav-btn" data-target="matches">Matches</button>
+      </nav>
+      <div class="hero-actions">
+        <div class="api-config">
+          <label for="apiBase">API base</label>
+          <input id="apiBase" type="text" placeholder="http://localhost:8000" />
+          <button id="applyApi" class="ghost">Apply</button>
+        </div>
+        <button id="refreshAll" class="primary">Refresh All</button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section id="dashboard" class="section is-active">
+        <div class="section-header">
+          <h1>Pipeline Snapshot</h1>
+          <p>Live status of files, extractions, and scores.</p>
+        </div>
+        <div class="grid metrics">
+          <article class="card">
+            <h3>Uptime</h3>
+            <p id="metricUptime" class="metric">--</p>
+            <span class="hint">seconds</span>
+          </article>
+          <article class="card">
+            <h3>Events</h3>
+            <p id="metricEvents" class="metric">--</p>
+            <span class="hint">watcher logs</span>
+          </article>
+          <article class="card">
+            <h3>Extractions</h3>
+            <p id="metricExtractions" class="metric">--</p>
+            <span class="hint">processed files</span>
+          </article>
+          <article class="card">
+            <h3>Scores</h3>
+            <p id="metricScores" class="metric">--</p>
+            <span class="hint">match records</span>
+          </article>
+        </div>
+        <div class="section-header">
+          <h2>Recent Matches</h2>
+          <p>Latest scores across CV and Job documents.</p>
+        </div>
+        <div id="recentMatches" class="stack"></div>
+      </section>
+
+      <section id="cv" class="section">
+        <div class="section-header">
+          <h1>CV Library</h1>
+          <p>Tracked CV documents with processing status.</p>
+        </div>
+        <div id="cvList" class="stack"></div>
+      </section>
+
+      <section id="job" class="section">
+        <div class="section-header">
+          <h1>Job Library</h1>
+          <p>Tracked job descriptions with processing status.</p>
+        </div>
+        <div id="jobList" class="stack"></div>
+      </section>
+
+      <section id="matches" class="section">
+        <div class="section-header">
+          <h1>Match Results</h1>
+          <p>Filter scores by CV or Job identifiers.</p>
+        </div>
+        <div class="filters">
+          <input id="filterCv" type="number" placeholder="Filter by CV id" />
+          <input id="filterJob" type="number" placeholder="Filter by Job id" />
+          <button id="applyFilters" class="ghost">Apply Filter</button>
+          <button id="clearFilters" class="ghost">Clear</button>
+        </div>
+        <div id="matchList" class="stack"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>AI Real-Time MVP console. Designed for internal RH teams.</p>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
