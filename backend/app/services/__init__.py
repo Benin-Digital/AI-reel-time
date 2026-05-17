@@ -1,3 +1,4 @@
+from .embeddings import embed_text, embed_texts
 from .extraction import extract_text
 from .event_queue import QueuedEvent, ack_event, dequeue_event, enqueue_event, get_queue_status
 from .fingerprint import file_sha256
@@ -7,6 +8,8 @@ from .worker import EventWorker
 
 __all__ = [
     "extract_text",
+    "embed_text",
+    "embed_texts",
     "dequeue_event",
     "enqueue_event",
     "get_queue_status",

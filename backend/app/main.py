@@ -13,7 +13,16 @@ import redis
 from sqlalchemy import delete, func, or_, select, text
 
 from .db import SessionLocal, init_db
-from .models import EventLog, ExtractedText, ScoreResult, CvDocument, JobDocument, MatchResult
+from .models import (
+    EventLog,
+    ExtractedText,
+    ScoreResult,
+    CvDocument,
+    JobDocument,
+    MatchResult,
+    CvEmbedding,
+    JobEmbedding,
+)
 from .schemas import (
     EventCreate,
     EventRead,
@@ -36,6 +45,7 @@ from .services import (
     EventWorker,
     enqueue_event,
     file_sha256,
+    embed_text,
     extract_text,
     score_texts,
     serialize_keywords,
@@ -272,6 +282,139 @@ def _upsert_match_result(cv_id: int, job_id: int, score: float, common: list[str
         )
 
 
+def _upsert_cv_embedding(cv_id: int, content_hash: str | None, embedding: list[float]) -> None:
+    with SessionLocal() as session:
+        existing = session.scalar(select(CvEmbedding).where(CvEmbedding.cv_id == cv_id))
+        if existing and existing.content_hash == content_hash:
+            return
+        if existing:
+            existing.content_hash = content_hash
+            existing.embedding = embedding
+            session.commit()
+            return
+        row = CvEmbedding(cv_id=cv_id, content_hash=content_hash, embedding=embedding)
+        session.add(row)
+        session.commit()
+
+
+def _upsert_job_embedding(job_id: int, content_hash: str | None, embedding: list[float]) -> None:
+    with SessionLocal() as session:
+        existing = session.scalar(select(JobEmbedding).where(JobEmbedding.job_id == job_id))
+        if existing and existing.content_hash == content_hash:
+            return
+        if existing:
+            existing.content_hash = content_hash
+            existing.embedding = embedding
+            session.commit()
+            return
+        row = JobEmbedding(job_id=job_id, content_hash=content_hash, embedding=embedding)
+        session.add(row)
+        session.commit()
+
+
+def _vector_score(distance: float) -> float:
+    similarity = max(0.0, 1.0 - distance)
+    return round(similarity * 100, 2)
+
+
+def _vector_match_cv(
+    cv_doc: CvDocumentRead,
+    extraction: ExtractedTextRead,
+) -> bool:
+    text_value = (extraction.extracted_text or "").strip()
+    if not text_value:
+        return False
+
+    try:
+        vector = embed_text(text_value)
+    except Exception as exc:
+        logger.warning("embedding failed for cv %s: %s", cv_doc.id, exc)
+        return False
+
+    if not vector:
+        return False
+
+    _upsert_cv_embedding(cv_doc.id, extraction.content_hash, vector)
+
+    with SessionLocal() as session:
+        distance = JobEmbedding.embedding.cosine_distance(vector).label("distance")
+        rows = session.execute(
+            select(
+                JobEmbedding.job_id,
+                JobDocument.path,
+                ExtractedText.extracted_text,
+                distance,
+            )
+            .join(JobDocument, JobEmbedding.job_id == JobDocument.id)
+            .join(ExtractedText, ExtractedText.file_path == JobDocument.path, isouter=True)
+            .order_by(distance.asc())
+            .limit(settings.embedding_top_k)
+        ).all()
+
+    if not rows:
+        return False
+
+    for row in rows:
+        job_text = (row.extracted_text or "").strip()
+        common: list[str] = []
+        if job_text:
+            _, common = score_texts(text_value, job_text)
+        score = _vector_score(float(row.distance))
+        _insert_score_result(Path(cv_doc.path), Path(row.path), score, common)
+        _upsert_match_result(cv_doc.id, row.job_id, score, common)
+
+    return True
+
+
+def _vector_match_job(
+    job_doc: JobDocumentRead,
+    extraction: ExtractedTextRead,
+) -> bool:
+    text_value = (extraction.extracted_text or "").strip()
+    if not text_value:
+        return False
+
+    try:
+        vector = embed_text(text_value)
+    except Exception as exc:
+        logger.warning("embedding failed for job %s: %s", job_doc.id, exc)
+        return False
+
+    if not vector:
+        return False
+
+    _upsert_job_embedding(job_doc.id, extraction.content_hash, vector)
+
+    with SessionLocal() as session:
+        distance = CvEmbedding.embedding.cosine_distance(vector).label("distance")
+        rows = session.execute(
+            select(
+                CvEmbedding.cv_id,
+                CvDocument.path,
+                ExtractedText.extracted_text,
+                distance,
+            )
+            .join(CvDocument, CvEmbedding.cv_id == CvDocument.id)
+            .join(ExtractedText, ExtractedText.file_path == CvDocument.path, isouter=True)
+            .order_by(distance.asc())
+            .limit(settings.embedding_top_k)
+        ).all()
+
+    if not rows:
+        return False
+
+    for row in rows:
+        cv_text = (row.extracted_text or "").strip()
+        common: list[str] = []
+        if cv_text:
+            _, common = score_texts(cv_text, text_value)
+        score = _vector_score(float(row.distance))
+        _insert_score_result(Path(row.path), Path(job_doc.path), score, common)
+        _upsert_match_result(row.cv_id, job_doc.id, score, common)
+
+    return True
+
+
 def _is_supported_file(path: Path) -> bool:
     return path.suffix.lower() in SUPPORTED_SUFFIXES
 
@@ -389,6 +532,10 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
         ):
             return
 
+        if settings.embedding_enabled:
+            if _vector_match_cv(cv_doc, changed_result):
+                return
+
         changed_text = changed_result.extracted_text or ""
         for job_path in _list_candidate_files(Path(settings.watch_job_dir)):
             job_result = _extract_and_persist(job_path)
@@ -417,6 +564,10 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             and previous_status == "ready"
         ):
             return
+
+        if settings.embedding_enabled:
+            if _vector_match_job(job_doc, changed_result):
+                return
 
         changed_text = changed_result.extracted_text or ""
         for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
