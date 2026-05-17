@@ -13,7 +13,7 @@ from sqlalchemy import delete, func, select, text
 from .db import SessionLocal, init_db
 from .models import EventLog, ExtractedText, ScoreResult
 from .schemas import EventCreate, EventRead, WatcherSimulateRequest, ExtractedTextCreate, ExtractedTextRead, ScoreRequest, ScoreRead
-from .services import LocalFolderWatcher, WatchEvent, file_sha256, extract_text, score_texts, serialize_keywords, deserialize_keywords
+from .services import LocalFolderWatcher, WatchEvent, EventWorker, enqueue_event, file_sha256, extract_text, score_texts, serialize_keywords, deserialize_keywords
 from .security import enforce_security, validate_security_settings
 from .settings import get_settings
 
@@ -280,9 +280,10 @@ def _on_watch_event(event: WatchEvent) -> None:
         return
 
     try:
-        _process_watch_event(event)
+        if not enqueue_event(event):
+            _process_watch_event(event)
     except Exception as exc:  # pragma: no cover
-        logger.exception("watcher processing failed: %s", exc)
+        logger.exception("watcher enqueue failed: %s", exc)
 
 
 @asynccontextmanager
@@ -293,10 +294,14 @@ async def lifespan(app: FastAPI):
     watched_folders = [Path(settings.watch_cv_dir), Path(settings.watch_job_dir)]
     watcher = LocalFolderWatcher(folders=watched_folders, callback=_on_watch_event)
     watcher.start()
+    worker = EventWorker(handler=_process_watch_event)
+    worker.start()
     app.state.watcher = watcher
+    app.state.worker = worker
     try:
         yield
     finally:
+        worker.stop()
         watcher.stop()
 
 
