@@ -1176,6 +1176,58 @@ def cleanup_retention() -> dict[str, int]:
         "deleted_scores": deleted_scores,
     }
 
+
+@app.post("/maintenance/purge-orphans")
+def purge_orphan_files() -> dict[str, int]:
+    removed_files = 0
+    removed_documents = 0
+
+    cv_root = Path(settings.watch_cv_dir)
+    job_root = Path(settings.watch_job_dir)
+
+    with SessionLocal() as session:
+        cv_paths = {
+            Path(row)
+            for row in session.scalars(select(CvDocument.path)).all()
+            if row
+        }
+        job_paths = {
+            Path(row)
+            for row in session.scalars(select(JobDocument.path)).all()
+            if row
+        }
+
+        for path in cv_paths:
+            if not path.exists():
+                _cleanup_removed_file(path, "cv")
+                removed_documents += 1
+
+        for path in job_paths:
+            if not path.exists():
+                _cleanup_removed_file(path, "job")
+                removed_documents += 1
+
+    for folder in (cv_root, job_root):
+        if not folder.exists():
+            continue
+        for file_path in folder.iterdir():
+            if not file_path.is_file():
+                continue
+            if not _is_supported_file(file_path):
+                continue
+            if file_path in cv_paths or file_path in job_paths:
+                continue
+            try:
+                file_path.unlink()
+                removed_files += 1
+            except Exception as exc:  # pragma: no cover
+                logger.warning("failed to remove orphan file %s: %s", file_path, exc)
+
+    return {
+        "removed_files": removed_files,
+        "removed_documents": removed_documents,
+    }
+
 @app.post("/extract", response_model=ExtractedTextRead)
 def ingest_and_extract(file_path: str) -> ExtractedTextRead:
     return _extract_and_persist(Path(file_path))
