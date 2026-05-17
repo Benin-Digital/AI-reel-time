@@ -69,6 +69,10 @@ class StateStore:
                 "updated_at": int(time.time()),
             }
 
+    def remove_hash(self, path: Path) -> None:
+        with self._lock:
+            self._data["files"].pop(str(path), None)
+
     def list_queue(self) -> list[dict[str, Any]]:
         with self._lock:
             return list(self._data["queue"])
@@ -77,11 +81,15 @@ class StateStore:
         with self._lock:
             self._data["queue"] = items
 
-    def upsert_queue_item(self, path: Path, role: str, error: str) -> None:
+    def upsert_queue_item(self, path: Path, role: str, action: str, error: str) -> None:
         with self._lock:
             queue = self._data["queue"]
             for item in queue:
-                if item.get("path") == str(path) and item.get("role") == role:
+                if (
+                    item.get("path") == str(path)
+                    and item.get("role") == role
+                    and item.get("action", "upload") == action
+                ):
                     item["last_error"] = error
                     item["attempts"] = int(item.get("attempts", 0)) + 1
                     item["updated_at"] = int(time.time())
@@ -90,6 +98,7 @@ class StateStore:
                 {
                     "path": str(path),
                     "role": role,
+                    "action": action,
                     "attempts": 0,
                     "queued_at": int(time.time()),
                     "last_error": error,
@@ -105,9 +114,17 @@ class SyncHandler(FileSystemEventHandler):
     def on_any_event(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
+        if event.event_type == "deleted":
+            self.agent.queue_delete(Path(event.src_path), self.role)
+            return
+
+        if event.event_type == "moved":
+            self.agent.queue_delete(Path(event.src_path), self.role)
+            if hasattr(event, "dest_path") and event.dest_path:
+                self.agent.queue_path(Path(event.dest_path), self.role)
+            return
+
         path = Path(event.src_path)
-        if hasattr(event, "dest_path") and event.dest_path:
-            path = Path(event.dest_path)
         self.agent.queue_path(path, self.role)
 
 
@@ -130,7 +147,7 @@ class SyncAgent:
         self.debounce_seconds = debounce_seconds
         self.retry_interval = retry_interval
         self._observer = Observer()
-        self._pending: dict[tuple[str, str], threading.Timer] = {}
+        self._pending: dict[tuple[str, str, str], threading.Timer] = {}
         self._pending_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._retry_thread = threading.Thread(target=self._retry_loop, daemon=True)
@@ -151,20 +168,37 @@ class SyncAgent:
         self._observer.join(timeout=5)
 
     def queue_path(self, path: Path, role: str) -> None:
-        key = (role, str(path))
+        self._schedule(path, role, "upload")
+
+    def queue_delete(self, path: Path, role: str) -> None:
+        self._schedule(path, role, "delete")
+
+    def _schedule(self, path: Path, role: str, action: str) -> None:
+        key = (role, str(path), action)
         with self._pending_lock:
             existing = self._pending.get(key)
             if existing:
                 existing.cancel()
-            timer = threading.Timer(self.debounce_seconds, self._process_path, args=(path, role))
+            timer = threading.Timer(
+                self.debounce_seconds,
+                self._process_action,
+                args=(path, role, action),
+            )
             self._pending[key] = timer
             timer.start()
 
-    def _process_path(self, path: Path, role: str) -> None:
-        key = (role, str(path))
+    def _process_action(self, path: Path, role: str, action: str) -> None:
+        key = (role, str(path), action)
         with self._pending_lock:
             self._pending.pop(key, None)
 
+        if action == "delete":
+            self._process_delete(path, role)
+            return
+
+        self._process_upload(path, role)
+
+    def _process_upload(self, path: Path, role: str) -> None:
         if not path.exists() or not path.is_file():
             return
         if path.suffix.lower() not in SUPPORTED_SUFFIXES:
@@ -184,7 +218,19 @@ class SyncAgent:
             self.state.save()
             return
 
-        self.state.upsert_queue_item(path, role, "upload failed")
+        self.state.upsert_queue_item(path, role, "upload", "upload failed")
+        self.state.save()
+
+    def _process_delete(self, path: Path, role: str) -> None:
+        if path.suffix.lower() not in SUPPORTED_SUFFIXES:
+            return
+
+        if self._delete_remote(path, role):
+            self.state.remove_hash(path)
+            self.state.save()
+            return
+
+        self.state.upsert_queue_item(path, role, "delete", "delete failed")
         self.state.save()
 
     def _upload_file(self, path: Path, role: str) -> bool:
@@ -214,6 +260,26 @@ class SyncAgent:
             except Exception:
                 pass
 
+    def _delete_remote(self, path: Path, role: str) -> bool:
+        headers = {}
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
+        payload = {"folder": role, "filename": path.name}
+        try:
+            response = requests.post(
+                f"{self.api_base}/ingest/delete",
+                json=payload,
+                headers=headers,
+                timeout=15,
+            )
+            if response.status_code >= 400:
+                logger.warning("delete failed (%s): %s", response.status_code, response.text)
+                return False
+            return True
+        except Exception as exc:
+            logger.warning("delete error: %s", exc)
+            return False
+
     def _retry_loop(self) -> None:
         while not self._stop_event.is_set():
             self._stop_event.wait(self.retry_interval)
@@ -230,9 +296,20 @@ class SyncAgent:
         for item in queue:
             path = Path(item.get("path", ""))
             role = item.get("role", "")
-            if not path.exists() or not path.is_file():
-                continue
             if role not in {"cv", "job"}:
+                continue
+            action = item.get("action", "upload")
+            if action == "delete":
+                if self._delete_remote(path, role):
+                    self.state.remove_hash(path)
+                    continue
+                item["attempts"] = int(item.get("attempts", 0)) + 1
+                item["updated_at"] = int(time.time())
+                remaining.append(item)
+                continue
+            if action != "upload":
+                continue
+            if not path.exists() or not path.is_file():
                 continue
 
             if self._upload_file(path, role):
