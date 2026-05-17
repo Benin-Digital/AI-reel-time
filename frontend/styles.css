@@ -220,13 +220,22 @@ body {
   gap: 14px;
 }
 
-.item {
+..item {
   background: var(--card);
   border-radius: var(--radius);
   padding: 16px 18px;
   border: 1px solid var(--stroke);
   display: grid;
   gap: 8px;
+}
+
+.details-panel {
+  margin-top: 16px;
+  border-left: 4px solid var(--accent-2);
+}
+
+.hidden {
+  display: none;
 }
 
 .item-title {

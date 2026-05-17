@@ -78,7 +78,18 @@
           <h1>CV Library</h1>
           <p>Tracked CV documents with processing status.</p>
         </div>
+        <div class="filters">
+          <input id="cvQuery" type="text" placeholder="Search CV path" />
+          <select id="cvStatus">
+            <option value="">All statuses</option>
+            <option value="ready">Ready</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Pending</option>
+          </select>
+          <button id="applyCvFilters" class="ghost">Apply</button>
+        </div>
         <div id="cvList" class="stack"></div>
+        <div id="cvDetails" class="item details-panel hidden"></div>
       </section>
 
       <section id="job" class="section">
@@ -86,17 +97,36 @@
           <h1>Job Library</h1>
           <p>Tracked job descriptions with processing status.</p>
         </div>
+        <div class="filters">
+          <input id="jobQuery" type="text" placeholder="Search job path" />
+          <select id="jobStatus">
+            <option value="">All statuses</option>
+            <option value="ready">Ready</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Pending</option>
+          </select>
+          <button id="applyJobFilters" class="ghost">Apply</button>
+        </div>
         <div id="jobList" class="stack"></div>
+        <div id="jobDetails" class="item details-panel hidden"></div>
       </section>
 
       <section id="matches" class="section">
         <div class="section-header">
           <h1>Match Results</h1>
-          <p>Filter scores by CV or Job identifiers.</p>
+          <p>Filter scores by CV, Job, rating or sort order.</p>
         </div>
         <div class="filters">
           <input id="filterCv" type="number" placeholder="Filter by CV id" />
           <input id="filterJob" type="number" placeholder="Filter by Job id" />
+          <input id="minScore" type="number" placeholder="Min score" min="0" max="100" />
+          <input id="maxScore" type="number" placeholder="Max score" min="0" max="100" />
+          <select id="sortMatches">
+            <option value="score_desc">Score desc</option>
+            <option value="score_asc">Score asc</option>
+            <option value="created_at_desc">Newest</option>
+            <option value="created_at_asc">Oldest</option>
+          </select>
           <button id="applyFilters" class="ghost">Apply Filter</button>
           <button id="clearFilters" class="ghost">Clear</button>
         </div>
