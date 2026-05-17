@@ -2,10 +2,12 @@ from contextlib import asynccontextmanager
 import json
 import logging
 from pathlib import Path
+import shutil
+import tempfile
 from time import perf_counter, time
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from sqlalchemy import delete, func, or_, select, text
@@ -614,6 +616,54 @@ def simulate_watcher_event(payload: WatcherSimulateRequest) -> dict[str, str]:
         "status": "written",
         "path": str(target),
         "timestamp": str(time()),
+    }
+
+
+@app.post("/ingest")
+def ingest_file(
+    folder: str = Form(...),
+    upload: UploadFile = File(...),
+    filename: str | None = Form(None),
+) -> dict[str, str]:
+    if folder not in {"cv", "job"}:
+        raise HTTPException(status_code=400, detail="Invalid folder")
+
+    target_dir = Path(settings.watch_cv_dir if folder == "cv" else settings.watch_job_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_name = filename or upload.filename or ""
+    safe_name = Path(raw_name).name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Missing filename")
+
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    target_path = target_dir / safe_name
+    temp_path: Path | None = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{safe_name}.",
+            dir=target_dir,
+            delete=False,
+        ) as temp_file:
+            shutil.copyfileobj(upload.file, temp_file)
+            temp_path = Path(temp_file.name)
+    finally:
+        try:
+            upload.file.close()
+        except Exception:
+            pass
+
+    if temp_path is None:
+        raise HTTPException(status_code=500, detail="Upload failed")
+
+    temp_path.replace(target_path)
+    return {
+        "status": "stored",
+        "path": str(target_path),
     }
 
 
