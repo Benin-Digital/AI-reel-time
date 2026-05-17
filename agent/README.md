@@ -28,4 +28,5 @@ export AI_REALTIME_API_KEY="YOUR_KEY"
 
 - Supported file types: `.pdf`, `.docx`, `.txt`.
 - Debounce and retry are enabled by default.
+- Deletions are synced to the VPS (remote file removed).
 - State is stored in `~/.ai-realtime-sync/state.json`.
