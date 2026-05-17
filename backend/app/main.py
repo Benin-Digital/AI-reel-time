@@ -12,8 +12,31 @@ from sqlalchemy import delete, func, select, text
 
 from .db import SessionLocal, init_db
 from .models import EventLog, ExtractedText, ScoreResult, CvDocument, JobDocument, MatchResult
-from .schemas import EventCreate, EventRead, WatcherSimulateRequest, ExtractedTextCreate, ExtractedTextRead, ScoreRequest, ScoreRead, CvDocumentRead, JobDocumentRead, MatchRead
-from .services import LocalFolderWatcher, WatchEvent, EventWorker, enqueue_event, file_sha256, extract_text, score_texts, serialize_keywords, deserialize_keywords
+from .schemas import (
+    EventCreate,
+    EventRead,
+    WatcherSimulateRequest,
+    ExtractedTextCreate,
+    ExtractedTextRead,
+    ScoreRequest,
+    ScoreRead,
+    CvDocumentRead,
+    CvDocumentDetailRead,
+    JobDocumentRead,
+    JobDocumentDetailRead,
+    MatchRead,
+)
+from .services import (
+    LocalFolderWatcher,
+    WatchEvent,
+    EventWorker,
+    enqueue_event,
+    file_sha256,
+    extract_text,
+    score_texts,
+    serialize_keywords,
+    deserialize_keywords,
+)
 from .security import enforce_security, validate_security_settings
 from .settings import get_settings
 
@@ -283,10 +306,17 @@ def _extract_and_persist(path: Path) -> ExtractedTextRead:
             )
         )
 
+    content_hash = file_sha256(path) if path.is_file() else None
+    existing = None
+    with SessionLocal() as session:
+        existing = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == str(path))
+        )
+        if existing and existing.content_hash == content_hash and existing.extraction_success:
+            return ExtractedTextRead.model_validate(existing)
+
     try:
         extracted = extract_text(path)
-        content_hash = file_sha256(path) if path.is_file() else None
-
         method = path.suffix.lower().lstrip(".") or "unknown"
         success = bool(extracted and extracted.strip())
 
@@ -305,6 +335,7 @@ def _extract_and_persist(path: Path) -> ExtractedTextRead:
         return _upsert_extraction_result(
             ExtractedTextCreate(
                 file_path=str(path),
+                content_hash=content_hash,
                 extraction_success=False,
                 error_message=str(exc),
             )
@@ -334,8 +365,23 @@ def _cleanup_removed_file(path: Path, role: str) -> None:
 def _score_against_counterparts(changed_path: Path, role: str) -> None:
     changed_result = _extract_and_persist(changed_path)
     if role == "cv":
+        previous_hash = None
+        with SessionLocal() as session:
+            previous = session.scalar(
+                select(CvDocument).where(CvDocument.path == str(changed_path))
+            )
+            previous_hash = previous.content_hash if previous else None
+            previous_status = previous.status if previous else None
+
         cv_doc = _upsert_cv_document(changed_path, changed_result)
         if not changed_result.extraction_success:
+            return
+
+        if (
+            previous_hash
+            and changed_result.content_hash == previous_hash
+            and previous_status == "ready"
+        ):
             return
 
         changed_text = changed_result.extracted_text or ""
@@ -348,8 +394,23 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             _insert_score_result(changed_path, job_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common)
     else:
+        previous_hash = None
+        with SessionLocal() as session:
+            previous = session.scalar(
+                select(JobDocument).where(JobDocument.path == str(changed_path))
+            )
+            previous_hash = previous.content_hash if previous else None
+            previous_status = previous.status if previous else None
+
         job_doc = _upsert_job_document(changed_path, changed_result)
         if not changed_result.extraction_success:
+            return
+
+        if (
+            previous_hash
+            and changed_result.content_hash == previous_hash
+            and previous_status == "ready"
+        ):
             return
 
         changed_text = changed_result.extracted_text or ""
@@ -577,12 +638,20 @@ def list_scores(limit: int = 50) -> list[ScoreRead]:
 
 
 @app.get("/cv-documents", response_model=list[CvDocumentRead])
-def list_cv_documents(limit: int = 50) -> list[CvDocumentRead]:
+def list_cv_documents(
+    limit: int = 50,
+    status: str | None = None,
+    query: str | None = None,
+) -> list[CvDocumentRead]:
     safe_limit = max(1, min(limit, 200))
+    stmt = select(CvDocument)
+    if status:
+        stmt = stmt.where(CvDocument.status == status)
+    if query:
+        stmt = stmt.where(CvDocument.path.ilike(f"%{query}%"))
+    stmt = stmt.order_by(CvDocument.id.desc()).limit(safe_limit)
     with SessionLocal() as session:
-        rows = session.scalars(
-            select(CvDocument).order_by(CvDocument.id.desc()).limit(safe_limit)
-        ).all()
+        rows = session.scalars(stmt).all()
         return [CvDocumentRead.model_validate(row) for row in rows]
 
 
@@ -595,13 +664,62 @@ def get_cv_document(doc_id: int) -> CvDocumentRead:
         return CvDocumentRead.model_validate(doc)
 
 
-@app.get("/job-documents", response_model=list[JobDocumentRead])
-def list_job_documents(limit: int = 50) -> list[JobDocumentRead]:
-    safe_limit = max(1, min(limit, 200))
+@app.get("/cv-documents/{doc_id}/details", response_model=CvDocumentDetailRead)
+def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead:
+    safe_limit = max(1, min(limit, 50))
     with SessionLocal() as session:
-        rows = session.scalars(
-            select(JobDocument).order_by(JobDocument.id.desc()).limit(safe_limit)
+        doc = session.get(CvDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="CV document not found")
+
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == doc.path)
+        )
+        match_rows = session.scalars(
+            select(MatchResult)
+            .where(MatchResult.cv_id == doc_id)
+            .order_by(MatchResult.score.desc())
+            .limit(safe_limit)
         ).all()
+        return CvDocumentDetailRead(
+            id=doc.id,
+            path=doc.path,
+            content_hash=doc.content_hash,
+            status=doc.status,
+            last_error=doc.last_error,
+            created_at=doc.created_at,
+            updated_at=doc.updated_at,
+            extraction=ExtractedTextRead.model_validate(extraction) if extraction else None,
+            top_matches=[
+                MatchRead(
+                    id=row.id,
+                    cv_id=row.cv_id,
+                    job_id=row.job_id,
+                    score=row.score,
+                    common_keywords=deserialize_keywords(row.common_keywords),
+                    created_at=row.created_at,
+                    updated_at=row.updated_at,
+                )
+                for row in match_rows
+            ],
+        )
+
+
+@app.get("/job-documents", response_model=list[JobDocumentRead])
+def list_job_documents(
+    limit: int = 50,
+    status: str | None = None,
+    query: str | None = None,
+) -> list[JobDocumentRead]:
+    safe_limit = max(1, min(limit, 200))
+    stmt = select(JobDocument)
+    if status:
+        stmt = stmt.where(JobDocument.status == status)
+    if query:
+        stmt = stmt.where(JobDocument.path.ilike(f"%{query}%"))
+    stmt = stmt.order_by(JobDocument.id.desc()).limit(safe_limit)
+    with SessionLocal() as session:
+        rows = session.scalars(stmt).all()
         return [JobDocumentRead.model_validate(row) for row in rows]
 
 
@@ -614,11 +732,115 @@ def get_job_document(doc_id: int) -> JobDocumentRead:
         return JobDocumentRead.model_validate(doc)
 
 
+@app.get("/job-documents/{doc_id}/details", response_model=JobDocumentDetailRead)
+def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRead:
+    safe_limit = max(1, min(limit, 50))
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == doc.path)
+        )
+        match_rows = session.scalars(
+            select(MatchResult)
+            .where(MatchResult.job_id == doc_id)
+            .order_by(MatchResult.score.desc())
+            .limit(safe_limit)
+        ).all()
+        return JobDocumentDetailRead(
+            id=doc.id,
+            path=doc.path,
+            content_hash=doc.content_hash,
+            status=doc.status,
+            last_error=doc.last_error,
+            created_at=doc.created_at,
+            updated_at=doc.updated_at,
+            extraction=ExtractedTextRead.model_validate(extraction) if extraction else None,
+            top_matches=[
+                MatchRead(
+                    id=row.id,
+                    cv_id=row.cv_id,
+                    job_id=row.job_id,
+                    score=row.score,
+                    common_keywords=deserialize_keywords(row.common_keywords),
+                    created_at=row.created_at,
+                    updated_at=row.updated_at,
+                )
+                for row in match_rows
+            ],
+        )
+
+
+@app.get("/extractions/path", response_model=ExtractedTextRead)
+def get_extraction_by_path(path: str) -> ExtractedTextRead:
+    with SessionLocal() as session:
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == path)
+        )
+        if not extraction:
+            raise HTTPException(status_code=404, detail="Extraction not found")
+        return ExtractedTextRead.model_validate(extraction)
+
+
+@app.get("/cv-documents/{doc_id}/matches", response_model=list[MatchRead])
+def list_matches_for_cv(doc_id: int, limit: int = 50) -> list[MatchRead]:
+    safe_limit = max(1, min(limit, 200))
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(MatchResult)
+            .where(MatchResult.cv_id == doc_id)
+            .order_by(MatchResult.score.desc())
+            .limit(safe_limit)
+        ).all()
+        return [
+            MatchRead(
+                id=row.id,
+                cv_id=row.cv_id,
+                job_id=row.job_id,
+                score=row.score,
+                common_keywords=deserialize_keywords(row.common_keywords),
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        ]
+
+
+@app.get("/job-documents/{doc_id}/matches", response_model=list[MatchRead])
+def list_matches_for_job(doc_id: int, limit: int = 50) -> list[MatchRead]:
+    safe_limit = max(1, min(limit, 200))
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(MatchResult)
+            .where(MatchResult.job_id == doc_id)
+            .order_by(MatchResult.score.desc())
+            .limit(safe_limit)
+        ).all()
+        return [
+            MatchRead(
+                id=row.id,
+                cv_id=row.cv_id,
+                job_id=row.job_id,
+                score=row.score,
+                common_keywords=deserialize_keywords(row.common_keywords),
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        ]
+
+
 @app.get("/matches", response_model=list[MatchRead])
 def list_matches(
     limit: int = 50,
     cv_id: int | None = None,
     job_id: int | None = None,
+    min_score: float | None = None,
+    max_score: float | None = None,
+    sort_by: str = "score_desc",
+    offset: int = 0,
 ) -> list[MatchRead]:
     safe_limit = max(1, min(limit, 200))
     stmt = select(MatchResult)
@@ -626,9 +848,22 @@ def list_matches(
         stmt = stmt.where(MatchResult.cv_id == cv_id)
     if job_id is not None:
         stmt = stmt.where(MatchResult.job_id == job_id)
+    if min_score is not None:
+        stmt = stmt.where(MatchResult.score >= min_score)
+    if max_score is not None:
+        stmt = stmt.where(MatchResult.score <= max_score)
+
+    if sort_by == "score_asc":
+        stmt = stmt.order_by(MatchResult.score.asc())
+    elif sort_by == "created_at_asc":
+        stmt = stmt.order_by(MatchResult.created_at.asc())
+    elif sort_by == "created_at_desc":
+        stmt = stmt.order_by(MatchResult.created_at.desc())
+    else:
+        stmt = stmt.order_by(MatchResult.score.desc())
 
     with SessionLocal() as session:
-        rows = session.scalars(stmt.order_by(MatchResult.id.desc()).limit(safe_limit)).all()
+        rows = session.scalars(stmt.offset(max(0, offset)).limit(safe_limit)).all()
         return [
             MatchRead(
                 id=row.id,

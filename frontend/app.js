@@ -111,10 +111,9 @@ const renderDocuments = (docs, target, kind) => {
       const id = btn.getAttribute("data-doc");
       const kind = btn.getAttribute("data-kind");
       const action = btn.getAttribute("data-action");
-      const path = decodeURIComponent(btn.getAttribute("data-path") || "");
 
       if (action === "details") {
-        loadDocumentDetails(kind, id, path);
+        loadDocumentDetails(kind, id);
         return;
       }
 
@@ -131,7 +130,10 @@ const renderDocuments = (docs, target, kind) => {
   });
 };
 
-const renderDocumentDetails = (doc, extraction, matches, target) => {
+const renderDocumentDetails = (doc, target) => {
+  const extraction = doc.extraction || {};
+  const matches = doc.top_matches || [];
+
   target.classList.remove("hidden");
   target.innerHTML = `
     <div class="item-title">
@@ -164,21 +166,11 @@ const renderDocumentDetails = (doc, extraction, matches, target) => {
   `;
 };
 
-const loadDocumentDetails = async (kind, id, path) => {
+const loadDocumentDetails = async (kind, id) => {
   const detailsTarget = kind === "cv" ? cvDetails : jobDetails;
-  if (!path) {
-    detailsTarget.innerHTML = formatEmpty("Missing document path for details.");
-    detailsTarget.classList.remove("hidden");
-    return;
-  }
-
   try {
-    const [doc, extraction, matches] = await Promise.all([
-      safeFetch(`/${kind}-documents/${id}`),
-      safeFetch(`/extractions/path?path=${encodeURIComponent(path)}`),
-      safeFetch(`/${kind}-documents/${id}/matches`),
-    ]);
-    renderDocumentDetails(doc, extraction, matches.slice(0, 6), detailsTarget);
+    const doc = await safeFetch(`/${kind}-documents/${id}/details`);
+    renderDocumentDetails(doc, detailsTarget);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     detailsTarget.innerHTML = formatEmpty(message);

@@ -103,3 +103,25 @@ class MatchRead(BaseModel):
     common_keywords: list[str]
     created_at: datetime
     updated_at: datetime
+
+
+class DocumentDetailBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    path: str
+    content_hash: str | None
+    status: str
+    last_error: str | None
+    created_at: datetime
+    updated_at: datetime
+    extraction: ExtractedTextRead | None
+    top_matches: list[MatchRead]
+
+
+class CvDocumentDetailRead(DocumentDetailBase):
+    pass
+
+
+class JobDocumentDetailRead(DocumentDetailBase):
+    pass
