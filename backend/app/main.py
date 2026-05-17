@@ -18,6 +18,7 @@ from .schemas import (
     EventCreate,
     EventRead,
     WatcherSimulateRequest,
+    IngestDeleteRequest,
     ExtractedTextCreate,
     ExtractedTextRead,
     ScoreRequest,
@@ -664,6 +665,42 @@ def ingest_file(
     temp_path.replace(target_path)
     return {
         "status": "stored",
+        "path": str(target_path),
+    }
+
+
+@app.post("/ingest/delete")
+def ingest_delete(payload: IngestDeleteRequest) -> dict[str, str]:
+    folder = payload.folder
+    target_dir = Path(settings.watch_cv_dir if folder == "cv" else settings.watch_job_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = Path(payload.filename).name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="Missing filename")
+
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    target_path = target_dir / safe_name
+    status = "missing"
+    if target_path.exists():
+        target_path.unlink()
+        status = "deleted"
+
+    delete_event = WatchEvent(
+        path=target_path,
+        event_type="deleted",
+        observed_at=time(),
+    )
+    try:
+        _on_watch_event(delete_event)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("ingest delete enqueue failed: %s", exc)
+
+    return {
+        "status": status,
         "path": str(target_path),
     }
 

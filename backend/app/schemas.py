@@ -30,6 +30,11 @@ class WatcherSimulateRequest(BaseModel):
     content: str = "sample content"
 
 
+class IngestDeleteRequest(BaseModel):
+    folder: Literal["cv", "job"] = "cv"
+    filename: str
+
+
 class ExtractedTextCreate(BaseModel):
     file_path: str
     content_hash: str | None = None
