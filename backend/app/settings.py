@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     scoring_max_bonus: float = 0.25
     scoring_experience_bonus: float = 0.1
     scoring_experience_penalty: float = 0.05
+    embedding_enabled: bool = True
+    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_device: str = "cpu"
+    embedding_batch_size: int = 16
+    embedding_dim: int = 384
+    embedding_top_k: int = 25
     queue_memory_max_size: int = 1000
     queue_memory_warn_threshold: int = 250
     queue_backend: str = "stream"
