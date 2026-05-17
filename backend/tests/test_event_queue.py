@@ -23,8 +23,8 @@ def test_enqueue_dequeue_memory_fallback(monkeypatch):
     result = event_queue.dequeue_event(timeout=0.1)
 
     assert result is not None
-    assert result.path == event.path
-    assert result.event_type == event.event_type
+    assert result.event.path == event.path
+    assert result.event.event_type == event.event_type
 
 
 def test_memory_queue_is_bounded(monkeypatch):
@@ -48,5 +48,5 @@ def test_memory_queue_is_bounded(monkeypatch):
     first = event_queue.dequeue_event(timeout=0.1)
     second = event_queue.dequeue_event(timeout=0.1)
 
-    assert first is not None and first.path == events[1].path
-    assert second is not None and second.path == events[2].path
+    assert first is not None and first.event.path == events[1].path
+    assert second is not None and second.event.path == events[2].path
