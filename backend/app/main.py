@@ -19,6 +19,7 @@ from .settings import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+SUPPORTED_SUFFIXES = {".pdf", ".docx", ".txt"}
 
 
 class _JsonFormatter(logging.Formatter):
@@ -142,6 +143,123 @@ def _insert_score_result(cv_path: Path, job_path: Path, score: float, common: li
         )
 
 
+def _is_supported_file(path: Path) -> bool:
+    return path.suffix.lower() in SUPPORTED_SUFFIXES
+
+
+def _resolve_role(path: Path) -> str | None:
+    try:
+        path.resolve().relative_to(Path(settings.watch_cv_dir).resolve())
+        return "cv"
+    except ValueError:
+        pass
+
+    try:
+        path.resolve().relative_to(Path(settings.watch_job_dir).resolve())
+        return "job"
+    except ValueError:
+        return None
+
+
+def _list_candidate_files(folder: Path) -> list[Path]:
+    if not folder.exists():
+        return []
+    return [
+        item
+        for item in folder.iterdir()
+        if item.is_file() and _is_supported_file(item)
+    ]
+
+
+def _extract_and_persist(path: Path) -> ExtractedTextRead:
+    if not path.exists():
+        logger.warning("File not found for extraction: %s", path)
+        return _upsert_extraction_result(
+            ExtractedTextCreate(
+                file_path=str(path),
+                extraction_success=False,
+                error_message="File not found",
+            )
+        )
+
+    try:
+        extracted = extract_text(path)
+        content_hash = file_sha256(path) if path.is_file() else None
+
+        method = path.suffix.lower().lstrip(".") or "unknown"
+        success = bool(extracted and extracted.strip())
+
+        return _upsert_extraction_result(
+            ExtractedTextCreate(
+                file_path=str(path),
+                content_hash=content_hash,
+                extracted_text=extracted,
+                extraction_method=method,
+                extraction_success=success,
+                error_message=None if success else "No text extracted",
+            )
+        )
+    except Exception as exc:
+        logger.exception("Extraction failed for %s: %s", path, exc)
+        return _upsert_extraction_result(
+            ExtractedTextCreate(
+                file_path=str(path),
+                extraction_success=False,
+                error_message=str(exc),
+            )
+        )
+
+
+def _cleanup_removed_file(path: Path, role: str) -> None:
+    with SessionLocal() as session:
+        session.execute(
+            delete(ExtractedText).where(ExtractedText.file_path == str(path))
+        )
+        if role == "cv":
+            session.execute(delete(ScoreResult).where(ScoreResult.cv_path == str(path)))
+        else:
+            session.execute(delete(ScoreResult).where(ScoreResult.job_path == str(path)))
+        session.commit()
+
+
+def _score_against_counterparts(changed_path: Path, role: str) -> None:
+    changed_result = _extract_and_persist(changed_path)
+    if not changed_result.extraction_success:
+        return
+
+    changed_text = changed_result.extracted_text or ""
+    if role == "cv":
+        for job_path in _list_candidate_files(Path(settings.watch_job_dir)):
+            job_result = _extract_and_persist(job_path)
+            if not job_result.extraction_success:
+                continue
+            score, common = score_texts(changed_text, job_result.extracted_text or "")
+            _insert_score_result(changed_path, job_path, score, common)
+    else:
+        for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
+            cv_result = _extract_and_persist(cv_path)
+            if not cv_result.extraction_success:
+                continue
+            score, common = score_texts(cv_result.extracted_text or "", changed_text)
+            _insert_score_result(cv_path, changed_path, score, common)
+
+
+def _process_watch_event(event: WatchEvent) -> None:
+    role = _resolve_role(event.path)
+    if role is None:
+        return
+
+    if not event.path.exists() or not event.path.is_file():
+        _cleanup_removed_file(event.path, role)
+        return
+
+    if not _is_supported_file(event.path):
+        logger.info("Skipping unsupported file type: %s", event.path)
+        return
+
+    _score_against_counterparts(event.path, role)
+
+
 def _on_watch_event(event: WatchEvent) -> None:
     try:
         fingerprint: str | None = None
@@ -159,6 +277,12 @@ def _on_watch_event(event: WatchEvent) -> None:
         )
     except Exception as exc:  # pragma: no cover
         logger.exception("watcher callback failed: %s", exc)
+        return
+
+    try:
+        _process_watch_event(event)
+    except Exception as exc:  # pragma: no cover
+        logger.exception("watcher processing failed: %s", exc)
 
 
 @asynccontextmanager
@@ -369,44 +493,4 @@ def cleanup_retention() -> dict[str, int]:
 
 @app.post("/extract", response_model=ExtractedTextRead)
 def ingest_and_extract(file_path: str) -> ExtractedTextRead:
-    path = Path(file_path)
-
-    if not path.exists():
-        logger.warning("File not found for extraction: %s", file_path)
-        return _upsert_extraction_result(
-            ExtractedTextCreate(
-                file_path=file_path,
-                extraction_success=False,
-                error_message="File not found",
-            )
-        )
-
-    try:
-        extracted = extract_text(path)
-        content_hash = file_sha256(path) if path.is_file() else None
-
-        method = path.suffix.lower().lstrip(".")
-        if not method:
-            method = "unknown"
-
-        success = bool(extracted and extracted.strip())
-
-        return _upsert_extraction_result(
-            ExtractedTextCreate(
-                file_path=file_path,
-                content_hash=content_hash,
-                extracted_text=extracted,
-                extraction_method=method,
-                extraction_success=success,
-                error_message=None if success else "No text extracted",
-            )
-        )
-    except Exception as exc:
-        logger.exception("Extraction failed for %s: %s", file_path, exc)
-        return _upsert_extraction_result(
-            ExtractedTextCreate(
-                file_path=file_path,
-                extraction_success=False,
-                error_message=str(exc),
-            )
-        )
+    return _extract_and_persist(Path(file_path))
