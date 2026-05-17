@@ -31,9 +31,14 @@ class EventWorker:
             name="event-worker",
             daemon=True,
         )
+        self.last_error: str | None = None
 
     def start(self) -> None:
         self._thread.start()
+
+    @property
+    def is_running(self) -> bool:
+        return self._thread.is_alive()
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -51,9 +56,11 @@ class EventWorker:
         while attempt <= self._max_retries and not self._stop_event.is_set():
             try:
                 self._handler(event)
+                self.last_error = None
                 return
-            except Exception:
+            except Exception as exc:
                 attempt += 1
+                self.last_error = str(exc)
                 logger.exception(
                     "event worker failed to process event on attempt %d",
                     attempt,

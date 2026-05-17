@@ -9,6 +9,8 @@ const metricUptime = document.getElementById("metricUptime");
 const metricEvents = document.getElementById("metricEvents");
 const metricExtractions = document.getElementById("metricExtractions");
 const metricScores = document.getElementById("metricScores");
+const metricQueueHealth = document.getElementById("metricQueueHealth");
+const metricWorkerStatus = document.getElementById("metricWorkerStatus");
 
 const recentMatches = document.getElementById("recentMatches");
 const cvList = document.getElementById("cvList");
@@ -64,6 +66,12 @@ const renderMetrics = (data) => {
   metricEvents.textContent = data.event_count ?? "--";
   metricExtractions.textContent = data.extraction_count ?? "--";
   metricScores.textContent = data.score_count ?? "--";
+  metricQueueHealth.textContent = data.redis_available
+    ? `online (${data.redis_queue_length} queued, ${data.memory_queue_length} mem)`
+    : "offline";
+  metricWorkerStatus.textContent = data.worker_alive
+    ? `alive${data.worker_last_error ? ` - error: ${data.worker_last_error}` : ""}`
+    : "stopped";
 };
 
 const renderMatches = (matches, target) => {

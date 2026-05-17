@@ -547,9 +547,10 @@ def readiness() -> dict[str, str]:
 
 
 @app.get("/metrics")
-def metrics() -> dict[str, float | int | bool]:
+def metrics() -> dict[str, float | int | bool | str | None]:
     uptime = int(time() - app.state.started_at)
     queue_status = get_queue_status()
+    worker = getattr(app.state, "worker", None)
     with SessionLocal() as session:
         events = session.scalar(select(func.count()).select_from(EventLog))
         extractions = session.scalar(select(func.count()).select_from(ExtractedText))
@@ -562,6 +563,24 @@ def metrics() -> dict[str, float | int | bool]:
         "redis_available": bool(queue_status.get("redis_available", False)),
         "redis_queue_length": int(queue_status.get("redis_queue_length", 0)),
         "memory_queue_length": int(queue_status.get("memory_queue_length", 0)),
+        "worker_alive": bool(worker.is_running) if worker is not None else False,
+        "worker_last_error": worker.last_error if worker is not None else None,
+    }
+
+
+@app.get("/queue-status")
+def queue_status() -> dict[str, int | bool]:
+    return get_queue_status()
+
+
+@app.get("/worker-status")
+def worker_status() -> dict[str, bool | str | None]:
+    worker = getattr(app.state, "worker", None)
+    if worker is None:
+        raise HTTPException(status_code=503, detail="worker unavailable")
+    return {
+        "alive": worker.is_running,
+        "last_error": worker.last_error,
     }
 
 
