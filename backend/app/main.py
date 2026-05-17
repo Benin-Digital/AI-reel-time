@@ -482,6 +482,7 @@ async def lifespan(app: FastAPI):
         max_retries=settings.worker_max_retries,
         retry_base_delay=settings.worker_retry_base_delay,
         retry_max_delay=settings.worker_retry_max_delay,
+        ack_on_failure=settings.queue_ack_on_failure,
     )
     worker.start()
     app.state.watcher = watcher

@@ -5,7 +5,7 @@ import logging
 import threading
 import time
 
-from .event_queue import dequeue_event
+from .event_queue import ack_event, dequeue_event
 from .watcher import WatchEvent
 
 logger = logging.getLogger(__name__)
@@ -19,12 +19,14 @@ class EventWorker:
         max_retries: int = 3,
         retry_base_delay: float = 0.5,
         retry_max_delay: float = 10.0,
+        ack_on_failure: bool = True,
     ) -> None:
         self._handler = handler
         self._poll_interval = poll_interval
         self._max_retries = max_retries
         self._retry_base_delay = retry_base_delay
         self._retry_max_delay = retry_max_delay
+        self._ack_on_failure = ack_on_failure
         self._stop_event = threading.Event()
         self._thread = threading.Thread(
             target=self._run,
@@ -46,18 +48,20 @@ class EventWorker:
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
-            event = dequeue_event(timeout=self._poll_interval)
-            if event is None:
+            queued = dequeue_event(timeout=self._poll_interval)
+            if queued is None:
                 continue
-            self._process_event(event)
+            success = self._process_event(queued.event)
+            if success or self._ack_on_failure:
+                ack_event(queued)
 
-    def _process_event(self, event: WatchEvent) -> None:
+    def _process_event(self, event: WatchEvent) -> bool:
         attempt = 0
         while attempt <= self._max_retries and not self._stop_event.is_set():
             try:
                 self._handler(event)
                 self.last_error = None
-                return
+                return True
             except Exception as exc:
                 attempt += 1
                 self.last_error = str(exc)
@@ -71,9 +75,10 @@ class EventWorker:
                         self._max_retries,
                         event,
                     )
-                    return
+                    return False
                 delay = min(
                     self._retry_base_delay * (2 ** (attempt - 1)),
                     self._retry_max_delay,
                 )
                 time.sleep(delay)
+        return False

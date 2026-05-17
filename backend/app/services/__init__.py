@@ -1,5 +1,5 @@
 from .extraction import extract_text
-from .event_queue import dequeue_event, enqueue_event, get_queue_status
+from .event_queue import QueuedEvent, ack_event, dequeue_event, enqueue_event, get_queue_status
 from .fingerprint import file_sha256
 from .scoring import score_texts, serialize_keywords, deserialize_keywords
 from .watcher import LocalFolderWatcher, WatchEvent
@@ -10,6 +10,8 @@ __all__ = [
     "dequeue_event",
     "enqueue_event",
     "get_queue_status",
+    "ack_event",
+    "QueuedEvent",
     "file_sha256",
     "LocalFolderWatcher",
     "WatchEvent",

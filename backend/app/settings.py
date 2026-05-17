@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     scoring_experience_penalty: float = 0.05
     queue_memory_max_size: int = 1000
     queue_memory_warn_threshold: int = 250
+    queue_backend: str = "stream"
+    queue_stream_name: str = "airealtime:watch_events"
+    queue_consumer_group: str = "airealtime-workers"
+    queue_consumer_name: str = ""
+    queue_ack_on_failure: bool = True
     worker_retry_base_delay: float = 0.5
     worker_retry_max_delay: float = 10.0
     worker_max_retries: int = 3
