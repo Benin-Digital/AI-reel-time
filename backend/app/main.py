@@ -927,6 +927,13 @@ def ingest_file(
         raise HTTPException(status_code=500, detail="Upload failed")
 
     temp_path.replace(target_path)
+    _on_watch_event(
+        WatchEvent(
+            path=target_path,
+            event_type="ingest",
+            observed_at=time(),
+        )
+    )
     return {
         "status": "stored",
         "path": str(target_path),
