@@ -7,7 +7,6 @@ const metricUptime = document.getElementById("metricUptime");
 const metricEvents = document.getElementById("metricEvents");
 const metricExtractions = document.getElementById("metricExtractions");
 const metricScores = document.getElementById("metricScores");
-const metricQueueHealth = document.getElementById("metricQueueHealth");
 const metricWorkerStatus = document.getElementById("metricWorkerStatus");
 
 const recentMatches = document.getElementById("recentMatches");
@@ -80,9 +79,6 @@ const renderMetrics = (data) => {
   metricEvents.textContent = data.event_count ?? "--";
   metricExtractions.textContent = data.extraction_count ?? "--";
   metricScores.textContent = data.score_count ?? "--";
-  metricQueueHealth.textContent = data.redis_available
-    ? `en ligne (${data.redis_queue_length} en file, ${data.memory_queue_length} en mémoire)`
-    : "hors ligne";
   metricWorkerStatus.textContent = data.worker_alive
     ? `actif${data.worker_last_error ? ` - erreur : ${data.worker_last_error}` : ""}`
     : "arrêté";
