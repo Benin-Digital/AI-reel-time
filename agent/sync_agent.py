@@ -77,6 +77,10 @@ class StateStore:
         with self._lock:
             return list(self._data["queue"])
 
+    def list_tracked_paths(self) -> list[str]:
+        with self._lock:
+            return list(self._data["files"].keys())
+
     def set_queue(self, items: list[dict[str, Any]]) -> None:
         with self._lock:
             self._data["queue"] = items
@@ -161,19 +165,89 @@ class SyncAgent:
         self._observer.schedule(SyncHandler(self, "job"), str(self.job_dir), recursive=False)
         self._observer.start()
         self._retry_thread.start()
-        self._seed_existing_files()
+        self._full_sync()
 
     def stop(self) -> None:
         self._stop_event.set()
         self._observer.stop()
         self._observer.join(timeout=5)
 
-    def _seed_existing_files(self) -> None:
-        for role, folder in (("cv", self.cv_dir), ("job", self.job_dir)):
-            for path in folder.iterdir():
-                if not path.is_file():
-                    continue
-                self._process_upload(path, role)
+    def _list_local_files(self, folder: Path) -> set[Path]:
+        return {
+            path
+            for path in folder.iterdir()
+            if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
+        }
+
+    def _list_remote_files(self, role: str) -> set[str]:
+        page = 1
+        page_size = 100
+        headers = {}
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
+
+        results: set[str] = set()
+        while True:
+            try:
+                response = requests.get(
+                    f"{self.api_base}/{role}-documents",
+                    params={"page": page, "page_size": page_size},
+                    headers=headers,
+                    timeout=15,
+                )
+            except Exception as exc:
+                logger.warning("remote list error for %s: %s", role, exc)
+                break
+
+            if response.status_code >= 400:
+                logger.warning(
+                    "remote list failed for %s (%s): %s",
+                    role,
+                    response.status_code,
+                    response.text,
+                )
+                break
+
+            payload = response.json()
+            if not isinstance(payload, list) or not payload:
+                break
+            for item in payload:
+                if isinstance(item, dict) and item.get("path"):
+                    results.add(Path(item["path"]).name)
+            if len(payload) < page_size:
+                break
+            page += 1
+
+        return results
+
+    def _full_sync(self) -> None:
+        local_cv = self._list_local_files(self.cv_dir)
+        local_job = self._list_local_files(self.job_dir)
+
+        remote_cv = self._list_remote_files("cv")
+        remote_job = self._list_remote_files("job")
+
+        local_cv_names = {path.name for path in local_cv}
+        local_job_names = {path.name for path in local_job}
+
+        for name in sorted(remote_cv - local_cv_names):
+            self._delete_remote(Path(name), "cv")
+
+        for name in sorted(remote_job - local_job_names):
+            self._delete_remote(Path(name), "job")
+
+        for path in sorted(local_cv):
+            self._process_upload(path, "cv")
+
+        for path in sorted(local_job):
+            self._process_upload(path, "job")
+
+        # Drop stale local hashes so future uploads are not skipped
+        for tracked in self.state.list_tracked_paths():
+            tracked_path = Path(tracked)
+            if not tracked_path.exists():
+                self.state.remove_hash(tracked_path)
+        self.state.save()
 
     def queue_path(self, path: Path, role: str) -> None:
         self._schedule(path, role, "upload")
