@@ -115,6 +115,22 @@ class MatchRead(BaseModel):
     updated_at: datetime
 
 
+class SearchRequest(BaseModel):
+    kind: Literal["cv", "job"] = "cv"
+    query: str
+    top_k: int = 10
+    min_score: float | None = None
+    status: Literal["ready", "failed", "pending"] | None = None
+
+
+class SearchHit(BaseModel):
+    id: int
+    path: str
+    status: str
+    score: float
+    updated_at: datetime
+
+
 class DocumentDetailBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

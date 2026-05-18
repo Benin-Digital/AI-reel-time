@@ -38,6 +38,8 @@ from .schemas import (
     JobDocumentRead,
     JobDocumentDetailRead,
     MatchRead,
+    SearchRequest,
+    SearchHit,
 )
 from .services import (
     LocalFolderWatcher,
@@ -1364,6 +1366,63 @@ def get_match(match_id: int) -> MatchRead:
             created_at=match.created_at,
             updated_at=match.updated_at,
         )
+
+
+@app.post("/search", response_model=list[SearchHit])
+def search_semantic(payload: SearchRequest) -> list[SearchHit]:
+    if not settings.embedding_enabled:
+        raise HTTPException(status_code=400, detail="embeddings disabled")
+
+    query_text = payload.query.strip()
+    if not query_text:
+        raise HTTPException(status_code=400, detail="query required")
+
+    vector = embed_text(query_text)
+    if not vector:
+        return []
+
+    top_k = max(1, min(payload.top_k, 100))
+
+    if payload.kind == "cv":
+        distance = CvEmbedding.embedding.cosine_distance(vector).label("distance")
+        stmt = (
+            select(CvDocument, distance)
+            .join(CvEmbedding, CvEmbedding.cv_id == CvDocument.id)
+            .order_by(distance.asc())
+            .limit(top_k)
+        )
+        if payload.status:
+            stmt = stmt.where(CvDocument.status == payload.status)
+    else:
+        distance = JobEmbedding.embedding.cosine_distance(vector).label("distance")
+        stmt = (
+            select(JobDocument, distance)
+            .join(JobEmbedding, JobEmbedding.job_id == JobDocument.id)
+            .order_by(distance.asc())
+            .limit(top_k)
+        )
+        if payload.status:
+            stmt = stmt.where(JobDocument.status == payload.status)
+
+    results: list[SearchHit] = []
+    with SessionLocal() as session:
+        rows = session.execute(stmt).all()
+
+    for doc, distance_value in rows:
+        score = _vector_score(float(distance_value))
+        if payload.min_score is not None and score < payload.min_score:
+            continue
+        results.append(
+            SearchHit(
+                id=doc.id,
+                path=doc.path,
+                status=doc.status,
+                score=score,
+                updated_at=doc.updated_at,
+            )
+        )
+
+    return results
 
 
 @app.post("/maintenance/cleanup")
