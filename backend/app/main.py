@@ -282,34 +282,66 @@ def _upsert_match_result(cv_id: int, job_id: int, score: float, common: list[str
         )
 
 
-def _upsert_cv_embedding(cv_id: int, content_hash: str | None, embedding: list[float]) -> None:
-    with SessionLocal() as session:
-        existing = session.scalar(select(CvEmbedding).where(CvEmbedding.cv_id == cv_id))
+def _upsert_cv_embedding(
+    cv_id: int,
+    content_hash: str | None,
+    embedding: list[float],
+    session: SessionLocal | None = None,
+) -> None:
+    if len(embedding) != settings.embedding_dim:
+        logger.warning("embedding dim mismatch for cv %s", cv_id)
+        return
+
+    def _apply(target_session):
+        existing = target_session.scalar(select(CvEmbedding).where(CvEmbedding.cv_id == cv_id))
         if existing and existing.content_hash == content_hash:
             return
         if existing:
             existing.content_hash = content_hash
             existing.embedding = embedding
-            session.commit()
+            target_session.commit()
             return
         row = CvEmbedding(cv_id=cv_id, content_hash=content_hash, embedding=embedding)
-        session.add(row)
-        session.commit()
+        target_session.add(row)
+        target_session.commit()
+
+    if session is not None:
+        _apply(session)
+        return
+
+    with SessionLocal() as local_session:
+        _apply(local_session)
 
 
-def _upsert_job_embedding(job_id: int, content_hash: str | None, embedding: list[float]) -> None:
-    with SessionLocal() as session:
-        existing = session.scalar(select(JobEmbedding).where(JobEmbedding.job_id == job_id))
+def _upsert_job_embedding(
+    job_id: int,
+    content_hash: str | None,
+    embedding: list[float],
+    session: SessionLocal | None = None,
+) -> None:
+    if len(embedding) != settings.embedding_dim:
+        logger.warning("embedding dim mismatch for job %s", job_id)
+        return
+
+    def _apply(target_session):
+        existing = target_session.scalar(select(JobEmbedding).where(JobEmbedding.job_id == job_id))
         if existing and existing.content_hash == content_hash:
             return
         if existing:
             existing.content_hash = content_hash
             existing.embedding = embedding
-            session.commit()
+            target_session.commit()
             return
         row = JobEmbedding(job_id=job_id, content_hash=content_hash, embedding=embedding)
-        session.add(row)
-        session.commit()
+        target_session.add(row)
+        target_session.commit()
+
+    if session is not None:
+        _apply(session)
+        return
+
+    with SessionLocal() as local_session:
+        _apply(local_session)
 
 
 def _vector_score(distance: float) -> float:
@@ -1377,6 +1409,88 @@ def purge_orphan_files() -> dict[str, int]:
     return {
         "removed_files": removed_files,
         "removed_documents": removed_documents,
+    }
+
+
+@app.post("/maintenance/backfill-embeddings")
+def backfill_embeddings(
+    scope: str = "all",
+    limit: int | None = None,
+) -> dict[str, int]:
+    if not settings.embedding_enabled:
+        raise HTTPException(status_code=400, detail="embeddings disabled")
+
+    normalized = scope.lower()
+    if normalized not in {"all", "cv", "job"}:
+        raise HTTPException(status_code=400, detail="invalid scope")
+
+    processed = 0
+    skipped = 0
+    failed = 0
+
+    with SessionLocal() as session:
+        if normalized in {"all", "cv"}:
+            rows = session.execute(
+                select(
+                    CvDocument.id,
+                    ExtractedText.content_hash,
+                    ExtractedText.extracted_text,
+                )
+                .join(ExtractedText, ExtractedText.file_path == CvDocument.path, isouter=True)
+                .order_by(CvDocument.id)
+            )
+            for cv_id, content_hash, extracted_text in rows:
+                if limit is not None and processed >= limit:
+                    break
+                text_value = (extracted_text or "").strip()
+                if not text_value:
+                    skipped += 1
+                    continue
+                try:
+                    vector = embed_text(text_value)
+                except Exception as exc:
+                    logger.warning("embedding failed for cv %s: %s", cv_id, exc)
+                    failed += 1
+                    continue
+                if not vector:
+                    failed += 1
+                    continue
+                _upsert_cv_embedding(cv_id, content_hash, vector, session=session)
+                processed += 1
+
+        if normalized in {"all", "job"}:
+            rows = session.execute(
+                select(
+                    JobDocument.id,
+                    ExtractedText.content_hash,
+                    ExtractedText.extracted_text,
+                )
+                .join(ExtractedText, ExtractedText.file_path == JobDocument.path, isouter=True)
+                .order_by(JobDocument.id)
+            )
+            for job_id, content_hash, extracted_text in rows:
+                if limit is not None and processed >= limit:
+                    break
+                text_value = (extracted_text or "").strip()
+                if not text_value:
+                    skipped += 1
+                    continue
+                try:
+                    vector = embed_text(text_value)
+                except Exception as exc:
+                    logger.warning("embedding failed for job %s: %s", job_id, exc)
+                    failed += 1
+                    continue
+                if not vector:
+                    failed += 1
+                    continue
+                _upsert_job_embedding(job_id, content_hash, vector, session=session)
+                processed += 1
+
+    return {
+        "processed": processed,
+        "skipped": skipped,
+        "failed": failed,
     }
 
 @app.post("/extract", response_model=ExtractedTextRead)
