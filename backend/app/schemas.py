@@ -121,6 +121,8 @@ class SearchRequest(BaseModel):
     top_k: int = 10
     min_score: float | None = None
     status: Literal["ready", "failed", "pending"] | None = None
+    vector_weight: float | None = None
+    lexical_weight: float | None = None
 
 
 class SearchHit(BaseModel):

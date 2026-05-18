@@ -371,6 +371,19 @@ def _hybrid_score(vector_score: float, lexical_score: float) -> float:
     return round(combined, 2)
 
 
+def _hybrid_score_with_weights(
+    vector_score: float,
+    lexical_score: float,
+    vector_weight: float,
+    lexical_weight: float,
+) -> float:
+    weight_sum = vector_weight + lexical_weight
+    if weight_sum <= 0:
+        return vector_score
+    combined = (vector_score * vector_weight + lexical_score * lexical_weight) / weight_sum
+    return round(combined, 2)
+
+
 def _vector_match_cv(
     cv_doc: CvDocumentRead,
     extraction: ExtractedTextRead,
@@ -1401,11 +1414,26 @@ def search_semantic(payload: SearchRequest) -> list[SearchHit]:
 
     top_k = max(1, min(payload.top_k, 100))
 
+    vector_weight = (
+        payload.vector_weight
+        if payload.vector_weight is not None
+        else settings.hybrid_vector_weight
+    )
+    lexical_weight = (
+        payload.lexical_weight
+        if payload.lexical_weight is not None
+        else settings.hybrid_lexical_weight
+    )
+    vector_weight = max(0.0, vector_weight)
+    lexical_weight = max(0.0, lexical_weight)
+    use_hybrid = settings.hybrid_scoring_enabled or payload.vector_weight is not None or payload.lexical_weight is not None
+
     if payload.kind == "cv":
         distance = CvEmbedding.embedding.cosine_distance(vector).label("distance")
         stmt = (
-            select(CvDocument, distance)
+            select(CvDocument, ExtractedText.extracted_text, distance)
             .join(CvEmbedding, CvEmbedding.cv_id == CvDocument.id)
+            .join(ExtractedText, ExtractedText.file_path == CvDocument.path, isouter=True)
             .order_by(distance.asc())
             .limit(top_k)
         )
@@ -1414,8 +1442,9 @@ def search_semantic(payload: SearchRequest) -> list[SearchHit]:
     else:
         distance = JobEmbedding.embedding.cosine_distance(vector).label("distance")
         stmt = (
-            select(JobDocument, distance)
+            select(JobDocument, ExtractedText.extracted_text, distance)
             .join(JobEmbedding, JobEmbedding.job_id == JobDocument.id)
+            .join(ExtractedText, ExtractedText.file_path == JobDocument.path, isouter=True)
             .order_by(distance.asc())
             .limit(top_k)
         )
@@ -1426,8 +1455,19 @@ def search_semantic(payload: SearchRequest) -> list[SearchHit]:
     with SessionLocal() as session:
         rows = session.execute(stmt).all()
 
-    for doc, distance_value in rows:
-        score = _vector_score(float(distance_value))
+    for doc, extracted_text, distance_value in rows:
+        vector_score = _vector_score(float(distance_value))
+        score = vector_score
+        if use_hybrid:
+            lexical_score = 0.0
+            if extracted_text:
+                lexical_score, _ = score_texts(query_text, extracted_text)
+            score = _hybrid_score_with_weights(
+                vector_score,
+                lexical_score,
+                vector_weight,
+                lexical_weight,
+            )
         if payload.min_score is not None and score < payload.min_score:
             continue
         results.append(
