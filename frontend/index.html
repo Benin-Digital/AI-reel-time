@@ -16,7 +16,7 @@
     <div class="backdrop"></div>
     <header class="hero">
       <div class="brand">
-        <span class="logo">
+        <span class="brand-mark">
           <img src="./cropped-Benin-digital-182.png" alt="Logo de l'entreprise" />
         </span>
         <div>
@@ -24,12 +24,6 @@
           <p class="brand-subtitle">Console de matching RH</p>
         </div>
       </div>
-      <nav class="nav">
-        <button class="nav-btn is-active" data-target="dashboard">Tableau de bord</button>
-        <button class="nav-btn" data-target="cv">Bibliothèque CV</button>
-        <button class="nav-btn" data-target="job">Bibliothèque offres</button>
-        <button class="nav-btn" data-target="matches">Correspondances</button>
-      </nav>
       <div class="hero-actions">
         <div class="api-config">
           <label for="apiBase">Base API</label>
@@ -41,10 +35,10 @@
     </header>
 
     <main class="shell">
-      <section id="dashboard" class="section is-active">
+      <section class="dashboard">
         <div class="section-header">
           <h1>Aperçu du pipeline</h1>
-          <p>État en temps réel des fichiers, extractions et scores.</p>
+          <p>Suivi instantané des fichiers, extractions et scores.</p>
         </div>
         <div class="grid metrics">
           <article class="card">
@@ -78,102 +72,120 @@
             <span class="hint">traitement des événements</span>
           </article>
         </div>
-        <div class="section-header">
-          <h2>Correspondances récentes</h2>
-          <p>Derniers scores entre les CV et les offres.</p>
-        </div>
-        <div id="recentMatches" class="stack"></div>
-      </section>
 
-      <section id="cv" class="section">
-        <div class="section-header">
-          <h1>Bibliothèque CV</h1>
-          <p>Documents CV suivis avec leur statut de traitement.</p>
-        </div>
-        <div class="filters">
-          <input id="cvQuery" type="text" placeholder="Rechercher un chemin ou un contenu CV" />
-          <select id="cvStatus">
-            <option value="">Tous les statuts</option>
-            <option value="ready">Prêt</option>
-            <option value="failed">Échec</option>
-            <option value="pending">En attente</option>
-          </select>
-          <select id="cvPageSize">
-            <option value="10">10 / page</option>
-            <option value="25" selected>25 / page</option>
-            <option value="50">50 / page</option>
-          </select>
-          <button id="applyCvFilters" class="ghost">Appliquer</button>
-        </div>
-        <div class="pagination-controls">
-          <button id="cvPrev" class="ghost">Précédent</button>
-          <span>Page <strong id="cvPage">1</strong></span>
-          <button id="cvNext" class="ghost">Suivant</button>
-        </div>
-        <div id="cvList" class="stack"></div>
-        <div id="cvDetails" class="item details-panel hidden"></div>
-      </section>
+        <div class="board">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Bibliothèque CV</h2>
+                <p>Documents CV suivis avec leur statut.</p>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="filters">
+                <input id="cvQuery" type="text" placeholder="Rechercher un chemin ou un contenu CV" />
+                <select id="cvStatus">
+                  <option value="">Tous les statuts</option>
+                  <option value="ready">Prêt</option>
+                  <option value="failed">Échec</option>
+                  <option value="pending">En attente</option>
+                </select>
+                <select id="cvPageSize">
+                  <option value="10">10 / page</option>
+                  <option value="25" selected>25 / page</option>
+                  <option value="50">50 / page</option>
+                </select>
+                <button id="applyCvFilters" class="ghost">Appliquer</button>
+              </div>
+              <div class="pagination-controls">
+                <button id="cvPrev" class="ghost">Précédent</button>
+                <span>Page <strong id="cvPage">1</strong></span>
+                <button id="cvNext" class="ghost">Suivant</button>
+              </div>
+              <div id="cvList" class="stack"></div>
+              <div id="cvDetails" class="item details-panel hidden"></div>
+            </div>
+          </section>
 
-      <section id="job" class="section">
-        <div class="section-header">
-          <h1>Bibliothèque offres</h1>
-          <p>Descriptions de postes suivies avec leur statut de traitement.</p>
-        </div>
-        <div class="filters">
-          <input id="jobQuery" type="text" placeholder="Rechercher un chemin ou un contenu d'offre" />
-          <select id="jobStatus">
-            <option value="">Tous les statuts</option>
-            <option value="ready">Prêt</option>
-            <option value="failed">Échec</option>
-            <option value="pending">En attente</option>
-          </select>
-          <select id="jobPageSize">
-            <option value="10">10 / page</option>
-            <option value="25" selected>25 / page</option>
-            <option value="50">50 / page</option>
-          </select>
-          <button id="applyJobFilters" class="ghost">Appliquer</button>
-        </div>
-        <div class="pagination-controls">
-          <button id="jobPrev" class="ghost">Précédent</button>
-          <span>Page <strong id="jobPage">1</strong></span>
-          <button id="jobNext" class="ghost">Suivant</button>
-        </div>
-        <div id="jobList" class="stack"></div>
-        <div id="jobDetails" class="item details-panel hidden"></div>
-      </section>
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Bibliothèque offres</h2>
+                <p>Descriptions de postes suivies avec leur statut.</p>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="filters">
+                <input id="jobQuery" type="text" placeholder="Rechercher un chemin ou un contenu d'offre" />
+                <select id="jobStatus">
+                  <option value="">Tous les statuts</option>
+                  <option value="ready">Prêt</option>
+                  <option value="failed">Échec</option>
+                  <option value="pending">En attente</option>
+                </select>
+                <select id="jobPageSize">
+                  <option value="10">10 / page</option>
+                  <option value="25" selected>25 / page</option>
+                  <option value="50">50 / page</option>
+                </select>
+                <button id="applyJobFilters" class="ghost">Appliquer</button>
+              </div>
+              <div class="pagination-controls">
+                <button id="jobPrev" class="ghost">Précédent</button>
+                <span>Page <strong id="jobPage">1</strong></span>
+                <button id="jobNext" class="ghost">Suivant</button>
+              </div>
+              <div id="jobList" class="stack"></div>
+              <div id="jobDetails" class="item details-panel hidden"></div>
+            </div>
+          </section>
 
-      <section id="matches" class="section">
-        <div class="section-header">
-          <h1>Résultats de correspondance</h1>
-          <p>Filtrez les scores par CV, offre, note ou ordre de tri.</p>
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <h2>Correspondances</h2>
+                <p>Scores et dernières correspondances.</p>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="section-header compact">
+                <h3>Correspondances récentes</h3>
+                <p>Derniers scores entre les CV et les offres.</p>
+              </div>
+              <div id="recentMatches" class="stack"></div>
+              <div class="section-header compact">
+                <h3>Filtres avancés</h3>
+                <p>Filtrez les scores par CV, offre, note ou ordre de tri.</p>
+              </div>
+              <div class="filters">
+                <input id="matchSearch" type="text" placeholder="Rechercher par mot-clé ou chemin" />
+                <input id="filterCv" type="number" placeholder="Filtrer par ID CV" />
+                <input id="filterJob" type="number" placeholder="Filtrer par ID offre" />
+                <input id="minScore" type="number" placeholder="Score min" min="0" max="100" />
+                <input id="maxScore" type="number" placeholder="Score max" min="0" max="100" />
+                <select id="matchPageSize">
+                  <option value="10">10 / page</option>
+                  <option value="25" selected>25 / page</option>
+                  <option value="50">50 / page</option>
+                </select>
+                <select id="sortMatches">
+                  <option value="score_desc">Score décroissant</option>
+                  <option value="score_asc">Score croissant</option>
+                  <option value="created_at_desc">Plus récent</option>
+                  <option value="created_at_asc">Plus ancien</option>
+                </select>
+                <button id="applyFilters" class="ghost">Appliquer</button>
+                <button id="clearFilters" class="ghost">Réinitialiser</button>
+              </div>
+              <div class="pagination-controls">
+                <button id="matchesPrev" class="ghost">Précédent</button>
+                <span>Page <strong id="matchesPage">1</strong></span>
+                <button id="matchesNext" class="ghost">Suivant</button>
+              </div>
+              <div id="matchList" class="stack"></div>
+            </div>
+          </section>
         </div>
-        <div class="filters">
-          <input id="matchSearch" type="text" placeholder="Rechercher par mot-clé ou chemin" />
-          <input id="filterCv" type="number" placeholder="Filtrer par ID CV" />
-          <input id="filterJob" type="number" placeholder="Filtrer par ID offre" />
-          <input id="minScore" type="number" placeholder="Score min" min="0" max="100" />
-          <input id="maxScore" type="number" placeholder="Score max" min="0" max="100" />
-          <select id="matchPageSize">
-            <option value="10">10 / page</option>
-            <option value="25" selected>25 / page</option>
-            <option value="50">50 / page</option>
-          </select>
-          <select id="sortMatches">
-            <option value="score_desc">Score décroissant</option>
-            <option value="score_asc">Score croissant</option>
-            <option value="created_at_desc">Plus récent</option>
-            <option value="created_at_asc">Plus ancien</option>
-          </select>
-          <button id="applyFilters" class="ghost">Appliquer</button>
-          <button id="clearFilters" class="ghost">Réinitialiser</button>
-        </div>
-        <div class="pagination-controls">
-          <button id="matchesPrev" class="ghost">Précédent</button>
-          <span>Page <strong id="matchesPage">1</strong></span>
-          <button id="matchesNext" class="ghost">Suivant</button>
-        </div>
-        <div id="matchList" class="stack"></div>
       </section>
     </main>
 
