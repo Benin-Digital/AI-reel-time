@@ -6,6 +6,9 @@ from pdf2image import convert_from_path
 from pypdf import PdfReader
 import pytesseract
 
+from ..settings import get_settings
+
+settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -36,10 +39,15 @@ def extract_text_from_pdf(path: Path) -> str:
 def _ocr_pdf(path: Path) -> str:
     """Use OCR (tesseract) on PDF images."""
     try:
-        images = convert_from_path(str(path))
+        images = convert_from_path(str(path), dpi=settings.ocr_dpi)
+        ocr_config = f"--psm {settings.ocr_psm} --oem {settings.ocr_oem}"
         text_content = []
         for img in images:
-            ocr_text = pytesseract.image_to_string(img)
+            ocr_text = pytesseract.image_to_string(
+                img,
+                lang=settings.ocr_languages,
+                config=ocr_config,
+            )
             if ocr_text.strip():
                 text_content.append(ocr_text)
         return "\n".join(text_content)
