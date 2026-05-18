@@ -54,12 +54,25 @@ apiBaseInput.value = apiBase;
 const safeFetch = async (path) => {
   const response = await fetch(`${apiBase}${path}`);
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(`La requête a échoué : ${response.status}`);
   }
   return response.json();
 };
 
 const formatEmpty = (message) => `<div class="item"><p class="meta">${message}</p></div>`;
+
+const statusLabel = (status) => {
+  if (status === "ready") {
+    return "Prêt";
+  }
+  if (status === "failed") {
+    return "Échec";
+  }
+  if (status === "pending") {
+    return "En attente";
+  }
+  return status || "En attente";
+};
 
 const renderMetrics = (data) => {
   metricUptime.textContent = data.uptime_seconds ?? "--";
@@ -67,23 +80,23 @@ const renderMetrics = (data) => {
   metricExtractions.textContent = data.extraction_count ?? "--";
   metricScores.textContent = data.score_count ?? "--";
   metricQueueHealth.textContent = data.redis_available
-    ? `online (${data.redis_queue_length} queued, ${data.memory_queue_length} mem)`
-    : "offline";
+    ? `en ligne (${data.redis_queue_length} en file, ${data.memory_queue_length} en mémoire)`
+    : "hors ligne";
   metricWorkerStatus.textContent = data.worker_alive
-    ? `alive${data.worker_last_error ? ` - error: ${data.worker_last_error}` : ""}`
-    : "stopped";
+    ? `actif${data.worker_last_error ? ` - erreur : ${data.worker_last_error}` : ""}`
+    : "arrêté";
 };
 
 const renderMatches = (matches, target) => {
   if (!matches.length) {
-    target.innerHTML = formatEmpty("No match results yet.");
+    target.innerHTML = formatEmpty("Aucun résultat de correspondance pour le moment.");
     return;
   }
 
   target.innerHTML = matches
     .map((match) => {
       const score = Math.round(match.score || 0);
-      const keywords = (match.common_keywords || []).slice(0, 6).join(", ") || "No keywords";
+      const keywords = (match.common_keywords || []).slice(0, 6).join(", ") || "Aucun mot-clé";
       return `
         <article class="item">
           <div class="item-title">
@@ -101,26 +114,25 @@ const renderMatches = (matches, target) => {
 
 const renderDocuments = (docs, target, kind) => {
   if (!docs.length) {
-    target.innerHTML = formatEmpty(`No ${kind} documents yet.`);
+    target.innerHTML = formatEmpty(`Aucun document ${kind === "cv" ? "CV" : "offre"} pour le moment.`);
     return;
   }
 
   target.innerHTML = docs
     .map((doc) => {
       const statusClass = doc.status === "ready" ? "badge" : "badge warn";
-      const statusLabel = doc.status || "pending";
       const error = doc.last_error ? `<div class="meta">${doc.last_error}</div>` : "";
       return `
         <article class="item">
           <div class="item-title">
             <strong>${doc.path}</strong>
-            <span class="${statusClass}">${statusLabel}</span>
+            <span class="${statusClass}">${statusLabel(doc.status)}</span>
           </div>
-          <div class="meta">ID ${doc.id} • Updated ${new Date(doc.updated_at).toLocaleString()}</div>
+          <div class="meta">ID ${doc.id} • Mis à jour le ${new Date(doc.updated_at).toLocaleString("fr-FR")}</div>
           ${error}
           <div class="actions">
-            <button class="ghost" data-doc="${doc.id}" data-kind="${kind}" data-path="${encodeURIComponent(doc.path)}" data-action="details">View details</button>
-            <button class="ghost" data-doc="${doc.id}" data-kind="${kind}" data-action="matches">View matches</button>
+            <button class="ghost" data-doc="${doc.id}" data-kind="${kind}" data-path="${encodeURIComponent(doc.path)}" data-action="details">Voir les détails</button>
+            <button class="ghost" data-doc="${doc.id}" data-kind="${kind}" data-action="matches">Voir les correspondances</button>
           </div>
         </article>
       `;
@@ -158,20 +170,20 @@ const renderDocumentDetails = (doc, target) => {
   target.classList.remove("hidden");
   target.innerHTML = `
     <div class="item-title">
-      <strong>Details for ${doc.path}</strong>
-      <span class="badge">${doc.status}</span>
+      <strong>Détails pour ${doc.path}</strong>
+      <span class="badge">${statusLabel(doc.status)}</span>
     </div>
-    <div class="meta">ID ${doc.id} • Updated ${new Date(doc.updated_at).toLocaleString()}</div>
-    ${doc.last_error ? `<div class="meta">Error: ${doc.last_error}</div>` : ""}
-    <div class="meta">Matches: ${doc.match_count}</div>
-    ${doc.average_score !== null && doc.average_score !== undefined ? `<div class="meta">Average score: ${doc.average_score}%</div>` : ""}
-    ${doc.top_keywords && doc.top_keywords.length ? `<div class="meta">Top keywords: ${doc.top_keywords.slice(0, 10).join(", ")}</div>` : ""}
-    <div class="meta">Extraction method: ${extraction.extraction_method || "unknown"}</div>
-    <div class="meta">Content hash: ${extraction.content_hash || "n/a"}</div>
-    <div class="meta">Text preview:</div>
-    <div class="item" style="background: rgba(239, 242, 240, 0.85); padding: 14px; white-space: pre-wrap; max-height: 180px; overflow: auto;">${(extraction.extracted_text || "No extracted text").slice(0, 1200)}</div>
-    <div class="section-header"><h2>Top matches</h2></div>
-    ${matches.length ? "" : "<div class=\"meta\">No matches yet for this document.</div>"}
+    <div class="meta">ID ${doc.id} • Mis à jour le ${new Date(doc.updated_at).toLocaleString("fr-FR")}</div>
+    ${doc.last_error ? `<div class="meta">Erreur : ${doc.last_error}</div>` : ""}
+    <div class="meta">Correspondances : ${doc.match_count}</div>
+    ${doc.average_score !== null && doc.average_score !== undefined ? `<div class="meta">Score moyen : ${doc.average_score}%</div>` : ""}
+    ${doc.top_keywords && doc.top_keywords.length ? `<div class="meta">Mots-clés principaux : ${doc.top_keywords.slice(0, 10).join(", ")}</div>` : ""}
+    <div class="meta">Méthode d’extraction : ${extraction.extraction_method || "inconnue"}</div>
+    <div class="meta">Hash du contenu : ${extraction.content_hash || "n/a"}</div>
+    <div class="meta">Aperçu du texte :</div>
+    <div class="item" style="background: rgba(239, 242, 240, 0.85); padding: 14px; white-space: pre-wrap; max-height: 180px; overflow: auto;">${(extraction.extracted_text || "Aucun texte extrait").slice(0, 1200)}</div>
+    <div class="section-header"><h2>Meilleures correspondances</h2></div>
+    ${matches.length ? "" : "<div class=\"meta\">Aucune correspondance pour ce document.</div>"}
     ${matches
       .map((match) => {
         const score = Math.round(match.score || 0);
@@ -196,7 +208,7 @@ const loadDocumentDetails = async (kind, id) => {
     const doc = await safeFetch(`/${kind}-documents/${id}/details`);
     renderDocumentDetails(doc, detailsTarget);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : "Erreur inconnue";
     detailsTarget.innerHTML = formatEmpty(message);
     detailsTarget.classList.remove("hidden");
   }
@@ -272,7 +284,7 @@ const loadAll = async () => {
     const recent = await safeFetch("/matches?page=1&page_size=6&sort_by=created_at_desc");
     renderMatches(recent, recentMatches);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : "Erreur inconnue";
     recentMatches.innerHTML = formatEmpty(message);
     cvList.innerHTML = formatEmpty(message);
     jobList.innerHTML = formatEmpty(message);

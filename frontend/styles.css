@@ -4,9 +4,9 @@
   --ink: #1f2b2d;
   --muted: #5a6a6f;
   --card: #ffffff;
-  --accent: #e26d3f;
-  --accent-2: #2f8f85;
-  --accent-3: #f2b94b;
+  --accent: #0f8a4a;
+  --accent-2: #0d6b38;
+  --accent-3: #7fd69a;
   --shadow: 0 24px 60px rgba(31, 43, 45, 0.12);
   --stroke: rgba(31, 43, 45, 0.08);
   --radius: 18px;
@@ -20,8 +20,8 @@ body {
   margin: 0;
   font-family: "Space Grotesk", system-ui, sans-serif;
   color: var(--ink);
-  background: radial-gradient(circle at top left, #fff6ed 0%, transparent 45%),
-    radial-gradient(circle at 80% 0%, #e8f6f4 0%, transparent 40%),
+  background: radial-gradient(circle at top left, #edf9f0 0%, transparent 45%),
+    radial-gradient(circle at 80% 0%, #e1f6e8 0%, transparent 40%),
     linear-gradient(160deg, var(--bg), var(--bg-alt));
   min-height: 100vh;
 }
@@ -29,8 +29,8 @@ body {
 .backdrop {
   position: fixed;
   inset: 0;
-  background: radial-gradient(circle at 20% 20%, rgba(226, 109, 63, 0.18), transparent 45%),
-    radial-gradient(circle at 80% 80%, rgba(47, 143, 133, 0.18), transparent 45%);
+  background: radial-gradient(circle at 20% 20%, rgba(15, 138, 74, 0.18), transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(13, 107, 56, 0.18), transparent 45%);
   pointer-events: none;
   z-index: -1;
 }
@@ -53,12 +53,16 @@ body {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-3));
-  color: #fff;
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: 0.08em;
+  overflow: hidden;
+  background: linear-gradient(135deg, #ffffff, #ebf9ef);
   box-shadow: var(--shadow);
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .brand-title {
@@ -95,7 +99,7 @@ body {
 }
 
 .nav-btn.is-active {
-  background: var(--ink);
+  background: var(--accent-2);
   color: #fff;
   border-color: transparent;
 }
@@ -144,7 +148,7 @@ body {
 }
 
 .primary {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff;
   box-shadow: var(--shadow);
 }
@@ -220,7 +224,7 @@ body {
   gap: 14px;
 }
 
-..item {
+.item {
   background: var(--card);
   border-radius: var(--radius);
   padding: 16px 18px;
@@ -253,13 +257,13 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  background: rgba(47, 143, 133, 0.14);
+  background: rgba(13, 107, 56, 0.12);
   color: var(--accent-2);
 }
 
 .badge.warn {
   background: rgba(226, 109, 63, 0.12);
-  color: var(--accent);
+  color: #a9441b;
 }
 
 .meta {
@@ -283,7 +287,7 @@ body {
 .score-bar span {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  background: linear-gradient(90deg, var(--accent-3), var(--accent), var(--accent-2));
 }
 
 .filters {

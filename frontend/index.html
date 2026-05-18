@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AI Real-Time - RH Console</title>
+    <title>AI Real-Time - Console RH</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,97 +16,99 @@
     <div class="backdrop"></div>
     <header class="hero">
       <div class="brand">
-        <span class="brand-mark">AI</span>
+        <span class="brand-mark">
+          <img src="./cropped-Benin-digital-182.png" alt="Logo de l'entreprise" />
+        </span>
         <div>
           <p class="brand-title">Real-Time</p>
-          <p class="brand-subtitle">RH Matching Console</p>
+          <p class="brand-subtitle">Console de matching RH</p>
         </div>
       </div>
       <nav class="nav">
-        <button class="nav-btn is-active" data-target="dashboard">Dashboard</button>
-        <button class="nav-btn" data-target="cv">CV Library</button>
-        <button class="nav-btn" data-target="job">Job Library</button>
-        <button class="nav-btn" data-target="matches">Matches</button>
+        <button class="nav-btn is-active" data-target="dashboard">Tableau de bord</button>
+        <button class="nav-btn" data-target="cv">Bibliothèque CV</button>
+        <button class="nav-btn" data-target="job">Bibliothèque offres</button>
+        <button class="nav-btn" data-target="matches">Correspondances</button>
       </nav>
       <div class="hero-actions">
         <div class="api-config">
-          <label for="apiBase">API base</label>
+          <label for="apiBase">Base API</label>
           <input id="apiBase" type="text" placeholder="http://localhost:8000" />
-          <button id="applyApi" class="ghost">Apply</button>
+          <button id="applyApi" class="ghost">Appliquer</button>
         </div>
-        <button id="refreshAll" class="primary">Refresh All</button>
+        <button id="refreshAll" class="primary">Actualiser tout</button>
       </div>
     </header>
 
     <main class="shell">
       <section id="dashboard" class="section is-active">
         <div class="section-header">
-          <h1>Pipeline Snapshot</h1>
-          <p>Live status of files, extractions, and scores.</p>
+          <h1>Aperçu du pipeline</h1>
+          <p>État en temps réel des fichiers, extractions et scores.</p>
         </div>
         <div class="grid metrics">
           <article class="card">
-            <h3>Uptime</h3>
+            <h3>Disponibilité</h3>
             <p id="metricUptime" class="metric">--</p>
-            <span class="hint">seconds</span>
+            <span class="hint">secondes</span>
           </article>
           <article class="card">
-            <h3>Events</h3>
+            <h3>Événements</h3>
             <p id="metricEvents" class="metric">--</p>
-            <span class="hint">watcher logs</span>
+            <span class="hint">journaux du watcher</span>
           </article>
           <article class="card">
             <h3>Extractions</h3>
             <p id="metricExtractions" class="metric">--</p>
-            <span class="hint">processed files</span>
+            <span class="hint">fichiers traités</span>
           </article>
           <article class="card">
             <h3>Scores</h3>
             <p id="metricScores" class="metric">--</p>
-            <span class="hint">match records</span>
+            <span class="hint">résultats de correspondance</span>
           </article>
           <article class="card">
-            <h3>Queue Health</h3>
+            <h3>Santé de la file</h3>
             <p id="metricQueueHealth" class="metric">--</p>
-            <span class="hint">redis / in-memory</span>
+            <span class="hint">redis / mémoire</span>
           </article>
           <article class="card">
             <h3>Worker</h3>
             <p id="metricWorkerStatus" class="metric">--</p>
-            <span class="hint">event processor</span>
+            <span class="hint">traitement des événements</span>
           </article>
         </div>
         <div class="section-header">
-          <h2>Recent Matches</h2>
-          <p>Latest scores across CV and Job documents.</p>
+          <h2>Correspondances récentes</h2>
+          <p>Derniers scores entre les CV et les offres.</p>
         </div>
         <div id="recentMatches" class="stack"></div>
       </section>
 
       <section id="cv" class="section">
         <div class="section-header">
-          <h1>CV Library</h1>
-          <p>Tracked CV documents with processing status.</p>
+          <h1>Bibliothèque CV</h1>
+          <p>Documents CV suivis avec leur statut de traitement.</p>
         </div>
         <div class="filters">
-          <input id="cvQuery" type="text" placeholder="Search CV path or content" />
+          <input id="cvQuery" type="text" placeholder="Rechercher un chemin ou un contenu CV" />
           <select id="cvStatus">
-            <option value="">All statuses</option>
-            <option value="ready">Ready</option>
-            <option value="failed">Failed</option>
-            <option value="pending">Pending</option>
+            <option value="">Tous les statuts</option>
+            <option value="ready">Prêt</option>
+            <option value="failed">Échec</option>
+            <option value="pending">En attente</option>
           </select>
           <select id="cvPageSize">
             <option value="10">10 / page</option>
             <option value="25" selected>25 / page</option>
             <option value="50">50 / page</option>
           </select>
-          <button id="applyCvFilters" class="ghost">Apply</button>
+          <button id="applyCvFilters" class="ghost">Appliquer</button>
         </div>
         <div class="pagination-controls">
-          <button id="cvPrev" class="ghost">Previous</button>
+          <button id="cvPrev" class="ghost">Précédent</button>
           <span>Page <strong id="cvPage">1</strong></span>
-          <button id="cvNext" class="ghost">Next</button>
+          <button id="cvNext" class="ghost">Suivant</button>
         </div>
         <div id="cvList" class="stack"></div>
         <div id="cvDetails" class="item details-panel hidden"></div>
@@ -114,28 +116,28 @@
 
       <section id="job" class="section">
         <div class="section-header">
-          <h1>Job Library</h1>
-          <p>Tracked job descriptions with processing status.</p>
+          <h1>Bibliothèque offres</h1>
+          <p>Descriptions de postes suivies avec leur statut de traitement.</p>
         </div>
         <div class="filters">
-          <input id="jobQuery" type="text" placeholder="Search job path or content" />
+          <input id="jobQuery" type="text" placeholder="Rechercher un chemin ou un contenu d'offre" />
           <select id="jobStatus">
-            <option value="">All statuses</option>
-            <option value="ready">Ready</option>
-            <option value="failed">Failed</option>
-            <option value="pending">Pending</option>
+            <option value="">Tous les statuts</option>
+            <option value="ready">Prêt</option>
+            <option value="failed">Échec</option>
+            <option value="pending">En attente</option>
           </select>
           <select id="jobPageSize">
             <option value="10">10 / page</option>
             <option value="25" selected>25 / page</option>
             <option value="50">50 / page</option>
           </select>
-          <button id="applyJobFilters" class="ghost">Apply</button>
+          <button id="applyJobFilters" class="ghost">Appliquer</button>
         </div>
         <div class="pagination-controls">
-          <button id="jobPrev" class="ghost">Previous</button>
+          <button id="jobPrev" class="ghost">Précédent</button>
           <span>Page <strong id="jobPage">1</strong></span>
-          <button id="jobNext" class="ghost">Next</button>
+          <button id="jobNext" class="ghost">Suivant</button>
         </div>
         <div id="jobList" class="stack"></div>
         <div id="jobDetails" class="item details-panel hidden"></div>
@@ -143,40 +145,40 @@
 
       <section id="matches" class="section">
         <div class="section-header">
-          <h1>Match Results</h1>
-          <p>Filter scores by CV, Job, rating or sort order.</p>
+          <h1>Résultats de correspondance</h1>
+          <p>Filtrez les scores par CV, offre, note ou ordre de tri.</p>
         </div>
         <div class="filters">
-          <input id="matchSearch" type="text" placeholder="Search by keyword or path" />
-          <input id="filterCv" type="number" placeholder="Filter by CV id" />
-          <input id="filterJob" type="number" placeholder="Filter by Job id" />
-          <input id="minScore" type="number" placeholder="Min score" min="0" max="100" />
-          <input id="maxScore" type="number" placeholder="Max score" min="0" max="100" />
+          <input id="matchSearch" type="text" placeholder="Rechercher par mot-clé ou chemin" />
+          <input id="filterCv" type="number" placeholder="Filtrer par ID CV" />
+          <input id="filterJob" type="number" placeholder="Filtrer par ID offre" />
+          <input id="minScore" type="number" placeholder="Score min" min="0" max="100" />
+          <input id="maxScore" type="number" placeholder="Score max" min="0" max="100" />
           <select id="matchPageSize">
             <option value="10">10 / page</option>
             <option value="25" selected>25 / page</option>
             <option value="50">50 / page</option>
           </select>
           <select id="sortMatches">
-            <option value="score_desc">Score desc</option>
-            <option value="score_asc">Score asc</option>
-            <option value="created_at_desc">Newest</option>
-            <option value="created_at_asc">Oldest</option>
+            <option value="score_desc">Score décroissant</option>
+            <option value="score_asc">Score croissant</option>
+            <option value="created_at_desc">Plus récent</option>
+            <option value="created_at_asc">Plus ancien</option>
           </select>
-          <button id="applyFilters" class="ghost">Apply Filter</button>
-          <button id="clearFilters" class="ghost">Clear</button>
+          <button id="applyFilters" class="ghost">Appliquer</button>
+          <button id="clearFilters" class="ghost">Réinitialiser</button>
         </div>
         <div class="pagination-controls">
-          <button id="matchesPrev" class="ghost">Previous</button>
+          <button id="matchesPrev" class="ghost">Précédent</button>
           <span>Page <strong id="matchesPage">1</strong></span>
-          <button id="matchesNext" class="ghost">Next</button>
+          <button id="matchesNext" class="ghost">Suivant</button>
         </div>
         <div id="matchList" class="stack"></div>
       </section>
     </main>
 
     <footer class="footer">
-      <p>AI Real-Time MVP console. Designed for internal RH teams.</p>
+      <p>Console MVP AI Real-Time. Conçue pour les équipes RH internes. Bénin Digital © 2026</p>
     </footer>
 
     <script src="./app.js"></script>
