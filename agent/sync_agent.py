@@ -435,7 +435,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state-file", default="~/.ai-realtime-sync/state.json")
     parser.add_argument("--debounce-seconds", type=float, default=1.0)
     parser.add_argument("--retry-interval", type=float, default=30.0)
-    parser.add_argument("--resync-interval", type=float, default=30.0)
+    parser.add_argument("--resync-interval", type=float, default=3.0)
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
