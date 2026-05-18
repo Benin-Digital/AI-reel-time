@@ -1553,6 +1553,7 @@ def backfill_embeddings(
     processed = 0
     skipped = 0
     failed = 0
+    total = 0
 
     def _apply_batch(batch: list[tuple[int, str | None, str]], kind: str) -> None:
         nonlocal processed, failed
@@ -1587,7 +1588,12 @@ def backfill_embeddings(
                     "processed": processed,
                     "skipped": skipped,
                     "failed": failed,
+                    "total": total,
+                    "has_more": False,
+                    "next_offset": offset,
                 }
+
+            total += session.scalar(select(func.count()).select_from(CvDocument)) or 0
 
             query = (
                 select(
@@ -1627,7 +1633,12 @@ def backfill_embeddings(
                     "processed": processed,
                     "skipped": skipped,
                     "failed": failed,
+                    "total": total,
+                    "has_more": False,
+                    "next_offset": offset,
                 }
+
+            total += session.scalar(select(func.count()).select_from(JobDocument)) or 0
 
             query = (
                 select(
@@ -1665,10 +1676,18 @@ def backfill_embeddings(
     if batch_size is not None:
         next_offset = offset + batch_size
 
+    has_more = True
+    if batch_size is None:
+        has_more = False
+    elif total and next_offset >= total:
+        has_more = False
+
     return {
         "processed": processed,
         "skipped": skipped,
         "failed": failed,
+        "total": total,
+        "has_more": has_more,
         "next_offset": next_offset,
     }
 
