@@ -48,6 +48,7 @@ from .services import (
     enqueue_event,
     file_sha256,
     embed_text,
+    embed_texts,
     extract_text,
     score_texts,
     serialize_keywords,
@@ -1553,6 +1554,31 @@ def backfill_embeddings(
     skipped = 0
     failed = 0
 
+    def _apply_batch(batch: list[tuple[int, str | None, str]], kind: str) -> None:
+        nonlocal processed, failed
+        if not batch:
+            return
+        if dry_run:
+            processed += len(batch)
+            return
+        try:
+            vectors = embed_texts([item[2] for item in batch])
+        except Exception as exc:
+            logger.warning("embedding batch failed: %s", exc)
+            failed += len(batch)
+            return
+
+        for idx, (doc_id, content_hash, _) in enumerate(batch):
+            vector = vectors[idx] if idx < len(vectors) else []
+            if not vector:
+                failed += 1
+                continue
+            if kind == "cv":
+                _upsert_cv_embedding(doc_id, content_hash, vector, session=session)
+            else:
+                _upsert_job_embedding(doc_id, content_hash, vector, session=session)
+            processed += 1
+
     with SessionLocal() as session:
         if normalized in {"all", "cv"}:
             remaining = None if limit is None else max(limit - processed, 0)
@@ -1580,6 +1606,7 @@ def backfill_embeddings(
                 query = query.limit(remaining)
 
             rows = session.execute(query)
+            batch: list[tuple[int, str | None, str]] = []
             for cv_id, content_hash, extracted_text in rows:
                 if limit is not None and processed >= limit:
                     break
@@ -1587,20 +1614,12 @@ def backfill_embeddings(
                 if not text_value:
                     skipped += 1
                     continue
-                if dry_run:
-                    processed += 1
-                    continue
-                try:
-                    vector = embed_text(text_value)
-                except Exception as exc:
-                    logger.warning("embedding failed for cv %s: %s", cv_id, exc)
-                    failed += 1
-                    continue
-                if not vector:
-                    failed += 1
-                    continue
-                _upsert_cv_embedding(cv_id, content_hash, vector, session=session)
-                processed += 1
+                batch.append((cv_id, content_hash, text_value))
+                if len(batch) >= settings.embedding_batch_size:
+                    _apply_batch(batch, "cv")
+                    batch = []
+
+            _apply_batch(batch, "cv")
         if normalized in {"all", "job"}:
             remaining = None if limit is None else max(limit - processed, 0)
             if remaining == 0:
@@ -1627,6 +1646,7 @@ def backfill_embeddings(
                 query = query.limit(remaining)
 
             rows = session.execute(query)
+            batch: list[tuple[int, str | None, str]] = []
             for job_id, content_hash, extracted_text in rows:
                 if limit is not None and processed >= limit:
                     break
@@ -1634,20 +1654,12 @@ def backfill_embeddings(
                 if not text_value:
                     skipped += 1
                     continue
-                if dry_run:
-                    processed += 1
-                    continue
-                try:
-                    vector = embed_text(text_value)
-                except Exception as exc:
-                    logger.warning("embedding failed for job %s: %s", job_id, exc)
-                    failed += 1
-                    continue
-                if not vector:
-                    failed += 1
-                    continue
-                _upsert_job_embedding(job_id, content_hash, vector, session=session)
-                processed += 1
+                batch.append((job_id, content_hash, text_value))
+                if len(batch) >= settings.embedding_batch_size:
+                    _apply_batch(batch, "job")
+                    batch = []
+
+            _apply_batch(batch, "job")
 
     next_offset = offset
     if batch_size is not None:
