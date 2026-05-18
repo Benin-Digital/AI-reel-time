@@ -2,8 +2,6 @@ const apiBaseInput = document.getElementById("apiBase");
 const applyApiButton = document.getElementById("applyApi");
 const refreshButton = document.getElementById("refreshAll");
 
-const sections = document.querySelectorAll(".section");
-const navButtons = document.querySelectorAll(".nav-btn");
 
 const metricUptime = document.getElementById("metricUptime");
 const metricEvents = document.getElementById("metricEvents");
@@ -160,7 +158,7 @@ const renderDocuments = (docs, target, kind) => {
         filterJob.value = id;
         filterCv.value = "";
       }
-      showSection("matches");
+      updatePageElement(matchesPage, 1);
       loadMatches();
     });
   });
@@ -215,15 +213,6 @@ const loadDocumentDetails = async (kind, id) => {
     detailsTarget.innerHTML = formatEmpty(message);
     detailsTarget.classList.remove("hidden");
   }
-};
-
-const showSection = (id) => {
-  sections.forEach((section) => {
-    section.classList.toggle("is-active", section.id === id);
-  });
-  navButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.target === id);
-  });
 };
 
 const buildParams = (params) => {
@@ -309,12 +298,6 @@ const startAutoRefresh = () => {
     loadAll();
   }, AUTO_REFRESH_MS);
 };
-
-navButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    showSection(button.dataset.target);
-  });
-});
 
 cvPrev.addEventListener("click", () => {
   const nextPage = getPageNumber(cvPage) - 1;
