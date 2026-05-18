@@ -1416,6 +1416,9 @@ def purge_orphan_files() -> dict[str, int]:
 def backfill_embeddings(
     scope: str = "all",
     limit: int | None = None,
+    offset: int = 0,
+    batch_size: int | None = None,
+    dry_run: bool = False,
 ) -> dict[str, int]:
     if not settings.embedding_enabled:
         raise HTTPException(status_code=400, detail="embeddings disabled")
@@ -1430,7 +1433,15 @@ def backfill_embeddings(
 
     with SessionLocal() as session:
         if normalized in {"all", "cv"}:
-            rows = session.execute(
+            remaining = None if limit is None else max(limit - processed, 0)
+            if remaining == 0:
+                return {
+                    "processed": processed,
+                    "skipped": skipped,
+                    "failed": failed,
+                }
+
+            query = (
                 select(
                     CvDocument.id,
                     ExtractedText.content_hash,
@@ -1439,12 +1450,23 @@ def backfill_embeddings(
                 .join(ExtractedText, ExtractedText.file_path == CvDocument.path, isouter=True)
                 .order_by(CvDocument.id)
             )
+            if offset:
+                query = query.offset(offset)
+            if batch_size is not None:
+                query = query.limit(batch_size)
+            elif remaining is not None:
+                query = query.limit(remaining)
+
+            rows = session.execute(query)
             for cv_id, content_hash, extracted_text in rows:
                 if limit is not None and processed >= limit:
                     break
                 text_value = (extracted_text or "").strip()
                 if not text_value:
                     skipped += 1
+                    continue
+                if dry_run:
+                    processed += 1
                     continue
                 try:
                     vector = embed_text(text_value)
@@ -1457,9 +1479,16 @@ def backfill_embeddings(
                     continue
                 _upsert_cv_embedding(cv_id, content_hash, vector, session=session)
                 processed += 1
-
         if normalized in {"all", "job"}:
-            rows = session.execute(
+            remaining = None if limit is None else max(limit - processed, 0)
+            if remaining == 0:
+                return {
+                    "processed": processed,
+                    "skipped": skipped,
+                    "failed": failed,
+                }
+
+            query = (
                 select(
                     JobDocument.id,
                     ExtractedText.content_hash,
@@ -1468,12 +1497,23 @@ def backfill_embeddings(
                 .join(ExtractedText, ExtractedText.file_path == JobDocument.path, isouter=True)
                 .order_by(JobDocument.id)
             )
+            if offset:
+                query = query.offset(offset)
+            if batch_size is not None:
+                query = query.limit(batch_size)
+            elif remaining is not None:
+                query = query.limit(remaining)
+
+            rows = session.execute(query)
             for job_id, content_hash, extracted_text in rows:
                 if limit is not None and processed >= limit:
                     break
                 text_value = (extracted_text or "").strip()
                 if not text_value:
                     skipped += 1
+                    continue
+                if dry_run:
+                    processed += 1
                     continue
                 try:
                     vector = embed_text(text_value)
