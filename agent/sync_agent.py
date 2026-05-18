@@ -142,6 +142,7 @@ class SyncAgent:
         state: StateStore,
         debounce_seconds: float,
         retry_interval: float,
+        resync_interval: float,
     ) -> None:
         self.cv_dir = cv_dir
         self.job_dir = job_dir
@@ -150,11 +151,14 @@ class SyncAgent:
         self.state = state
         self.debounce_seconds = debounce_seconds
         self.retry_interval = retry_interval
+        self.resync_interval = resync_interval
         self._observer = Observer()
         self._pending: dict[tuple[str, str, str], threading.Timer] = {}
         self._pending_lock = threading.Lock()
+        self._sync_lock = threading.Lock()
         self._stop_event = threading.Event()
         self._retry_thread = threading.Thread(target=self._retry_loop, daemon=True)
+        self._resync_thread = threading.Thread(target=self._resync_loop, daemon=True)
 
     def start(self) -> None:
         self.state.load()
@@ -165,12 +169,16 @@ class SyncAgent:
         self._observer.schedule(SyncHandler(self, "job"), str(self.job_dir), recursive=False)
         self._observer.start()
         self._retry_thread.start()
+        if self.resync_interval > 0:
+            self._resync_thread.start()
         self._full_sync()
 
     def stop(self) -> None:
         self._stop_event.set()
         self._observer.stop()
         self._observer.join(timeout=5)
+        if self._resync_thread.is_alive():
+            self._resync_thread.join(timeout=5)
 
     def _list_local_files(self, folder: Path) -> set[Path]:
         return {
@@ -221,33 +229,41 @@ class SyncAgent:
         return results
 
     def _full_sync(self) -> None:
-        local_cv = self._list_local_files(self.cv_dir)
-        local_job = self._list_local_files(self.job_dir)
+        with self._sync_lock:
+            local_cv = self._list_local_files(self.cv_dir)
+            local_job = self._list_local_files(self.job_dir)
 
-        remote_cv = self._list_remote_files("cv")
-        remote_job = self._list_remote_files("job")
+            remote_cv = self._list_remote_files("cv")
+            remote_job = self._list_remote_files("job")
 
-        local_cv_names = {path.name for path in local_cv}
-        local_job_names = {path.name for path in local_job}
+            local_cv_names = {path.name for path in local_cv}
+            local_job_names = {path.name for path in local_job}
 
-        for name in sorted(remote_cv - local_cv_names):
-            self._delete_remote(Path(name), "cv")
+            for name in sorted(remote_cv - local_cv_names):
+                self._delete_remote(Path(name), "cv")
 
-        for name in sorted(remote_job - local_job_names):
-            self._delete_remote(Path(name), "job")
+            for name in sorted(remote_job - local_job_names):
+                self._delete_remote(Path(name), "job")
 
-        for path in sorted(local_cv):
-            self._process_upload(path, "cv")
+            for path in sorted(local_cv):
+                self._process_upload(path, "cv")
 
-        for path in sorted(local_job):
-            self._process_upload(path, "job")
+            for path in sorted(local_job):
+                self._process_upload(path, "job")
 
-        # Drop stale local hashes so future uploads are not skipped
-        for tracked in self.state.list_tracked_paths():
-            tracked_path = Path(tracked)
-            if not tracked_path.exists():
-                self.state.remove_hash(tracked_path)
-        self.state.save()
+            # Drop stale local hashes so future uploads are not skipped
+            for tracked in self.state.list_tracked_paths():
+                tracked_path = Path(tracked)
+                if not tracked_path.exists():
+                    self.state.remove_hash(tracked_path)
+            self.state.save()
+
+    def _resync_loop(self) -> None:
+        while not self._stop_event.is_set():
+            self._stop_event.wait(self.resync_interval)
+            if self._stop_event.is_set():
+                return
+            self._full_sync()
 
     def queue_path(self, path: Path, role: str) -> None:
         self._schedule(path, role, "upload")
@@ -419,6 +435,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state-file", default="~/.ai-realtime-sync/state.json")
     parser.add_argument("--debounce-seconds", type=float, default=1.0)
     parser.add_argument("--retry-interval", type=float, default=30.0)
+    parser.add_argument("--resync-interval", type=float, default=30.0)
     parser.add_argument("--log-level", default="INFO")
     return parser.parse_args()
 
@@ -446,6 +463,7 @@ def main() -> None:
         state=state,
         debounce_seconds=args.debounce_seconds,
         retry_interval=args.retry_interval,
+        resync_interval=args.resync_interval,
     )
 
     agent.start()
