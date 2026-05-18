@@ -357,6 +357,19 @@ def _vector_score(distance: float) -> float:
     return round(similarity * 100, 2)
 
 
+def _hybrid_score(vector_score: float, lexical_score: float) -> float:
+    if not settings.hybrid_scoring_enabled:
+        return vector_score
+    weight_sum = settings.hybrid_vector_weight + settings.hybrid_lexical_weight
+    if weight_sum <= 0:
+        return vector_score
+    combined = (
+        vector_score * settings.hybrid_vector_weight
+        + lexical_score * settings.hybrid_lexical_weight
+    ) / weight_sum
+    return round(combined, 2)
+
+
 def _vector_match_cv(
     cv_doc: CvDocumentRead,
     extraction: ExtractedTextRead,
@@ -396,10 +409,12 @@ def _vector_match_cv(
 
     for row in rows:
         job_text = (row.extracted_text or "").strip()
+        lexical_score = 0.0
         common: list[str] = []
         if job_text:
-            _, common = score_texts(text_value, job_text)
-        score = _vector_score(float(row.distance))
+            lexical_score, common = score_texts(text_value, job_text)
+        vector_score = _vector_score(float(row.distance))
+        score = _hybrid_score(vector_score, lexical_score)
         _insert_score_result(Path(cv_doc.path), Path(row.path), score, common)
         _upsert_match_result(cv_doc.id, row.job_id, score, common)
 
@@ -445,10 +460,12 @@ def _vector_match_job(
 
     for row in rows:
         cv_text = (row.extracted_text or "").strip()
+        lexical_score = 0.0
         common: list[str] = []
         if cv_text:
-            _, common = score_texts(cv_text, text_value)
-        score = _vector_score(float(row.distance))
+            lexical_score, common = score_texts(cv_text, text_value)
+        vector_score = _vector_score(float(row.distance))
+        score = _hybrid_score(vector_score, lexical_score)
         _insert_score_result(Path(row.path), Path(job_doc.path), score, common)
         _upsert_match_result(row.cv_id, job_doc.id, score, common)
 

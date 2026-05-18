@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     scoring_max_bonus: float = 0.25
     scoring_experience_bonus: float = 0.1
     scoring_experience_penalty: float = 0.05
+    hybrid_scoring_enabled: bool = True
+    hybrid_vector_weight: float = 0.7
+    hybrid_lexical_weight: float = 0.3
     embedding_enabled: bool = True
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_device: str = "cpu"
