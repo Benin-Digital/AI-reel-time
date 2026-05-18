@@ -7,7 +7,7 @@ import tempfile
 from time import perf_counter, time
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from sqlalchemy import delete, func, or_, select, text
@@ -54,6 +54,12 @@ from .services import (
 )
 from .security import enforce_security, validate_security_settings
 from .settings import get_settings
+from .observability import (
+    CONTENT_TYPE_LATEST,
+    record_request,
+    render_metrics,
+    update_runtime_metrics,
+)
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -693,6 +699,14 @@ async def security_middleware(request: Request, call_next):
     response = await call_next(request)
     response.headers["x-request-id"] = request_id
     duration_ms = (perf_counter() - start) * 1000
+    route = request.scope.get("route")
+    route_path = route.path if route and hasattr(route, "path") else request.url.path
+    record_request(
+        request.method,
+        route_path,
+        response.status_code,
+        duration_ms / 1000,
+    )
     logger.info(
         "request",
         extra={
@@ -754,6 +768,38 @@ def metrics() -> dict[str, float | int | bool | str | None]:
         "worker_alive": bool(worker.is_running) if worker is not None else False,
         "worker_last_error": worker.last_error if worker is not None else None,
     }
+
+
+@app.get("/metrics/prometheus")
+def metrics_prometheus() -> Response:
+    queue_status = get_queue_status()
+    worker = getattr(app.state, "worker", None)
+    with SessionLocal() as session:
+        events = session.scalar(select(func.count()).select_from(EventLog))
+        extractions = session.scalar(select(func.count()).select_from(ExtractedText))
+        scores = session.scalar(select(func.count()).select_from(ScoreResult))
+        matches = session.scalar(select(func.count()).select_from(MatchResult))
+        cv_documents = session.scalar(select(func.count()).select_from(CvDocument))
+        job_documents = session.scalar(select(func.count()).select_from(JobDocument))
+        cv_embeddings = session.scalar(select(func.count()).select_from(CvEmbedding))
+        job_embeddings = session.scalar(select(func.count()).select_from(JobEmbedding))
+
+    update_runtime_metrics(
+        queue_status,
+        bool(worker.is_running) if worker is not None else False,
+        {
+            "events": int(events or 0),
+            "extractions": int(extractions or 0),
+            "scores": int(scores or 0),
+            "matches": int(matches or 0),
+            "cv_documents": int(cv_documents or 0),
+            "job_documents": int(job_documents or 0),
+            "cv_embeddings": int(cv_embeddings or 0),
+            "job_embeddings": int(job_embeddings or 0),
+        },
+        settings.embedding_enabled,
+    )
+    return Response(content=render_metrics(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/queue-status")
