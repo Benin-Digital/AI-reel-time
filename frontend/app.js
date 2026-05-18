@@ -50,6 +50,9 @@ const applyJobFilters = document.getElementById("applyJobFilters");
 
 let apiBase = localStorage.getItem("apiBase") || "";
 apiBaseInput.value = apiBase;
+const AUTO_REFRESH_MS = 3000;
+let autoRefreshTimer = null;
+let autoRefreshInFlight = false;
 
 const safeFetch = async (path) => {
   const response = await fetch(`${apiBase}${path}`);
@@ -277,6 +280,10 @@ const loadJobDocuments = async () => {
 };
 
 const loadAll = async () => {
+  if (autoRefreshInFlight) {
+    return;
+  }
+  autoRefreshInFlight = true;
   try {
     const metrics = await safeFetch("/metrics");
     renderMetrics(metrics);
@@ -289,7 +296,18 @@ const loadAll = async () => {
     cvList.innerHTML = formatEmpty(message);
     jobList.innerHTML = formatEmpty(message);
     matchList.innerHTML = formatEmpty(message);
+  } finally {
+    autoRefreshInFlight = false;
   }
+};
+
+const startAutoRefresh = () => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+  }
+  autoRefreshTimer = setInterval(() => {
+    loadAll();
+  }, AUTO_REFRESH_MS);
 };
 
 navButtons.forEach((button) => {
@@ -341,6 +359,7 @@ applyApiButton.addEventListener("click", () => {
   apiBase = apiBaseInput.value.trim();
   localStorage.setItem("apiBase", apiBase);
   loadAll();
+  startAutoRefresh();
 });
 
 refreshButton.addEventListener("click", () => {
@@ -374,3 +393,4 @@ applyJobFilters.addEventListener("click", () => {
 });
 
 loadAll();
+startAutoRefresh();
