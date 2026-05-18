@@ -12,10 +12,18 @@ FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 
 mkdir -p "$CV_DIR" "$JOB_DIR"
 
-if ! command -v python >/dev/null 2>&1; then
-  echo "python not found on PATH" >&2
-  exit 1
+# Setup Python with virtualenv
+VENV_PATH="$ROOT_DIR/.venv"
+if [ ! -d "$VENV_PATH" ]; then
+  echo "Creating virtualenv..."
+  python3 -m venv "$VENV_PATH"
+  source "$VENV_PATH/bin/activate"
+  pip install -q requests watchdog
+else
+  source "$VENV_PATH/bin/activate"
 fi
+
+PYTHON_BIN="$VENV_PATH/bin/python3"
 
 if ! command -v open >/dev/null 2>&1; then
   echo "open command not found (macOS expected)" >&2
@@ -24,13 +32,13 @@ fi
 
 # Start frontend
 pushd "$ROOT_DIR/frontend" >/dev/null
-python -m http.server "$FRONTEND_PORT" >/tmp/ai-realtime-frontend.log 2>&1 &
+"$PYTHON_BIN" -m http.server "$FRONTEND_PORT" >/tmp/ai-realtime-frontend.log 2>&1 &
 FRONTEND_PID=$!
 popd >/dev/null
 
 # Start RH agent
 pushd "$ROOT_DIR" >/dev/null
-python agent/sync_agent.py \
+"$PYTHON_BIN" agent/sync_agent.py \
   --cv-dir "$CV_DIR" \
   --job-dir "$JOB_DIR" \
   --api-base "$API_BASE" \

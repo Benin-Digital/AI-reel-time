@@ -1,7 +1,7 @@
 services:
   api:
     build:
-      context: ./backend
+      context: ../../backend
       dockerfile: Dockerfile
     container_name: airealtime-api
     environment:
@@ -10,23 +10,23 @@ services:
       AI_REALTIME_REDIS_URL: redis://redis:6379/0
       AI_REALTIME_WATCH_CV_DIR: /srv/ai-realtime/storage/cv
       AI_REALTIME_WATCH_JOB_DIR: /srv/ai-realtime/storage/job
+      AI_REALTIME_CORS_ALLOW_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       AI_REALTIME_LOG_LEVEL: INFO
       AI_REALTIME_LOG_JSON: "false"
       AI_REALTIME_DATABASE_AUTO_CREATE: "true"
     ports:
       - "8000:8000"
     volumes:
-      - ./backend/app:/app/app
-      - ./storage/cv:/srv/ai-realtime/storage/cv
-      - ./storage/job:/srv/ai-realtime/storage/job
-      - ./storage/archive:/srv/ai-realtime/storage/archive
+      - ../../backend/app:/app/app:ro
+      - ../../storage/cv:/srv/ai-realtime/storage/cv:rw
+      - ../../storage/job:/srv/ai-realtime/storage/job:rw
+      - ../../storage/archive:/srv/ai-realtime/storage/archive:rw
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
-    read_only: true
     tmpfs:
       - /tmp
     security_opt:

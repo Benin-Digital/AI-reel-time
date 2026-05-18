@@ -237,7 +237,7 @@ class SyncAgent:
         headers = {}
         if self.api_key:
             headers["x-api-key"] = self.api_key
-        files = {"file": (path.name, path.open("rb"))}
+        files = {"upload": (path.name, path.open("rb"))}
         data = {"folder": role, "filename": path.name}
         try:
             response = requests.post(
@@ -256,7 +256,7 @@ class SyncAgent:
             return False
         finally:
             try:
-                files["file"][1].close()
+                files["upload"][1].close()
             except Exception:
                 pass
 

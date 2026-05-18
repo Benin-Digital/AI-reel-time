@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File,
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy.orm import Session
 
 from .db import SessionLocal, init_db
 from .models import (
@@ -295,7 +296,7 @@ def _upsert_cv_embedding(
     cv_id: int,
     content_hash: str | None,
     embedding: list[float],
-    session: SessionLocal | None = None,
+    session: Session | None = None,
 ) -> None:
     if len(embedding) != settings.embedding_dim:
         logger.warning("embedding dim mismatch for cv %s", cv_id)
@@ -326,7 +327,7 @@ def _upsert_job_embedding(
     job_id: int,
     content_hash: str | None,
     embedding: list[float],
-    session: SessionLocal | None = None,
+    session: Session | None = None,
 ) -> None:
     if len(embedding) != settings.embedding_dim:
         logger.warning("embedding dim mismatch for job %s", job_id)
