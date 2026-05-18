@@ -161,11 +161,19 @@ class SyncAgent:
         self._observer.schedule(SyncHandler(self, "job"), str(self.job_dir), recursive=False)
         self._observer.start()
         self._retry_thread.start()
+        self._seed_existing_files()
 
     def stop(self) -> None:
         self._stop_event.set()
         self._observer.stop()
         self._observer.join(timeout=5)
+
+    def _seed_existing_files(self) -> None:
+        for role, folder in (("cv", self.cv_dir), ("job", self.job_dir)):
+            for path in folder.iterdir():
+                if not path.is_file():
+                    continue
+                self._process_upload(path, role)
 
     def queue_path(self, path: Path, role: str) -> None:
         self._schedule(path, role, "upload")
