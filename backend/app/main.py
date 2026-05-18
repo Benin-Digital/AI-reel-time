@@ -1527,10 +1527,15 @@ def backfill_embeddings(
                 _upsert_job_embedding(job_id, content_hash, vector, session=session)
                 processed += 1
 
+    next_offset = offset
+    if batch_size is not None:
+        next_offset = offset + batch_size
+
     return {
         "processed": processed,
         "skipped": skipped,
         "failed": failed,
+        "next_offset": next_offset,
     }
 
 @app.post("/extract", response_model=ExtractedTextRead)
