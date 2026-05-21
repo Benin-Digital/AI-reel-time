@@ -67,6 +67,7 @@ from .services import (
     deserialize_keywords,
     get_queue_status,
 )
+from .services.explain import build_match_explanation
 from .security import enforce_security, validate_security_settings
 from .settings import get_settings
 from .observability import (
@@ -1498,6 +1499,41 @@ def get_match(match_id: int) -> MatchRead:
             common_keywords=deserialize_keywords(match.common_keywords),
             created_at=match.created_at,
             updated_at=match.updated_at,
+        )
+
+
+@app.get("/matches/{match_id}/explain", response_model=MatchExplainRead)
+def explain_match(match_id: int) -> MatchExplainRead:
+    with SessionLocal() as session:
+        match = session.get(MatchResult, match_id)
+        if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        cv_doc = session.get(CvDocument, match.cv_id)
+        job_doc = session.get(JobDocument, match.job_id)
+        if not cv_doc or not job_doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        cv_extract = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == cv_doc.path)
+        )
+        job_extract = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == job_doc.path)
+        )
+
+        cv_text = cv_extract.extracted_text if cv_extract else ""
+        job_text = job_extract.extracted_text if job_extract else ""
+        keywords = deserialize_keywords(match.common_keywords)
+
+        details = build_match_explanation(cv_text, job_text, match.score, keywords)
+        return MatchExplainRead(
+            match_id=match.id,
+            score=match.score,
+            summary=str(details["summary"]),
+            why_match=list(details["why_match"]),
+            vigilance=list(details["vigilance"]),
+            evidence=list(details["evidence"]),
+            keyword_hits=list(details["keyword_hits"]),
         )
 
 
