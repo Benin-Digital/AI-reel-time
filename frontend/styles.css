@@ -141,8 +141,8 @@ body {
 .auth-active .brand {
   position: absolute;
   top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: clamp(20px, 4vw, 64px);
+  transform: none;
   z-index: 30;
 }
 
