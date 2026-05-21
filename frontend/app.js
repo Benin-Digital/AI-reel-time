@@ -79,12 +79,15 @@ const documentSelection = { cv: null, job: null };
 let apiBase = localStorage.getItem("apiBase") || "";
 apiBaseInput.value = apiBase;
 const AUTO_REFRESH_MS = 3000;
+const AUTO_REFRESH_MAX_MS = 30000;
+const AUTO_REFRESH_BACKOFF_FACTOR = 1.8;
 const REQUEST_TIMEOUT_MS = 12000;
 const MAX_UPLOAD_MB = 20;
 const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt"];
 let authToken = localStorage.getItem("authToken") || "";
 let authUser = JSON.parse(localStorage.getItem("authUser") || "null");
 let autoRefreshTimer = null;
+let autoRefreshDelayMs = AUTO_REFRESH_MS;
 let autoRefreshInFlight = false;
 let activePanel = "cv";
 let pendingDeleteKind = null;
@@ -115,6 +118,13 @@ const openModal = (modal) => {
 const closeModal = (modal) => {
   if (modal) {
     modal.hidden = true;
+  }
+};
+
+const clearAutoRefreshTimer = () => {
+  if (autoRefreshTimer) {
+    clearTimeout(autoRefreshTimer);
+    autoRefreshTimer = null;
   }
 };
 
@@ -1114,12 +1124,13 @@ const loadMatchesSafe = async () => {
 const loadAll = async () => {
   if (!apiBase) {
     setApiStatus("Base API manquante. Renseignez l'URL puis appliquez.");
-    return;
+    return false;
   }
   if (autoRefreshInFlight) {
-    return;
+    return false;
   }
   autoRefreshInFlight = true;
+  let hadFailure = false;
   try {
     const metricsPromise = safeFetch("/metrics").then(renderMetrics).catch((error) => {
       if (error instanceof Error && error.name === "AuthError") {
@@ -1157,18 +1168,21 @@ const loadAll = async () => {
           : "Erreur inconnue";
     if (error instanceof Error && error.name === "AuthError") {
       setApiStatus(message);
-      return;
+      return true;
     }
 
     if (isTransientFetchError(error)) {
       console.debug("Transient refresh failure suppressed:", message);
-      return;
+      hadFailure = true;
+      return hadFailure;
     }
 
     console.warn("Refresh failure:", message);
+    hadFailure = true;
   } finally {
     autoRefreshInFlight = false;
   }
+  return hadFailure;
 };
 
 const login = async (email, password) => {
@@ -1300,12 +1314,26 @@ initUploadZone("cv", uploadCvZone, uploadCvInput, uploadCvButton, uploadCvStatus
 initUploadZone("job", uploadJobZone, uploadJobInput, uploadJobButton, uploadJobStatus);
 
 const startAutoRefresh = () => {
-  if (autoRefreshTimer) {
-    clearInterval(autoRefreshTimer);
-  }
-  autoRefreshTimer = setInterval(() => {
-    loadAll();
-  }, AUTO_REFRESH_MS);
+  clearAutoRefreshTimer();
+
+  const scheduleNextRefresh = (delayMs = autoRefreshDelayMs) => {
+    clearAutoRefreshTimer();
+    autoRefreshTimer = window.setTimeout(async () => {
+      const hadFailure = await loadAll();
+      if (hadFailure) {
+        autoRefreshDelayMs = Math.min(
+          AUTO_REFRESH_MAX_MS,
+          Math.max(AUTO_REFRESH_MS, Math.round(autoRefreshDelayMs * AUTO_REFRESH_BACKOFF_FACTOR)),
+        );
+      } else {
+        autoRefreshDelayMs = AUTO_REFRESH_MS;
+      }
+      scheduleNextRefresh(autoRefreshDelayMs);
+    }, delayMs);
+  };
+
+  autoRefreshDelayMs = AUTO_REFRESH_MS;
+  scheduleNextRefresh(autoRefreshDelayMs);
 };
 
 cvPrev.addEventListener("click", () => {
@@ -1351,6 +1379,7 @@ applyApiButton.addEventListener("click", () => {
   apiBase = apiBaseInput.value.trim();
   localStorage.setItem("apiBase", apiBase);
   setApiStatus("");
+  autoRefreshDelayMs = AUTO_REFRESH_MS;
   loadAll();
   startAutoRefresh();
 });
