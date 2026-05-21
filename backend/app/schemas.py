@@ -175,6 +175,11 @@ class UserCreate(BaseModel):
     role: Literal["admin", "member"] = "member"
 
 
+class UserUpdate(BaseModel):
+    role: Literal["admin", "member"] | None = None
+    is_active: bool | None = None
+
+
 class AuthLoginRequest(BaseModel):
     email: str
     password: str

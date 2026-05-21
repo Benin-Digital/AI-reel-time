@@ -51,6 +51,7 @@ from .schemas import (
     AuthLoginResponse,
     MatchExplainRead,
     UserCreate,
+    UserUpdate,
     UserRead,
 )
 from .services import (
@@ -952,6 +953,33 @@ def create_user(payload: UserCreate, request: Request) -> UserRead:
             role=payload.role,
             is_active=True,
         )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return UserRead.model_validate(user)
+
+
+@app.patch("/auth/users/{user_id}", response_model=UserRead)
+def update_user(user_id: int, payload: UserUpdate, request: Request) -> UserRead:
+    current_user = _require_admin(request)
+    with SessionLocal() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        if user.role == "superadmin":
+            raise HTTPException(status_code=403, detail="Superadmin account is protected")
+
+        if current_user.role == "admin":
+            if user.role != "member":
+                raise HTTPException(status_code=403, detail="Admin can only manage member accounts")
+            if payload.role is not None and payload.role != "member":
+                raise HTTPException(status_code=403, detail="Admin can only keep member role")
+
+        if payload.role is not None:
+            user.role = payload.role
+        if payload.is_active is not None:
+            user.is_active = payload.is_active
+
         session.add(user)
         session.commit()
         session.refresh(user)
