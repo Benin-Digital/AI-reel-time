@@ -87,6 +87,8 @@ let authUser = JSON.parse(localStorage.getItem("authUser") || "null");
 let autoRefreshTimer = null;
 let autoRefreshInFlight = false;
 let activePanel = "cv";
+let consecutiveLoadFailures = 0;
+const MAX_CONSECUTIVE_LOAD_FAILURES = 3;
 let pendingDeleteKind = null;
 let pendingDeleteFilenames = [];
 let pendingDeleteResolve = null;
@@ -1075,6 +1077,8 @@ const loadAll = async () => {
     await Promise.all([loadCvDocuments(), loadJobDocuments(), loadMatches()]);
     const recent = await safeFetch("/matches?page=1&page_size=6&sort_by=created_at_desc");
     renderMatches(recent, recentMatches);
+    // successful load -> reset transient failure counter and clear status
+    consecutiveLoadFailures = 0;
     setApiStatus("");
   } catch (error) {
     const message =
@@ -1083,6 +1087,15 @@ const loadAll = async () => {
         : error instanceof Error
           ? error.message
           : "Erreur inconnue";
+    // increment transient failure counter
+    consecutiveLoadFailures += 1;
+    if (consecutiveLoadFailures < MAX_CONSECUTIVE_LOAD_FAILURES) {
+      // treat as transient: don't overwrite UI, just log quietly
+      console.debug(`Transient loadAll failure (${consecutiveLoadFailures}):`, message);
+      return;
+    }
+
+    // persistent failure: update lists and show status
     recentMatches.innerHTML = formatEmpty(message);
     cvList.innerHTML = formatEmpty(message);
     jobList.innerHTML = formatEmpty(message);
