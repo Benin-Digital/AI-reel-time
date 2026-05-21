@@ -17,7 +17,6 @@ SKIP_PATHS = {
     "/health",
     "/ready",
     "/auth/login",
-    "/auth/register",
     "/openapi.json",
     "/docs",
     "/redoc",

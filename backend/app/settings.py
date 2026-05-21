@@ -26,9 +26,9 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-me"
     jwt_algorithm: str = "HS256"
     jwt_access_token_minutes: int = 60
-    bootstrap_admin_email: str = ""
-    bootstrap_admin_password: str = ""
-    bootstrap_admin_role: str = "admin"
+    bootstrap_superadmin_email: str = "superadmin@ai-realtime.local"
+    bootstrap_superadmin_password: str = "SuperAdmin2026!"
+    bootstrap_superadmin_role: str = "superadmin"
     upload_max_mb: int = 20
     retention_event_days: int = 30
     retention_extraction_days: int = 30

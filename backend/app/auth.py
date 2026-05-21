@@ -79,23 +79,23 @@ def authenticate_request(request: Request, session: Session) -> User:
 def ensure_bootstrap_user(session: Session) -> None:
     if not settings.auth_enabled:
         return
-    if not settings.bootstrap_admin_email or not settings.bootstrap_admin_password:
-        logger.warning("Auth enabled without bootstrap admin credentials.")
+    if not settings.bootstrap_superadmin_email or not settings.bootstrap_superadmin_password:
+        logger.warning("Auth enabled without bootstrap superadmin credentials.")
         return
 
     if settings.jwt_secret_key == "change-me":
         logger.warning("JWT secret key uses default value; update AI_REALTIME_JWT_SECRET_KEY.")
 
     existing = session.scalar(
-        select(User).where(User.email == settings.bootstrap_admin_email)
+        select(User).where(User.email == settings.bootstrap_superadmin_email)
     )
     if existing is not None:
         return
 
     user = User(
-        email=settings.bootstrap_admin_email,
-        password_hash=hash_password(settings.bootstrap_admin_password),
-        role=settings.bootstrap_admin_role or "admin",
+        email=settings.bootstrap_superadmin_email,
+        password_hash=hash_password(settings.bootstrap_superadmin_password),
+        role=settings.bootstrap_superadmin_role or "superadmin",
         is_active=True,
     )
     session.add(user)

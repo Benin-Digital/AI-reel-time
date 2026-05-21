@@ -49,7 +49,6 @@ from .schemas import (
     SearchHit,
     AuthLoginRequest,
     AuthLoginResponse,
-    AuthRegisterRequest,
     MatchExplainRead,
     UserCreate,
     UserRead,
@@ -402,8 +401,15 @@ def _require_admin(request: Request) -> User:
     user = getattr(request.state, "user", None)
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-    if user.role != "admin":
+    if user.role not in {"admin", "superadmin"}:
         raise HTTPException(status_code=403, detail="Admin role required")
+    return user
+
+
+def _require_superadmin(request: Request) -> User:
+    user = _require_admin(request)
+    if user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Superadmin role required")
     return user
 
 
@@ -915,29 +921,6 @@ def login(payload: AuthLoginRequest) -> AuthLoginResponse:
         )
 
 
-@app.post("/auth/register", response_model=AuthLoginResponse, status_code=201)
-def register(payload: AuthRegisterRequest) -> AuthLoginResponse:
-    with SessionLocal() as session:
-        existing = session.scalar(select(User).where(User.email == payload.email))
-        if existing is not None:
-            raise HTTPException(status_code=409, detail="User already exists")
-
-        user = User(
-            email=payload.email,
-            password_hash=hash_password(payload.password),
-            role="member",
-            is_active=True,
-        )
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        token = create_access_token(user)
-        return AuthLoginResponse(
-            access_token=token,
-            user=UserRead.model_validate(user),
-        )
-
-
 @app.get("/auth/me", response_model=UserRead)
 def get_me(request: Request) -> UserRead:
     user = getattr(request.state, "user", None)
@@ -956,7 +939,9 @@ def list_users(request: Request) -> list[UserRead]:
 
 @app.post("/auth/users", response_model=UserRead)
 def create_user(payload: UserCreate, request: Request) -> UserRead:
-    _require_admin(request)
+    current_user = _require_admin(request)
+    if current_user.role == "admin" and payload.role != "member":
+        raise HTTPException(status_code=403, detail="Admin can only create member accounts")
     with SessionLocal() as session:
         existing = session.scalar(select(User).where(User.email == payload.email))
         if existing is not None:
