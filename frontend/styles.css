@@ -114,6 +114,13 @@ body {
 
 .auth-gate {
   padding: 32px clamp(20px, 4vw, 64px) 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  background-image: url('background.avif');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
 }
 
 .auth-gate__card {
