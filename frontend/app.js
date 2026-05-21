@@ -84,12 +84,14 @@ const AUTO_REFRESH_BACKOFF_FACTOR = 1.8;
 const REQUEST_TIMEOUT_MS = 12000;
 const MAX_UPLOAD_MB = 20;
 const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt"];
+const DASHBOARD_CACHE_KEY = "aiRealtimeDashboardCache";
 let authToken = localStorage.getItem("authToken") || "";
 let authUser = JSON.parse(localStorage.getItem("authUser") || "null");
 let autoRefreshTimer = null;
 let autoRefreshDelayMs = AUTO_REFRESH_MS;
 let autoRefreshInFlight = false;
 let activePanel = "cv";
+let isHydratingDashboard = false;
 let pendingDeleteKind = null;
 let pendingDeleteFilenames = [];
 let pendingDeleteResolve = null;
@@ -125,6 +127,61 @@ const clearAutoRefreshTimer = () => {
   if (autoRefreshTimer) {
     clearTimeout(autoRefreshTimer);
     autoRefreshTimer = null;
+  }
+};
+
+const readDashboardCache = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DASHBOARD_CACHE_KEY) || "null");
+  } catch (error) {
+    return null;
+  }
+};
+
+const writeDashboardCache = (patch) => {
+  const current = readDashboardCache() || {};
+  const next = {
+    ...current,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(next));
+  } catch (error) {
+    // Ignore storage quota or privacy mode failures.
+  }
+};
+
+const hydrateDashboardFromCache = () => {
+  const cache = readDashboardCache();
+  if (!cache) {
+    return;
+  }
+  isHydratingDashboard = true;
+  try {
+    if (cache.selectedDocuments) {
+      if (cache.selectedDocuments.cv) {
+        setSelectedDocument("cv", cache.selectedDocuments.cv);
+      }
+      if (cache.selectedDocuments.job) {
+        setSelectedDocument("job", cache.selectedDocuments.job);
+      }
+    }
+
+    if (cache.metrics) {
+      renderMetrics(cache.metrics);
+    }
+    if (Array.isArray(cache.recentMatches)) {
+      renderMatches(cache.recentMatches, recentMatches);
+    }
+    if (Array.isArray(cache.cvDocuments)) {
+      renderDocuments(cache.cvDocuments, cvList, "cv");
+    }
+    if (Array.isArray(cache.jobDocuments)) {
+      renderDocuments(cache.jobDocuments, jobList, "job");
+    }
+  } finally {
+    isHydratingDashboard = false;
   }
 };
 
@@ -800,6 +857,7 @@ const renderMetrics = (data) => {
       ? `actif${data.worker_last_error ? ` - erreur : ${data.worker_last_error}` : ""}`
       : "arrêté";
   }
+  writeDashboardCache({ metrics: data });
 };
 
 const renderMatches = (matches, target) => {
@@ -807,6 +865,9 @@ const renderMatches = (matches, target) => {
     target.classList.remove("match-grid");
     target.classList.add("stack");
     target.innerHTML = formatEmpty("Aucun résultat de correspondance pour le moment.");
+    if (target === recentMatches) {
+      writeDashboardCache({ recentMatches: matches });
+    }
     return;
   }
 
@@ -823,11 +884,20 @@ const renderMatches = (matches, target) => {
       }
     });
   });
+
+  if (target === recentMatches) {
+    writeDashboardCache({ recentMatches: matches });
+  }
 };
 
 const renderDocuments = (docs, target, kind) => {
   if (!docs.length) {
     target.innerHTML = formatEmpty(`Aucun document ${kind === "cv" ? "CV" : "offre"} pour le moment.`);
+    if (kind === "cv") {
+      writeDashboardCache({ cvDocuments: docs });
+    } else if (kind === "job") {
+      writeDashboardCache({ jobDocuments: docs });
+    }
     return;
   }
 
@@ -917,8 +987,14 @@ const renderDocuments = (docs, target, kind) => {
   });
 
   const selectedDocumentId = documentSelection[kind];
-  if (selectedDocumentId) {
+  if (selectedDocumentId && !isHydratingDashboard) {
     loadDocumentDetails(kind, selectedDocumentId);
+  }
+
+  if (kind === "cv") {
+    writeDashboardCache({ cvDocuments: docs, selectedDocuments: { ...readDashboardCache()?.selectedDocuments, cv: documentSelection[kind] } });
+  } else if (kind === "job") {
+    writeDashboardCache({ jobDocuments: docs, selectedDocuments: { ...readDashboardCache()?.selectedDocuments, job: documentSelection[kind] } });
   }
 };
 
@@ -1432,6 +1508,7 @@ if (deleteJobAll) {
 
 updateAuthUi();
 loadAuthUser();
+hydrateDashboardFromCache();
 loadAll();
 startAutoRefresh();
 setActivePanel(activePanel);
