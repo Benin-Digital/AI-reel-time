@@ -25,12 +25,19 @@ def extract_text_from_pdf(path: Path) -> str:
             except Exception as exc:
                 logger.warning(f"Failed to extract text from PDF page {page_num}: {exc}")
 
-        if text_content:
-            return "\n".join(text_content)
+        extracted_text = "\n".join(text_content)
+        if len(extracted_text.strip()) >= settings.ocr_min_text_length:
+            return extracted_text
 
-        # Fallback to OCR if PDF extraction yielded no text
-        logger.info(f"PDF {path.name} has no extractable text, attempting OCR...")
-        return _ocr_pdf(path)
+        logger.info(
+            "PDF %s extracted text below threshold (%d chars), attempting OCR...",
+            path.name,
+            settings.ocr_min_text_length,
+        )
+        ocr_text = _ocr_pdf(path)
+        if len(ocr_text.strip()) > len(extracted_text.strip()):
+            return ocr_text
+        return extracted_text
     except Exception as exc:
         logger.exception(f"PDF extraction failed for {path.name}: {exc}")
         return ""
@@ -64,6 +71,12 @@ def extract_text_from_docx(path: Path) -> str:
         for para in doc.paragraphs:
             if para.text.strip():
                 text_content.append(para.text)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    cell_text = cell.text.strip()
+                    if cell_text:
+                        text_content.append(cell_text)
         return "\n".join(text_content)
     except Exception as exc:
         logger.exception(f"DOCX extraction failed for {path.name}: {exc}")
