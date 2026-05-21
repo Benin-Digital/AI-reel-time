@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 import json
 import logging
 from pathlib import Path
-import shutil
 import tempfile
 from time import perf_counter, time
 from uuid import uuid4
@@ -135,6 +134,32 @@ def _configure_cors(app: FastAPI) -> None:
         allow_methods=methods or ["*"],
         allow_headers=headers or ["*"],
     )
+
+
+def _write_upload_to_temp(upload: UploadFile, target_dir: Path, safe_name: str) -> Path:
+    max_bytes = max(0, settings.upload_max_mb) * 1024 * 1024
+    temp_path: Path | None = None
+    with tempfile.NamedTemporaryFile(
+        prefix=f".{safe_name}.",
+        dir=target_dir,
+        delete=False,
+    ) as temp_file:
+        total = 0
+        while True:
+            chunk = upload.file.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if max_bytes and total > max_bytes:
+                temp_path = Path(temp_file.name)
+                temp_file.flush()
+                temp_file.close()
+                if temp_path.exists():
+                    temp_path.unlink()
+                raise HTTPException(status_code=413, detail="File too large")
+            temp_file.write(chunk)
+        temp_path = Path(temp_file.name)
+    return temp_path
 
 
 def _insert_event(payload: EventCreate) -> EventRead:
@@ -979,15 +1004,8 @@ def ingest_file(
 
     target_path = target_dir / safe_name
     temp_path: Path | None = None
-
     try:
-        with tempfile.NamedTemporaryFile(
-            prefix=f".{safe_name}.",
-            dir=target_dir,
-            delete=False,
-        ) as temp_file:
-            shutil.copyfileobj(upload.file, temp_file)
-            temp_path = Path(temp_file.name)
+        temp_path = _write_upload_to_temp(upload, target_dir, safe_name)
     finally:
         try:
             upload.file.close()
@@ -997,7 +1015,12 @@ def ingest_file(
     if temp_path is None:
         raise HTTPException(status_code=500, detail="Upload failed")
 
-    temp_path.replace(target_path)
+    try:
+        temp_path.replace(target_path)
+    except Exception:
+        if temp_path.exists():
+            temp_path.unlink()
+        raise
     _on_watch_event(
         WatchEvent(
             path=target_path,
