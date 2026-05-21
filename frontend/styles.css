@@ -153,7 +153,7 @@ body {
 
 /* add top spacing so the auth card sits below the centered logo */
 .auth-active .auth-gate {
-  padding-top: 110px;
+  padding-top: clamp(80px, 12vh, 110px);
 }
 
 .auth-gate__card {
