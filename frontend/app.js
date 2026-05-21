@@ -1078,6 +1078,19 @@ const renderDocumentDetails = (doc, target) => {
       }
     });
   });
+
+  // Persist this document detail in the dashboard cache
+  try {
+    const kind = target === cvDetails ? "cv" : "job";
+    const cache = readDashboardCache() || {};
+    cache.documentDetails = cache.documentDetails || {};
+    cache.documentDetails[kind] = cache.documentDetails[kind] || {};
+    cache.documentDetails[kind][String(doc.id)] = doc;
+    cache.updatedAt = new Date().toISOString();
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    // ignore storage errors
+  }
 };
 
 const loadDocumentDetails = async (kind, id) => {
@@ -1087,6 +1100,30 @@ const loadDocumentDetails = async (kind, id) => {
     renderDocumentDetails(doc, detailsTarget);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erreur inconnue";
+    if (error instanceof Error && error.name === "AuthError") {
+      detailsTarget.innerHTML = formatEmpty(message);
+      detailsTarget.classList.remove("hidden");
+      return;
+    }
+
+    // On transient network errors, try to restore last-good details from cache
+    if (isTransientFetchError(error)) {
+      try {
+        const cache = readDashboardCache() || {};
+        const details = (cache.documentDetails || {})[kind] || {};
+        const cached = details[String(id)];
+        if (cached) {
+          renderDocumentDetails(cached, detailsTarget);
+          return;
+        }
+      } catch (e) {
+        // ignore cache read errors and fallthrough
+      }
+      // if no cached detail available, do not overwrite existing UI
+      return;
+    }
+
+    // Non-transient error: show message
     detailsTarget.innerHTML = formatEmpty(message);
     detailsTarget.classList.remove("hidden");
   }
