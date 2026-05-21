@@ -110,6 +110,7 @@ let autoRefreshTimer = null;
 let autoRefreshDelayMs = AUTO_REFRESH_MS;
 let autoRefreshInFlight = false;
 let activePanel = "cv";
+let adminUsersCache = [];
 let isHydratingDashboard = false;
 let pendingDeleteKind = null;
 let pendingDeleteFilenames = [];
@@ -487,6 +488,20 @@ const syncAdminRoleOptions = () => {
   }
 };
 
+const canEditUser = (user) => {
+  if (!authUser) {
+    return false;
+  }
+  if (authUser.role === "superadmin") {
+    return user.role !== "superadmin";
+  }
+  return user.role === "member";
+};
+
+const canEditUserRole = (user) => authUser?.role === "superadmin" && user.role !== "superadmin";
+
+const canEditUserActive = (user) => canEditUser(user);
+
 const renderAdminUsers = (users) => {
   if (!adminUsersList) {
     return;
@@ -500,9 +515,25 @@ const renderAdminUsers = (users) => {
   adminUsersList.innerHTML = users
     .map((user) => `
       <article class="admin-user-card">
-        <strong>${user.email}</strong>
-        <div class="admin-user-meta">Rôle: ${user.role} · Statut: ${user.is_active ? "actif" : "inactif"}</div>
-        <div class="admin-user-meta">Créé le ${new Date(user.created_at).toLocaleString("fr-FR")}</div>
+        <div>
+          <strong>${user.email}</strong>
+          <div class="admin-user-meta">Créé le ${new Date(user.created_at).toLocaleString("fr-FR")}</div>
+        </div>
+        <div class="admin-user-controls" data-user-card="${user.id}">
+          <label>
+            Rôle
+            <select data-user-role="${user.id}" ${canEditUserRole(user) ? "" : "disabled"}>
+              <option value="member" ${user.role === "member" ? "selected" : ""}>Utilisateur</option>
+              <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
+            </select>
+          </label>
+          <label class="admin-user-toggle">
+            <input type="checkbox" data-user-active="${user.id}" ${user.is_active ? "checked" : ""} ${canEditUserActive(user) ? "" : "disabled"} />
+            Actif
+          </label>
+          <button class="ghost" type="button" data-user-save="${user.id}" ${canEditUser(user) ? "" : "disabled"}>Enregistrer</button>
+          <p class="admin-user-meta">Statut: ${user.is_active ? "actif" : "inactif"}</p>
+        </div>
       </article>
     `)
     .join("");
@@ -513,6 +544,7 @@ const loadAdminUsers = async () => {
     return;
   }
   const users = await safeFetch("/auth/users");
+  adminUsersCache = Array.isArray(users) ? users : [];
   renderAdminUsers(users);
   syncAdminRoleOptions();
 };
@@ -528,6 +560,42 @@ const createAdminUser = async (email, password, role) => {
   await safeFetch("/auth/users", {
     method: "POST",
     body: JSON.stringify({ email, password, role }),
+    json: true,
+  });
+  await loadAdminUsers();
+};
+
+const updateAdminUser = async (userId) => {
+  clearAdminError();
+  const roleSelect = document.querySelector(`[data-user-role="${userId}"]`);
+  const activeToggle = document.querySelector(`[data-user-active="${userId}"]`);
+  const current = adminUsersCache.find((user) => String(user.id) === String(userId));
+
+  if (!current) {
+    throw new Error("Utilisateur introuvable dans la liste.");
+  }
+
+  const payload = {};
+  if (roleSelect && canEditUserRole(current)) {
+    const nextRole = roleSelect.value;
+    if (nextRole !== current.role) {
+      payload.role = nextRole;
+    }
+  }
+  if (activeToggle && canEditUserActive(current)) {
+    const nextActive = activeToggle.checked;
+    if (nextActive !== current.is_active) {
+      payload.is_active = nextActive;
+    }
+  }
+
+  if (!Object.keys(payload).length) {
+    return;
+  }
+
+  await safeFetch(`/auth/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
     json: true,
   });
   await loadAdminUsers();
@@ -1793,6 +1861,26 @@ if (adminCreateUserForm) {
       );
       adminCreateUserForm.reset();
       syncAdminRoleOptions();
+      clearAdminError();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erreur inconnue";
+      showAdminError(message);
+    }
+  });
+}
+
+if (adminUsersList) {
+  adminUsersList.addEventListener("click", async (event) => {
+    const button = event.target instanceof HTMLElement ? event.target.closest("[data-user-save]") : null;
+    if (!(button instanceof HTMLElement)) {
+      return;
+    }
+    const userId = button.getAttribute("data-user-save");
+    if (!userId) {
+      return;
+    }
+    try {
+      await updateAdminUser(userId);
       clearAdminError();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erreur inconnue";
