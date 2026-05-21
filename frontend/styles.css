@@ -112,6 +112,54 @@ body {
   font-weight: 600;
 }
 
+.auth-gate {
+  padding: 32px clamp(20px, 4vw, 64px) 0;
+}
+
+.auth-gate__card {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px;
+  border-radius: 28px;
+  border: 1px solid rgba(10, 107, 59, 0.18);
+  background:
+    radial-gradient(circle at top left, rgba(182, 224, 198, 0.6), transparent 40%),
+    linear-gradient(135deg, #ffffff 0%, #f7fbf8 100%);
+  box-shadow: 0 22px 50px rgba(20, 32, 35, 0.12);
+}
+
+.auth-gate__eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.auth-gate__card h1 {
+  margin: 0;
+  font-family: "DM Serif Display", serif;
+  font-size: clamp(32px, 5vw, 52px);
+  line-height: 1;
+  max-width: 12ch;
+}
+
+.auth-gate__card p {
+  margin: 16px 0 0;
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.auth-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+
 .api-config {
   display: flex;
   flex-wrap: wrap;
@@ -163,6 +211,22 @@ body {
   color: #7c1d1b;
   border-color: #efc7c5;
   background: #fff3f2;
+}
+
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.auth-mode-switch .ghost {
+  background: #f3f7f6;
+}
+
+.auth-mode-switch .ghost.is-active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  border-color: transparent;
 }
 
 .primary:hover,

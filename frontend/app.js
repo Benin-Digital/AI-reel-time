@@ -5,10 +5,20 @@ const apiStatus = document.getElementById("apiStatus");
 const loginButton = document.getElementById("loginButton");
 const logoutButton = document.getElementById("logoutButton");
 const authStatus = document.getElementById("authStatus");
+const authGate = document.getElementById("authGate");
+const dashboardShell = document.getElementById("dashboardShell");
+const appFooter = document.getElementById("appFooter");
+const openLoginModalButton = document.getElementById("openLoginModal");
+const openRegisterModalButton = document.getElementById("openRegisterModal");
 const loginModal = document.getElementById("loginModal");
 const loginForm = document.getElementById("loginForm");
+const loginTitle = document.getElementById("loginTitle");
 const loginEmail = document.getElementById("loginEmail");
 const loginPassword = document.getElementById("loginPassword");
+const registerPasswordGroup = document.getElementById("registerPasswordGroup");
+const registerPasswordConfirm = document.getElementById("registerPasswordConfirm");
+const authModeLoginButton = document.getElementById("authModeLogin");
+const authModeRegisterButton = document.getElementById("authModeRegister");
 const loginError = document.getElementById("loginError");
 const explainModal = document.getElementById("explainModal");
 const explainContent = document.getElementById("explainContent");
@@ -87,6 +97,7 @@ const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt"];
 const DASHBOARD_CACHE_KEY = "aiRealtimeDashboardCache";
 let authToken = localStorage.getItem("authToken") || "";
 let authUser = JSON.parse(localStorage.getItem("authUser") || "null");
+let authMode = "login";
 let autoRefreshTimer = null;
 let autoRefreshDelayMs = AUTO_REFRESH_MS;
 let autoRefreshInFlight = false;
@@ -379,7 +390,7 @@ const updateAuthUi = () => {
   if (authUser) {
     authStatus.textContent = `${authUser.email} (${authUser.role})`;
   } else {
-    authStatus.textContent = "Non connecte";
+    authStatus.textContent = "Accès restreint";
   }
   if (loginButton) {
     loginButton.hidden = Boolean(authUser);
@@ -387,6 +398,46 @@ const updateAuthUi = () => {
   if (logoutButton) {
     logoutButton.hidden = !authUser;
   }
+  if (authGate) {
+    authGate.hidden = Boolean(authUser);
+  }
+  if (dashboardShell) {
+    dashboardShell.hidden = !authUser;
+  }
+  if (appFooter) {
+    appFooter.hidden = !authUser;
+  }
+};
+
+const setAuthMode = (mode) => {
+  authMode = mode === "register" ? "register" : "login";
+  if (loginTitle) {
+    loginTitle.textContent = authMode === "register" ? "Créer un compte" : "Connexion";
+  }
+  if (authModeLoginButton) {
+    authModeLoginButton.classList.toggle("is-active", authMode === "login");
+  }
+  if (authModeRegisterButton) {
+    authModeRegisterButton.classList.toggle("is-active", authMode === "register");
+  }
+  if (registerPasswordGroup) {
+    registerPasswordGroup.hidden = authMode !== "register";
+  }
+  if (registerPasswordConfirm) {
+    registerPasswordConfirm.required = authMode === "register";
+    if (authMode !== "register") {
+      registerPasswordConfirm.value = "";
+    }
+  }
+  if (loginPassword) {
+    loginPassword.placeholder = authMode === "register" ? "Choisissez un mot de passe" : "Mot de passe";
+  }
+};
+
+const openAuthModal = (mode = "login") => {
+  clearLoginError();
+  setAuthMode(mode);
+  openModal(loginModal);
 };
 
 const showLoginError = (message) => {
@@ -1235,6 +1286,9 @@ const loadMatchesSafe = async () => {
 };
 
 const loadAll = async () => {
+  if (!authUser) {
+    return false;
+  }
   if (!apiBase) {
     setApiStatus("Base API manquante. Renseignez l'URL puis appliquez.");
     return false;
@@ -1313,8 +1367,33 @@ const login = async (email, password) => {
   localStorage.setItem("authToken", authToken);
   localStorage.setItem("authUser", JSON.stringify(authUser));
   updateAuthUi();
+  setAuthMode("login");
   closeModal(loginModal);
-  loadAll();
+  hydrateDashboardFromCache();
+  await loadAll();
+  startAutoRefresh();
+};
+
+const register = async (email, password) => {
+  clearLoginError();
+  const payload = { email, password };
+  const response = await safeFetch("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    json: true,
+    skipAuth: true,
+    allowAuthErrors: true,
+  });
+  authToken = response.access_token;
+  authUser = response.user;
+  localStorage.setItem("authToken", authToken);
+  localStorage.setItem("authUser", JSON.stringify(authUser));
+  updateAuthUi();
+  setAuthMode("login");
+  closeModal(loginModal);
+  hydrateDashboardFromCache();
+  await loadAll();
+  startAutoRefresh();
 };
 
 const logout = () => {
@@ -1322,25 +1401,30 @@ const logout = () => {
   authUser = null;
   localStorage.removeItem("authToken");
   localStorage.removeItem("authUser");
+  clearAutoRefreshTimer();
+  autoRefreshDelayMs = AUTO_REFRESH_MS;
   updateAuthUi();
-  openModal(loginModal);
+  setApiStatus("");
+  openAuthModal("login");
 };
 
 const loadAuthUser = async () => {
-  if (!authToken || authUser) {
-    return;
+  if (!authToken) {
+    return false;
   }
   try {
     const user = await safeFetch("/auth/me");
     authUser = user;
     localStorage.setItem("authUser", JSON.stringify(authUser));
     updateAuthUi();
+    return true;
   } catch (error) {
     authToken = "";
     authUser = null;
     localStorage.removeItem("authToken");
     localStorage.removeItem("authUser");
     updateAuthUi();
+    return false;
   }
 };
 
@@ -1364,8 +1448,19 @@ tabs.forEach((tab) => {
 
 if (loginButton) {
   loginButton.addEventListener("click", () => {
-    clearLoginError();
-    openModal(loginModal);
+    openAuthModal("login");
+  });
+}
+
+if (openLoginModalButton) {
+  openLoginModalButton.addEventListener("click", () => {
+    openAuthModal("login");
+  });
+}
+
+if (openRegisterModalButton) {
+  openRegisterModalButton.addEventListener("click", () => {
+    openAuthModal("register");
   });
 }
 
@@ -1375,11 +1470,37 @@ if (logoutButton) {
   });
 }
 
+if (authModeLoginButton) {
+  authModeLoginButton.addEventListener("click", () => {
+    setAuthMode("login");
+    clearLoginError();
+  });
+}
+
+if (authModeRegisterButton) {
+  authModeRegisterButton.addEventListener("click", () => {
+    setAuthMode("register");
+    clearLoginError();
+  });
+}
+
 if (loginForm) {
   loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
-      await login(loginEmail.value.trim(), loginPassword.value);
+      const email = loginEmail.value.trim();
+      const password = loginPassword.value;
+      if (authMode === "register") {
+        if (!registerPasswordConfirm) {
+          throw new Error("Le formulaire d'inscription est indisponible.");
+        }
+        if (password !== registerPasswordConfirm.value) {
+          throw new Error("Les mots de passe ne correspondent pas.");
+        }
+        await register(email, password);
+        return;
+      }
+      await login(email, password);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erreur inconnue";
       showLoginError(message);
@@ -1433,6 +1554,10 @@ const startAutoRefresh = () => {
     clearAutoRefreshTimer();
     autoRefreshTimer = window.setTimeout(async () => {
       const hadFailure = await loadAll();
+      if (!authUser) {
+        clearAutoRefreshTimer();
+        return;
+      }
       if (hadFailure) {
         autoRefreshDelayMs = Math.min(
           AUTO_REFRESH_MAX_MS,
@@ -1492,12 +1617,18 @@ applyApiButton.addEventListener("click", () => {
   apiBase = apiBaseInput.value.trim();
   localStorage.setItem("apiBase", apiBase);
   setApiStatus("");
-  autoRefreshDelayMs = AUTO_REFRESH_MS;
-  loadAll();
-  startAutoRefresh();
+  if (authUser) {
+    autoRefreshDelayMs = AUTO_REFRESH_MS;
+    loadAll();
+    startAutoRefresh();
+  }
 });
 
 refreshButton.addEventListener("click", () => {
+  if (!authUser) {
+    openAuthModal("login");
+    return;
+  }
   loadAll();
 });
 
@@ -1543,9 +1674,22 @@ if (deleteJobAll) {
   });
 }
 
-updateAuthUi();
-loadAuthUser();
-hydrateDashboardFromCache();
-loadAll();
-startAutoRefresh();
-setActivePanel(activePanel);
+const bootstrapApp = async () => {
+  setAuthMode("login");
+  updateAuthUi();
+
+  const authenticated = await loadAuthUser();
+  if (!authenticated) {
+    clearAutoRefreshTimer();
+    setApiStatus("");
+    openAuthModal("login");
+    return;
+  }
+
+  hydrateDashboardFromCache();
+  await loadAll();
+  startAutoRefresh();
+  setActivePanel(activePanel);
+};
+
+bootstrapApp();

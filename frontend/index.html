@@ -35,7 +35,21 @@
       </div>
     </header>
 
-    <main class="shell">
+    <section id="authGate" class="auth-gate" hidden>
+      <div class="auth-gate__card">
+        <p class="auth-gate__eyebrow">Accès sécurisé</p>
+        <h1>Créez un compte ou connectez-vous pour accéder au dashboard.</h1>
+        <p>
+          L’interface est réservée aux utilisateurs authentifiés. Vous pouvez créer un compte depuis cet écran puis entrer dans la console.
+        </p>
+        <div class="auth-gate__actions">
+          <button id="openLoginModal" class="primary" type="button">Se connecter</button>
+          <button id="openRegisterModal" class="ghost" type="button">Créer un compte</button>
+        </div>
+      </div>
+    </section>
+
+    <main id="dashboardShell" class="shell">
       <div id="apiStatus" class="banner" hidden></div>
       <section class="dashboard">
         <div class="grid metrics">
@@ -212,7 +226,7 @@
       </section>
     </main>
 
-    <footer class="footer">
+    <footer id="appFooter" class="footer">
       <p>Console MVP AI Real-Time. Conçue pour les équipes RH internes. Bénin Digital © 2026</p>
     </footer>
 
@@ -224,10 +238,18 @@
           <button class="ghost modal-close" data-modal-close>Fermer</button>
         </div>
         <form id="loginForm" class="modal-body">
+          <div class="auth-mode-switch" role="tablist" aria-label="Choix du mode d'authentification">
+            <button id="authModeLogin" class="ghost is-active" type="button">Connexion</button>
+            <button id="authModeRegister" class="ghost" type="button">Créer un compte</button>
+          </div>
           <label for="loginEmail">Email</label>
           <input id="loginEmail" type="email" placeholder="admin@entreprise.com" required />
           <label for="loginPassword">Mot de passe</label>
           <input id="loginPassword" type="password" placeholder="Mot de passe" required />
+          <div id="registerPasswordGroup" hidden>
+            <label for="registerPasswordConfirm">Confirmer le mot de passe</label>
+            <input id="registerPasswordConfirm" type="password" placeholder="Confirmez le mot de passe" />
+          </div>
           <button class="primary" type="submit">Se connecter</button>
           <p id="loginError" class="form-error" hidden></p>
         </form>
