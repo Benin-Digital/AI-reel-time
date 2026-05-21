@@ -13,7 +13,15 @@ from .settings import get_settings
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-SKIP_PATHS = {"/health", "/ready", "/auth/login", "/openapi.json", "/docs", "/redoc"}
+SKIP_PATHS = {
+    "/health",
+    "/ready",
+    "/auth/login",
+    "/auth/register",
+    "/openapi.json",
+    "/docs",
+    "/redoc",
+}
 
 
 def _parse_keys(raw: str) -> Set[str]:

@@ -180,6 +180,11 @@ class AuthLoginRequest(BaseModel):
     password: str
 
 
+class AuthRegisterRequest(BaseModel):
+    email: str
+    password: str
+
+
 class AuthLoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

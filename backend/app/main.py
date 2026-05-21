@@ -49,6 +49,7 @@ from .schemas import (
     SearchHit,
     AuthLoginRequest,
     AuthLoginResponse,
+    AuthRegisterRequest,
     MatchExplainRead,
     UserCreate,
     UserRead,
@@ -907,6 +908,29 @@ def login(payload: AuthLoginRequest) -> AuthLoginResponse:
         user = authenticate_user(session, payload.email, payload.password)
         if user is None:
             raise HTTPException(status_code=401, detail="Invalid credentials")
+        token = create_access_token(user)
+        return AuthLoginResponse(
+            access_token=token,
+            user=UserRead.model_validate(user),
+        )
+
+
+@app.post("/auth/register", response_model=AuthLoginResponse, status_code=201)
+def register(payload: AuthRegisterRequest) -> AuthLoginResponse:
+    with SessionLocal() as session:
+        existing = session.scalar(select(User).where(User.email == payload.email))
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="User already exists")
+
+        user = User(
+            email=payload.email,
+            password_hash=hash_password(payload.password),
+            role="member",
+            is_active=True,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
         token = create_access_token(user)
         return AuthLoginResponse(
             access_token=token,

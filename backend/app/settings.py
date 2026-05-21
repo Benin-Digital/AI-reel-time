@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     cors_allow_headers: str = "Authorization,Content-Type,X-API-Key"
     log_level: str = "INFO"
     log_json: bool = False
-    auth_enabled: bool = False
+    auth_enabled: bool = True
     jwt_secret_key: str = "change-me"
     jwt_algorithm: str = "HS256"
     jwt_access_token_minutes: int = 60
