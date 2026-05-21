@@ -18,7 +18,12 @@ _memory_limits: Dict[str, Tuple[int, int]] = {}
 def _get_client() -> redis.Redis:
     global _client
     if _client is None:
-        _client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+        _client = redis.Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
     return _client
 
 
