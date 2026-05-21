@@ -1055,6 +1055,19 @@ const loadCvDocuments = async () => {
   updatePagerButtons(cvPrev, cvPage);
 };
 
+const loadCvDocumentsSafe = async () => {
+  try {
+    await loadCvDocuments();
+  } catch (error) {
+    if (error instanceof Error && error.name === "AuthError") {
+      throw error;
+    }
+    if (!isTransientFetchError(error)) {
+      console.warn("CV refresh failure:", error);
+    }
+  }
+};
+
 const loadJobDocuments = async () => {
   const currentPage = getPageNumber(jobPage);
   const query = buildParams({
@@ -1072,6 +1085,32 @@ const loadJobDocuments = async () => {
   updatePagerButtons(jobPrev, jobPage);
 };
 
+const loadJobDocumentsSafe = async () => {
+  try {
+    await loadJobDocuments();
+  } catch (error) {
+    if (error instanceof Error && error.name === "AuthError") {
+      throw error;
+    }
+    if (!isTransientFetchError(error)) {
+      console.warn("Job refresh failure:", error);
+    }
+  }
+};
+
+const loadMatchesSafe = async () => {
+  try {
+    await loadMatches();
+  } catch (error) {
+    if (error instanceof Error && error.name === "AuthError") {
+      throw error;
+    }
+    if (!isTransientFetchError(error)) {
+      console.warn("Match refresh failure:", error);
+    }
+  }
+};
+
 const loadAll = async () => {
   if (!apiBase) {
     setApiStatus("Base API manquante. Renseignez l'URL puis appliquez.");
@@ -1082,12 +1121,33 @@ const loadAll = async () => {
   }
   autoRefreshInFlight = true;
   try {
-    const metrics = await safeFetch("/metrics");
-    renderMetrics(metrics);
-    await Promise.all([loadCvDocuments(), loadJobDocuments(), loadMatches()]);
-    const recent = await safeFetch("/matches?page=1&page_size=6&sort_by=created_at_desc");
-    renderMatches(recent, recentMatches);
-    setApiStatus("");
+    const metricsPromise = safeFetch("/metrics").then(renderMetrics).catch((error) => {
+      if (error instanceof Error && error.name === "AuthError") {
+        throw error;
+      }
+      if (!isTransientFetchError(error)) {
+        console.warn("Metrics refresh failure:", error);
+      }
+    });
+
+    const recentMatchesPromise = safeFetch("/matches?page=1&page_size=6&sort_by=created_at_desc")
+      .then((recent) => renderMatches(recent, recentMatches))
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AuthError") {
+          throw error;
+        }
+        if (!isTransientFetchError(error)) {
+          console.warn("Recent matches refresh failure:", error);
+        }
+      });
+
+    await Promise.all([
+      metricsPromise,
+      loadCvDocumentsSafe(),
+      loadJobDocumentsSafe(),
+      loadMatchesSafe(),
+      recentMatchesPromise,
+    ]);
   } catch (error) {
     const message =
       error instanceof Error && error.name === "AuthError"
