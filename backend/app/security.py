@@ -5,13 +5,15 @@ from typing import Set
 
 from fastapi import HTTPException, Request
 
+from .auth import authenticate_request
+from .db import SessionLocal
 from .services.rate_limit import check_rate_limit
 from .settings import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-SKIP_PATHS = {"/health"}
+SKIP_PATHS = {"/health", "/ready", "/auth/login", "/openapi.json", "/docs", "/redoc"}
 
 
 def _parse_keys(raw: str) -> Set[str]:
@@ -46,8 +48,16 @@ def _validate_api_key(request: Request) -> str | None:
 
 
 def enforce_security(request: Request) -> None:
+    if request.method == "OPTIONS":
+        return
+
     if request.url.path in SKIP_PATHS:
         return
+
+    if settings.auth_enabled:
+        with SessionLocal() as session:
+            user = authenticate_request(request, session)
+            request.state.user = user
 
     api_key = _validate_api_key(request)
 
