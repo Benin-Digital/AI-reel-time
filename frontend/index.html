@@ -245,6 +245,26 @@
       </div>
     </div>
 
+    <div id="deleteConfirmModal" class="modal" hidden>
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+        <div class="modal-header">
+          <h3 id="deleteConfirmTitle">Confirmation de suppression</h3>
+          <button class="ghost modal-close" data-modal-close>Fermer</button>
+        </div>
+        <div class="modal-body">
+          <p id="deleteConfirmText">Vous vous apprêtez à supprimer des fichiers du serveur.</p>
+          <div id="deleteConfirmList" class="muted"></div>
+          <label for="deleteConfirmInput">Tapez <strong>SUPPRIMER</strong> pour confirmer</label>
+          <input id="deleteConfirmInput" type="text" placeholder="SUPPRIMER" />
+          <div class="actions">
+            <button id="deleteConfirmCancel" class="ghost" data-modal-close>Annuler</button>
+            <button id="deleteConfirmConfirm" class="primary" disabled>Supprimer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="./app.js"></script>
   </body>
 </html>

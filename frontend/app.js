@@ -12,6 +12,12 @@ const loginPassword = document.getElementById("loginPassword");
 const loginError = document.getElementById("loginError");
 const explainModal = document.getElementById("explainModal");
 const explainContent = document.getElementById("explainContent");
+const deleteConfirmModal = document.getElementById("deleteConfirmModal");
+const deleteConfirmText = document.getElementById("deleteConfirmText");
+const deleteConfirmList = document.getElementById("deleteConfirmList");
+const deleteConfirmInput = document.getElementById("deleteConfirmInput");
+const deleteConfirmConfirmBtn = document.getElementById("deleteConfirmConfirm");
+const deleteConfirmCancelBtn = document.getElementById("deleteConfirmCancel");
 const uploadCvZone = document.getElementById("uploadCvZone");
 const uploadCvInput = document.getElementById("uploadCvInput");
 const uploadCvButton = document.getElementById("uploadCvButton");
@@ -81,6 +87,9 @@ let authUser = JSON.parse(localStorage.getItem("authUser") || "null");
 let autoRefreshTimer = null;
 let autoRefreshInFlight = false;
 let activePanel = "cv";
+let pendingDeleteKind = null;
+let pendingDeleteFilenames = [];
+let pendingDeleteResolve = null;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -108,6 +117,37 @@ const closeModal = (modal) => {
     modal.hidden = true;
   }
 };
+
+const openDeleteConfirm = (kind, filenames) => new Promise((resolve) => {
+  pendingDeleteKind = kind;
+  pendingDeleteFilenames = Array.isArray(filenames) ? filenames : [filenames];
+  pendingDeleteResolve = resolve;
+
+  if (deleteConfirmText) {
+    if (pendingDeleteFilenames.length === 1) {
+      deleteConfirmText.textContent = `Confirmez la suppression du fichier : ${pendingDeleteFilenames[0]}`;
+    } else {
+      deleteConfirmText.textContent = `Confirmer la suppression de ${pendingDeleteFilenames.length} fichiers.`;
+    }
+  }
+
+  if (deleteConfirmList) {
+    const preview = pendingDeleteFilenames.slice(0, 10).map((f) => `<div>${f}</div>`).join("");
+    deleteConfirmList.innerHTML = pendingDeleteFilenames.length > 10
+      ? `<div>Affichage des ${Math.min(pendingDeleteFilenames.length, 10)} premiers fichiers :</div>${preview}`
+      : preview || "";
+  }
+
+  if (deleteConfirmInput) {
+    deleteConfirmInput.value = "";
+    deleteConfirmInput.focus();
+  }
+  if (deleteConfirmConfirmBtn) {
+    deleteConfirmConfirmBtn.disabled = true;
+  }
+
+  openModal(deleteConfirmModal);
+});
 
 const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
   const controller = new AbortController();
@@ -433,7 +473,8 @@ const deleteDocumentsBatch = async (kind, filenames) => {
 
 const handleDeleteDocument = async (kind, filename) => {
   const label = getDocumentLabel(kind);
-  if (!window.confirm(`Supprimer ${label} ${filename} du serveur ?`)) {
+  const confirmed = await openDeleteConfirm(kind, [filename]);
+  if (!confirmed) {
     return;
   }
 
@@ -464,7 +505,8 @@ const handleDeleteAllDocuments = async (kind) => {
     return;
   }
 
-  if (!window.confirm(`Supprimer tous les fichiers ${label} (${filenames.length}) du serveur ?`)) {
+  const confirmed = await openDeleteConfirm(kind, filenames);
+  if (!confirmed) {
     return;
   }
 
@@ -1144,8 +1186,37 @@ document.querySelectorAll("[data-modal-close]").forEach((button) => {
   button.addEventListener("click", () => {
     closeModal(loginModal);
     closeModal(explainModal);
+    closeModal(deleteConfirmModal);
+    if (pendingDeleteResolve) {
+      pendingDeleteResolve(false);
+      pendingDeleteResolve = null;
+    }
   });
 });
+
+if (deleteConfirmInput) {
+  deleteConfirmInput.addEventListener("input", () => {
+    const ok = deleteConfirmInput.value.trim().toUpperCase() === "SUPPRIMER";
+    if (deleteConfirmConfirmBtn) {
+      deleteConfirmConfirmBtn.disabled = !ok;
+    }
+  });
+}
+
+if (deleteConfirmConfirmBtn) {
+  deleteConfirmConfirmBtn.addEventListener("click", async () => {
+    closeModal(deleteConfirmModal);
+    const filenames = pendingDeleteFilenames || [];
+    const kind = pendingDeleteKind;
+    // clear pending before resolution
+    pendingDeleteFilenames = [];
+    pendingDeleteKind = null;
+    if (pendingDeleteResolve) {
+      pendingDeleteResolve(true);
+      pendingDeleteResolve = null;
+    }
+  });
+}
 
 initUploadZone("cv", uploadCvZone, uploadCvInput, uploadCvButton, uploadCvStatus);
 initUploadZone("job", uploadJobZone, uploadJobInput, uploadJobButton, uploadJobStatus);

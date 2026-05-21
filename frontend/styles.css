@@ -1347,6 +1347,23 @@ body {
   padding: 10px 12px;
 }
 
+#deleteConfirmList {
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke);
+  background: #fbfcfd;
+  font-size: 13px;
+}
+
+.modal .actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
 .form-error {
   padding: 8px 10px;
   border-radius: 12px;
