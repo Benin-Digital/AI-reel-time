@@ -10,6 +10,14 @@ const dashboardShell = document.getElementById("dashboardShell");
 const appFooter = document.getElementById("appFooter");
 const openLoginModalButton = document.getElementById("openLoginModal");
 const openRegisterModalButton = document.getElementById("openRegisterModal");
+const adminTab = document.getElementById("tabAdmin");
+const adminPanel = document.getElementById("adminPanel");
+const adminUsersList = document.getElementById("adminUsersList");
+const adminCreateUserForm = document.getElementById("adminCreateUserForm");
+const adminUserEmail = document.getElementById("adminUserEmail");
+const adminUserPassword = document.getElementById("adminUserPassword");
+const adminUserRole = document.getElementById("adminUserRole");
+const adminCreateUserError = document.getElementById("adminCreateUserError");
 const loginModal = document.getElementById("loginModal");
 const loginForm = document.getElementById("loginForm");
 const loginTitle = document.getElementById("loginTitle");
@@ -106,6 +114,8 @@ let isHydratingDashboard = false;
 let pendingDeleteKind = null;
 let pendingDeleteFilenames = [];
 let pendingDeleteResolve = null;
+
+const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -383,6 +393,8 @@ const renderScoreChip = (score) => {
   return `<span class="score-chip ${tone.className}">${score}%</span>`;
 };
 
+const canManageUsers = () => Boolean(authUser && ADMIN_ROLES.has(authUser.role));
+
 const updateAuthUi = () => {
   if (!authStatus) {
     return;
@@ -406,6 +418,12 @@ const updateAuthUi = () => {
   }
   if (appFooter) {
     appFooter.hidden = !authUser;
+  }
+  if (adminTab) {
+    adminTab.hidden = !canManageUsers();
+  }
+  if (adminPanel) {
+    adminPanel.hidden = !canManageUsers() || activePanel !== "admin";
   }
 };
 
@@ -440,6 +458,81 @@ const openAuthModal = (mode = "login") => {
   openModal(loginModal);
 };
 
+const clearAdminError = () => {
+  if (!adminCreateUserError) {
+    return;
+  }
+  adminCreateUserError.hidden = true;
+  adminCreateUserError.textContent = "";
+};
+
+const showAdminError = (message) => {
+  if (!adminCreateUserError) {
+    return;
+  }
+  adminCreateUserError.hidden = false;
+  adminCreateUserError.textContent = message;
+};
+
+const syncAdminRoleOptions = () => {
+  if (!adminUserRole) {
+    return;
+  }
+  const adminOption = adminUserRole.querySelector('option[value="admin"]');
+  if (adminOption) {
+    adminOption.hidden = authUser?.role !== "superadmin";
+  }
+  if (authUser?.role !== "superadmin") {
+    adminUserRole.value = "member";
+  }
+};
+
+const renderAdminUsers = (users) => {
+  if (!adminUsersList) {
+    return;
+  }
+  if (!Array.isArray(users) || !users.length) {
+    adminUsersList.innerHTML = '<p class="muted">Aucun compte trouvé.</p>';
+    return;
+  }
+
+  adminUsersList.className = "stack admin-user-list";
+  adminUsersList.innerHTML = users
+    .map((user) => `
+      <article class="admin-user-card">
+        <strong>${user.email}</strong>
+        <div class="admin-user-meta">Rôle: ${user.role} · Statut: ${user.is_active ? "actif" : "inactif"}</div>
+        <div class="admin-user-meta">Créé le ${new Date(user.created_at).toLocaleString("fr-FR")}</div>
+      </article>
+    `)
+    .join("");
+};
+
+const loadAdminUsers = async () => {
+  if (!canManageUsers()) {
+    return;
+  }
+  const users = await safeFetch("/auth/users");
+  renderAdminUsers(users);
+  syncAdminRoleOptions();
+};
+
+const createAdminUser = async (email, password, role) => {
+  clearAdminError();
+  if (!canManageUsers()) {
+    throw new Error("Accès admin requis.");
+  }
+  if (authUser?.role === "admin" && role !== "member") {
+    throw new Error("Un admin ne peut créer que des comptes utilisateur.");
+  }
+  await safeFetch("/auth/users", {
+    method: "POST",
+    body: JSON.stringify({ email, password, role }),
+    json: true,
+  });
+  await loadAdminUsers();
+};
+
 const showLoginError = (message) => {
   if (!loginError) {
     return;
@@ -461,6 +554,9 @@ const setSelectedDocument = (kind, id) => {
 };
 
 const setActivePanel = (panelName) => {
+  if (panelName === "admin" && !canManageUsers()) {
+    panelName = "cv";
+  }
   activePanel = panelName;
   document.body.setAttribute("data-active-panel", panelName);
 
@@ -1371,6 +1467,9 @@ const login = async (email, password) => {
   closeModal(loginModal);
   hydrateDashboardFromCache();
   await loadAll();
+  if (canManageUsers()) {
+    await loadAdminUsers();
+  }
   startAutoRefresh();
 };
 
@@ -1393,6 +1492,9 @@ const register = async (email, password) => {
   closeModal(loginModal);
   hydrateDashboardFromCache();
   await loadAll();
+  if (canManageUsers()) {
+    await loadAdminUsers();
+  }
   startAutoRefresh();
 };
 
@@ -1432,6 +1534,9 @@ tabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     const panelName = tab.getAttribute("data-panel");
     if (panelName) {
+      if (panelName === "admin" && !canManageUsers()) {
+        return;
+      }
       setActivePanel(panelName);
       if (panelName === "cv") {
         loadCvDocuments();
@@ -1441,6 +1546,9 @@ tabs.forEach((tab) => {
       }
       if (panelName === "matches") {
         loadMatches();
+      }
+      if (panelName === "admin") {
+        loadAdminUsers();
       }
     }
   });
@@ -1674,6 +1782,25 @@ if (deleteJobAll) {
   });
 }
 
+if (adminCreateUserForm) {
+  adminCreateUserForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await createAdminUser(
+        adminUserEmail.value.trim(),
+        adminUserPassword.value,
+        adminUserRole ? adminUserRole.value : "member",
+      );
+      adminCreateUserForm.reset();
+      syncAdminRoleOptions();
+      clearAdminError();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erreur inconnue";
+      showAdminError(message);
+    }
+  });
+}
+
 const bootstrapApp = async () => {
   setAuthMode("login");
   updateAuthUi();
@@ -1688,6 +1815,9 @@ const bootstrapApp = async () => {
 
   hydrateDashboardFromCache();
   await loadAll();
+  if (canManageUsers()) {
+    await loadAdminUsers();
+  }
   startAutoRefresh();
   setActivePanel(activePanel);
 };

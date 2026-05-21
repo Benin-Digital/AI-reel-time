@@ -38,13 +38,12 @@
     <section id="authGate" class="auth-gate" hidden>
       <div class="auth-gate__card">
         <p class="auth-gate__eyebrow">Accès sécurisé</p>
-        <h1>Créez un compte ou connectez-vous pour accéder au dashboard.</h1>
+        <h1>Connectez-vous pour accéder au dashboard.</h1>
         <p>
-          L’interface est réservée aux utilisateurs authentifiés. Vous pouvez créer un compte depuis cet écran puis entrer dans la console.
+          Les comptes sont créés par le super-admin ou l’admin autorisé. Aucun compte public n’est disponible.
         </p>
         <div class="auth-gate__actions">
           <button id="openLoginModal" class="primary" type="button">Se connecter</button>
-          <button id="openRegisterModal" class="ghost" type="button">Créer un compte</button>
         </div>
       </div>
     </section>
@@ -84,6 +83,7 @@
           <button id="tabCv" class="workspace-switcher__button is-active" type="button" data-panel="cv" role="tab" aria-selected="true">Bibliothèque CV</button>
           <button id="tabJob" class="workspace-switcher__button" type="button" data-panel="job" role="tab" aria-selected="false">Bibliothèque offres</button>
           <button id="tabMatches" class="workspace-switcher__button" type="button" data-panel="matches" role="tab" aria-selected="false">Correspondances</button>
+          <button id="tabAdmin" class="workspace-switcher__button" type="button" data-panel="admin" role="tab" aria-selected="false" hidden>Administration</button>
         </div>
 
         <div class="board">
@@ -222,6 +222,40 @@
               <div id="matchList" class="stack"></div>
             </div>
           </section>
+
+          <section class="panel panel-view panel-view--admin" data-panel="admin" role="tabpanel" aria-labelledby="tabAdmin" hidden>
+            <div class="panel-body">
+              <div class="section-header compact">
+                <h3>Administration des comptes</h3>
+                <p>Créer des comptes et attribuer les droits selon le rôle connecté.</p>
+              </div>
+              <div class="admin-workspace">
+                <div class="card admin-card">
+                  <h4>Créer un compte</h4>
+                  <form id="adminCreateUserForm" class="admin-form">
+                    <label for="adminUserEmail">Email</label>
+                    <input id="adminUserEmail" type="email" placeholder="utilisateur@entreprise.com" required />
+                    <label for="adminUserPassword">Mot de passe</label>
+                    <input id="adminUserPassword" type="password" placeholder="Mot de passe initial" required />
+                    <label for="adminUserRole">Rôle</label>
+                    <select id="adminUserRole">
+                      <option value="member">Utilisateur</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <button id="adminCreateUserButton" class="primary" type="submit">Créer le compte</button>
+                    <p id="adminCreateUserError" class="form-error" hidden></p>
+                  </form>
+                </div>
+                <div class="card admin-card">
+                  <div class="section-header compact">
+                    <h4>Comptes existants</h4>
+                    <p>Liste des comptes autorisés à accéder à la plateforme.</p>
+                  </div>
+                  <div id="adminUsersList" class="stack"></div>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
     </main>
@@ -238,18 +272,10 @@
           <button class="ghost modal-close" data-modal-close>Fermer</button>
         </div>
         <form id="loginForm" class="modal-body">
-          <div class="auth-mode-switch" role="tablist" aria-label="Choix du mode d'authentification">
-            <button id="authModeLogin" class="ghost is-active" type="button">Connexion</button>
-            <button id="authModeRegister" class="ghost" type="button">Créer un compte</button>
-          </div>
           <label for="loginEmail">Email</label>
           <input id="loginEmail" type="email" placeholder="admin@entreprise.com" required />
           <label for="loginPassword">Mot de passe</label>
           <input id="loginPassword" type="password" placeholder="Mot de passe" required />
-          <div id="registerPasswordGroup" hidden>
-            <label for="registerPasswordConfirm">Confirmer le mot de passe</label>
-            <input id="registerPasswordConfirm" type="password" placeholder="Confirmez le mot de passe" />
-          </div>
           <button class="primary" type="submit">Se connecter</button>
           <p id="loginError" class="form-error" hidden></p>
         </form>

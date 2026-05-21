@@ -160,6 +160,71 @@ body {
   margin-top: 22px;
 }
 
+.admin-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.admin-card h4 {
+  margin: 0;
+  font-family: "DM Serif Display", serif;
+  font-size: 20px;
+}
+
+.admin-form {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-form label {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.admin-form input,
+.admin-form select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: #fff;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.admin-user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-user-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  background: #f8faf9;
+}
+
+.admin-user-card strong {
+  font-size: 15px;
+}
+
+.admin-user-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .api-config {
   display: flex;
   flex-wrap: wrap;
