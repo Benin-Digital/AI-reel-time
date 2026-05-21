@@ -14,6 +14,12 @@ from sqlalchemy import delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from .db import SessionLocal, init_db
+from .auth import (
+    authenticate_user,
+    create_access_token,
+    ensure_bootstrap_user,
+    hash_password,
+)
 from .models import (
     EventLog,
     ExtractedText,
@@ -23,6 +29,7 @@ from .models import (
     MatchResult,
     CvEmbedding,
     JobEmbedding,
+    User,
 )
 from .schemas import (
     EventCreate,
@@ -41,6 +48,11 @@ from .schemas import (
     MatchRead,
     SearchRequest,
     SearchHit,
+    AuthLoginRequest,
+    AuthLoginResponse,
+    MatchExplainRead,
+    UserCreate,
+    UserRead,
 )
 from .services import (
     LocalFolderWatcher,
@@ -357,6 +369,15 @@ def _upsert_job_embedding(
 def _vector_score(distance: float) -> float:
     similarity = max(0.0, 1.0 - distance)
     return round(similarity * 100, 2)
+
+
+def _require_admin(request: Request) -> User:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+    return user
 
 
 def _hybrid_score(vector_score: float, lexical_score: float) -> float:
@@ -698,6 +719,8 @@ def _on_watch_event(event: WatchEvent) -> None:
 async def lifespan(app: FastAPI):
     validate_security_settings()
     init_db()
+    with SessionLocal() as session:
+        ensure_bootstrap_user(session)
     app.state.started_at = time()
     watched_folders = [Path(settings.watch_cv_dir), Path(settings.watch_job_dir)]
     watcher = LocalFolderWatcher(folders=watched_folders, callback=_on_watch_event)
@@ -850,6 +873,54 @@ def worker_status() -> dict[str, bool | str | None]:
         "alive": worker.is_running,
         "last_error": worker.last_error,
     }
+
+
+@app.post("/auth/login", response_model=AuthLoginResponse)
+def login(payload: AuthLoginRequest) -> AuthLoginResponse:
+    with SessionLocal() as session:
+        user = authenticate_user(session, payload.email, payload.password)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        token = create_access_token(user)
+        return AuthLoginResponse(
+            access_token=token,
+            user=UserRead.model_validate(user),
+        )
+
+
+@app.get("/auth/me", response_model=UserRead)
+def get_me(request: Request) -> UserRead:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return UserRead.model_validate(user)
+
+
+@app.get("/auth/users", response_model=list[UserRead])
+def list_users(request: Request) -> list[UserRead]:
+    _require_admin(request)
+    with SessionLocal() as session:
+        rows = session.scalars(select(User).order_by(User.id.asc())).all()
+        return [UserRead.model_validate(row) for row in rows]
+
+
+@app.post("/auth/users", response_model=UserRead)
+def create_user(payload: UserCreate, request: Request) -> UserRead:
+    _require_admin(request)
+    with SessionLocal() as session:
+        existing = session.scalar(select(User).where(User.email == payload.email))
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="User already exists")
+        user = User(
+            email=payload.email,
+            password_hash=hash_password(payload.password),
+            role=payload.role,
+            is_active=True,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return UserRead.model_validate(user)
 
 
 @app.post("/events", response_model=EventRead)
