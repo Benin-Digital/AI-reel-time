@@ -156,3 +156,41 @@ class CvDocumentDetailRead(DocumentDetailBase):
 
 class JobDocumentDetailRead(DocumentDetailBase):
     pass
+
+
+class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    role: Literal["admin", "member"] = "member"
+
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserRead
+
+
+class MatchExplainRead(BaseModel):
+    match_id: int
+    score: float
+    summary: str
+    why_match: list[str]
+    vigilance: list[str]
+    evidence: list[str]
+    keyword_hits: list[str]
