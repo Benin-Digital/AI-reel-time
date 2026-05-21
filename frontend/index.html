@@ -19,10 +19,6 @@
         <span class="logo">
           <img src="./cropped-Benin-digital-182.png" alt="Logo de l'entreprise" />
         </span>
-        <div>
-          <p class="brand-title">Real-Time</p>
-          <p class="brand-subtitle">Console de matching RH</p>
-        </div>
       </div>
       <div class="hero-actions">
         <div class="api-config">
@@ -30,11 +26,17 @@
           <input id="apiBase" type="text" placeholder="http://localhost:8000" />
           <button id="applyApi" class="ghost">Appliquer</button>
         </div>
+        <div class="auth-controls">
+          <span id="authStatus" class="auth-status">Non connecte</span>
+          <button id="loginButton" class="ghost">Se connecter</button>
+          <button id="logoutButton" class="ghost" hidden>Se deconnecter</button>
+        </div>
         <button id="refreshAll" class="primary">Actualiser tout</button>
       </div>
     </header>
 
     <main class="shell">
+      <div id="apiStatus" class="banner" hidden></div>
       <section class="dashboard">
         <div class="grid metrics">
           <article class="card">
@@ -64,80 +66,108 @@
           </article>
         </div>
 
+        <div class="workspace-switcher" role="tablist" aria-label="Navigation des bibliothèques">
+          <button id="tabCv" class="workspace-switcher__button is-active" type="button" data-panel="cv" role="tab" aria-selected="true">Bibliothèque CV</button>
+          <button id="tabJob" class="workspace-switcher__button" type="button" data-panel="job" role="tab" aria-selected="false">Bibliothèque offres</button>
+          <button id="tabMatches" class="workspace-switcher__button" type="button" data-panel="matches" role="tab" aria-selected="false">Correspondances</button>
+        </div>
+
         <div class="board">
-          <section class="panel">
-            <div class="panel-header">
-              <div>
-                <h2>Bibliothèque CV</h2>
-                <p>Documents CV suivis avec leur statut.</p>
-              </div>
-            </div>
+          <section class="panel panel-view panel-view--cv is-active" data-panel="cv" role="tabpanel" aria-labelledby="tabCv">
             <div class="panel-body">
-              <div class="filters">
-                <input id="cvQuery" type="text" placeholder="Rechercher un chemin ou un contenu CV" />
-                <select id="cvStatus">
-                  <option value="">Tous les statuts</option>
-                  <option value="ready">Prêt</option>
-                  <option value="failed">Échec</option>
-                  <option value="pending">En attente</option>
-                </select>
-                <select id="cvPageSize">
-                  <option value="10">10 / page</option>
-                  <option value="25" selected>25 / page</option>
-                  <option value="50">50 / page</option>
-                </select>
-                <button id="applyCvFilters" class="ghost">Appliquer</button>
+              <div class="document-workspace">
+                <div class="document-list-column">
+                  <div class="upload-card">
+                    <div id="uploadCvZone" class="upload-zone" data-kind="cv">
+                      <input id="uploadCvInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />
+                      <div>
+                        <h4>Ajouter des CV</h4>
+                        <p>Glisser-deposer vos fichiers ici ou choisir depuis votre ordinateur.</p>
+                      </div>
+                      <button id="uploadCvButton" class="ghost">Choisir des fichiers</button>
+                    </div>
+                    <div id="uploadCvStatus" class="upload-status"></div>
+                  </div>
+                  <div class="filters document-filters">
+                    <input id="cvQuery" type="text" placeholder="Rechercher un chemin ou un contenu CV" />
+                    <select id="cvStatus">
+                      <option value="">Tous les statuts</option>
+                      <option value="ready">Prêt</option>
+                      <option value="failed">Échec</option>
+                      <option value="pending">En attente</option>
+                    </select>
+                    <select id="cvPageSize">
+                      <option value="10">10 / page</option>
+                      <option value="25" selected>25 / page</option>
+                      <option value="50">50 / page</option>
+                    </select>
+                    <button id="applyCvFilters" class="ghost">Appliquer</button>
+                  </div>
+                  <div class="pagination-controls document-pagination">
+                    <button id="cvPrev" class="ghost">Précédent</button>
+                    <span>Page <strong id="cvPage">1</strong></span>
+                    <button id="cvNext" class="ghost">Suivant</button>
+                  </div>
+                  <div id="cvList" class="stack document-list"></div>
+                </div>
+                <aside class="document-detail-column">
+                  <div class="document-detail-header">
+                    <h3>Détail du CV</h3>
+                  </div>
+                  <div id="cvDetails" class="document-detail-panel hidden"></div>
+                </aside>
               </div>
-              <div class="pagination-controls">
-                <button id="cvPrev" class="ghost">Précédent</button>
-                <span>Page <strong id="cvPage">1</strong></span>
-                <button id="cvNext" class="ghost">Suivant</button>
-              </div>
-              <div id="cvList" class="stack"></div>
-              <div id="cvDetails" class="item details-panel hidden"></div>
             </div>
           </section>
 
-          <section class="panel">
-            <div class="panel-header">
-              <div>
-                <h2>Bibliothèque offres</h2>
-                <p>Descriptions de postes suivies avec leur statut.</p>
-              </div>
-            </div>
+          <section class="panel panel-view panel-view--job" data-panel="job" role="tabpanel" aria-labelledby="tabJob" hidden>
             <div class="panel-body">
-              <div class="filters">
-                <input id="jobQuery" type="text" placeholder="Rechercher un chemin ou un contenu d'offre" />
-                <select id="jobStatus">
-                  <option value="">Tous les statuts</option>
-                  <option value="ready">Prêt</option>
-                  <option value="failed">Échec</option>
-                  <option value="pending">En attente</option>
-                </select>
-                <select id="jobPageSize">
-                  <option value="10">10 / page</option>
-                  <option value="25" selected>25 / page</option>
-                  <option value="50">50 / page</option>
-                </select>
-                <button id="applyJobFilters" class="ghost">Appliquer</button>
+              <div class="document-workspace">
+                <div class="document-list-column">
+                  <div class="upload-card">
+                    <div id="uploadJobZone" class="upload-zone" data-kind="job">
+                      <input id="uploadJobInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />
+                      <div>
+                        <h4>Ajouter des offres</h4>
+                        <p>Glisser-deposer vos fichiers ici ou choisir depuis votre ordinateur.</p>
+                      </div>
+                      <button id="uploadJobButton" class="ghost">Choisir des fichiers</button>
+                    </div>
+                    <div id="uploadJobStatus" class="upload-status"></div>
+                  </div>
+                  <div class="filters document-filters">
+                    <input id="jobQuery" type="text" placeholder="Rechercher un chemin ou un contenu d'offre" />
+                    <select id="jobStatus">
+                      <option value="">Tous les statuts</option>
+                      <option value="ready">Prêt</option>
+                      <option value="failed">Échec</option>
+                      <option value="pending">En attente</option>
+                    </select>
+                    <select id="jobPageSize">
+                      <option value="10">10 / page</option>
+                      <option value="25" selected>25 / page</option>
+                      <option value="50">50 / page</option>
+                    </select>
+                    <button id="applyJobFilters" class="ghost">Appliquer</button>
+                  </div>
+                  <div class="pagination-controls document-pagination">
+                    <button id="jobPrev" class="ghost">Précédent</button>
+                    <span>Page <strong id="jobPage">1</strong></span>
+                    <button id="jobNext" class="ghost">Suivant</button>
+                  </div>
+                  <div id="jobList" class="stack document-list"></div>
+                </div>
+                <aside class="document-detail-column">
+                  <div class="document-detail-header">
+                    <h3>Détail de l’offre</h3>
+                  </div>
+                  <div id="jobDetails" class="document-detail-panel hidden"></div>
+                </aside>
               </div>
-              <div class="pagination-controls">
-                <button id="jobPrev" class="ghost">Précédent</button>
-                <span>Page <strong id="jobPage">1</strong></span>
-                <button id="jobNext" class="ghost">Suivant</button>
-              </div>
-              <div id="jobList" class="stack"></div>
-              <div id="jobDetails" class="item details-panel hidden"></div>
             </div>
           </section>
 
-          <section class="panel">
-            <div class="panel-header">
-              <div>
-                <h2>Correspondances</h2>
-                <p>Scores et dernières correspondances.</p>
-              </div>
-            </div>
+          <section class="panel panel-view panel-view--matches" data-panel="matches" role="tabpanel" aria-labelledby="tabMatches" hidden>
             <div class="panel-body">
               <div class="section-header compact">
                 <h3>Correspondances récentes</h3>
@@ -183,6 +213,35 @@
     <footer class="footer">
       <p>Console MVP AI Real-Time. Conçue pour les équipes RH internes. Bénin Digital © 2026</p>
     </footer>
+
+    <div id="loginModal" class="modal" hidden>
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+        <div class="modal-header">
+          <h3 id="loginTitle">Connexion</h3>
+          <button class="ghost modal-close" data-modal-close>Fermer</button>
+        </div>
+        <form id="loginForm" class="modal-body">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" type="email" placeholder="admin@entreprise.com" required />
+          <label for="loginPassword">Mot de passe</label>
+          <input id="loginPassword" type="password" placeholder="Mot de passe" required />
+          <button class="primary" type="submit">Se connecter</button>
+          <p id="loginError" class="form-error" hidden></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="explainModal" class="modal" hidden>
+      <div class="modal-backdrop" data-modal-close></div>
+      <div class="modal-card modal-card--wide" role="dialog" aria-modal="true" aria-labelledby="explainTitle">
+        <div class="modal-header">
+          <h3 id="explainTitle">Pourquoi ce match</h3>
+          <button class="ghost modal-close" data-modal-close>Fermer</button>
+        </div>
+        <div id="explainContent" class="modal-body"></div>
+      </div>
+    </div>
 
     <script src="./app.js"></script>
   </body>
