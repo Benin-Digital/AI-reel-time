@@ -123,6 +123,17 @@ body {
   background-repeat: no-repeat;
 }
 
+body.auth-background {
+  background-image: url('background.avif');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+.auth-gate__card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(247,251,248,0.85) 100%);
+}
+
 .auth-gate__card {
   max-width: 760px;
   margin: 0 auto;

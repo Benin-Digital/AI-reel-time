@@ -426,6 +426,10 @@ const updateAuthUi = () => {
   if (adminPanel) {
     adminPanel.hidden = !canManageUsers() || activePanel !== "admin";
   }
+  // Toggle a body-level background class so the image covers the header too
+  if (typeof document !== "undefined") {
+    document.body.classList.toggle("auth-background", Boolean(authGate && !authGate.hidden));
+  }
 };
 
 const setAuthMode = (mode) => {
