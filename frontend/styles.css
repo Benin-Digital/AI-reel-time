@@ -129,8 +129,31 @@ body {
 }
 
 .auth-active .hero {
-  background: transparent;
+  height: 0;
+  padding: 0 !important;
+  border-bottom: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+/* center the logo above the auth card */
+.auth-active .brand {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+}
+
+.auth-active .brand-mark {
   box-shadow: none;
+  background: transparent;
+}
+
+/* add top spacing so the auth card sits below the centered logo */
+.auth-active .auth-gate {
+  padding-top: 110px;
 }
 
 .auth-gate__card {
