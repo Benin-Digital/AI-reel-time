@@ -159,6 +159,12 @@ body {
   border: 1px solid var(--stroke);
 }
 
+.ghost.danger {
+  color: #7c1d1b;
+  border-color: #efc7c5;
+  background: #fff3f2;
+}
+
 .primary:hover,
 .ghost:hover {
   transform: translateY(-2px);
@@ -598,6 +604,7 @@ body {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .doc-row .doc-card__button {
@@ -631,6 +638,13 @@ body {
   background: #faefe3;
   border-color: #d7a778;
   color: var(--job-accent-2);
+}
+
+.doc-row .doc-card__button--danger,
+.doc-row .doc-card__button--danger:hover {
+  color: #7c1d1b;
+  border-color: #efc7c5;
+  background: #fff3f2;
 }
 
 .doc-row .doc-card__button:hover {

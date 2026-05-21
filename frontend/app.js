@@ -55,6 +55,7 @@ const cvPageSize = document.getElementById("cvPageSize");
 const cvPrev = document.getElementById("cvPrev");
 const cvNext = document.getElementById("cvNext");
 const applyCvFilters = document.getElementById("applyCvFilters");
+const deleteCvAll = document.getElementById("deleteCvAll");
 
 const jobQuery = document.getElementById("jobQuery");
 const jobStatus = document.getElementById("jobStatus");
@@ -63,6 +64,7 @@ const jobPageSize = document.getElementById("jobPageSize");
 const jobPrev = document.getElementById("jobPrev");
 const jobNext = document.getElementById("jobNext");
 const applyJobFilters = document.getElementById("applyJobFilters");
+const deleteJobAll = document.getElementById("deleteJobAll");
 
 const tabs = Array.from(document.querySelectorAll(".workspace-switcher__button"));
 const panelViews = Array.from(document.querySelectorAll(".panel-view"));
@@ -356,6 +358,133 @@ const pushUploadStatus = (target, message) => {
   item.className = "upload-status__item";
   item.textContent = message;
   target.prepend(item);
+};
+
+const getDocumentConfig = (kind) => {
+  if (kind === "cv") {
+    return {
+      list: cvList,
+      details: cvDetails,
+      page: cvPage,
+      query: cvQuery,
+      status: cvStatus,
+      statusTarget: uploadCvStatus,
+    };
+  }
+
+  return {
+    list: jobList,
+    details: jobDetails,
+    page: jobPage,
+    query: jobQuery,
+    status: jobStatus,
+    statusTarget: uploadJobStatus,
+  };
+};
+
+const getDocumentLabel = (kind) => (kind === "cv" ? "CV" : "offre");
+
+const deleteDocument = async (kind, filename) => {
+  await safeFetch("/ingest/delete", {
+    method: "POST",
+    body: JSON.stringify({ folder: kind, filename }),
+    json: true,
+  });
+};
+
+const collectAllDocuments = async (kind) => {
+  const config = getDocumentConfig(kind);
+  const filenames = [];
+  let page = 1;
+  const pageSize = 200;
+
+  while (true) {
+    const query = buildParams({
+      page,
+      page_size: pageSize,
+      status: config.status.value,
+      query: config.query.value,
+    });
+    const docs = await safeFetch(`/${kind}-documents${query}`);
+    if (!docs.length) {
+      break;
+    }
+    filenames.push(...docs.map((doc) => doc.path));
+    if (docs.length < pageSize) {
+      break;
+    }
+    page += 1;
+  }
+
+  return filenames;
+};
+
+const deleteDocumentsBatch = async (kind, filenames) => {
+  if (!filenames.length) {
+    return { results: [] };
+  }
+
+  return safeFetch("/ingest/delete-batch", {
+    method: "POST",
+    body: JSON.stringify({ folder: kind, filenames }),
+    json: true,
+  });
+};
+
+const handleDeleteDocument = async (kind, filename) => {
+  const label = getDocumentLabel(kind);
+  if (!window.confirm(`Supprimer ${label} ${filename} du serveur ?`)) {
+    return;
+  }
+
+  const config = getDocumentConfig(kind);
+  try {
+    await deleteDocument(kind, filename);
+    pushUploadStatus(config.statusTarget, `${filename} - supprimé`);
+    documentSelection[kind] = null;
+    if (config.details) {
+      config.details.innerHTML = "";
+      config.details.classList.add("hidden");
+    }
+    await loadAll();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erreur inconnue";
+    pushUploadStatus(config.statusTarget, `${filename} - ${message}`);
+    setApiStatus(message);
+  }
+};
+
+const handleDeleteAllDocuments = async (kind) => {
+  const config = getDocumentConfig(kind);
+  const label = getDocumentLabel(kind);
+  const filenames = await collectAllDocuments(kind);
+
+  if (!filenames.length) {
+    pushUploadStatus(config.statusTarget, `Aucun ${label} à supprimer`);
+    return;
+  }
+
+  if (!window.confirm(`Supprimer tous les fichiers ${label} (${filenames.length}) du serveur ?`)) {
+    return;
+  }
+
+  try {
+    await deleteDocumentsBatch(kind, filenames);
+    documentSelection[kind] = null;
+    config.details.innerHTML = "";
+    config.details.classList.add("hidden");
+    if (kind === "cv") {
+      updatePageElement(cvPage, 1);
+    } else {
+      updatePageElement(jobPage, 1);
+    }
+    pushUploadStatus(config.statusTarget, `Suppression terminée pour ${filenames.length} fichier(s)`);
+    await loadAll();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erreur inconnue";
+    pushUploadStatus(config.statusTarget, `${label} - ${message}`);
+    setApiStatus(message);
+  }
 };
 
 const uploadFile = async (kind, file, statusTarget) => {
@@ -666,6 +795,7 @@ const renderDocuments = (docs, target, kind) => {
           </div>
           <div class="doc-row__actions">
             <button class="ghost doc-card__button" data-doc="${doc.id}" data-kind="${kind}" data-action="matches" title="Ouvre l'onglet Correspondances avec un filtre déjà appliqué">Voir les matches liés</button>
+            <button class="ghost danger doc-card__button doc-card__button--danger" data-delete-doc="${doc.path}" data-delete-id="${doc.id}" data-kind="${kind}" title="Supprime ce fichier du serveur">Supprimer</button>
           </div>
         </article>
       `;
@@ -692,6 +822,18 @@ const renderDocuments = (docs, target, kind) => {
       updatePageElement(matchesPage, 1);
       setActivePanel("matches");
       loadMatches();
+    });
+  });
+
+  target.querySelectorAll("button[data-delete-doc]").forEach((btn) => {
+    btn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const filename = btn.getAttribute("data-delete-doc");
+      const kind = btn.getAttribute("data-kind");
+      if (!filename || !kind) {
+        return;
+      }
+      await handleDeleteDocument(kind, filename);
     });
   });
 
@@ -843,25 +985,35 @@ const loadMatches = async () => {
 };
 
 const loadCvDocuments = async () => {
+  const currentPage = getPageNumber(cvPage);
   const query = buildParams({
-    page: getPageNumber(cvPage),
+    page: currentPage,
     page_size: cvPageSize.value,
     status: cvStatus.value,
     query: cvQuery.value,
   });
   const data = await safeFetch(`/cv-documents${query}`);
+  if (!data.length && currentPage > 1) {
+    updatePageElement(cvPage, currentPage - 1);
+    return loadCvDocuments();
+  }
   renderDocuments(data, cvList, "cv");
   updatePagerButtons(cvPrev, cvPage);
 };
 
 const loadJobDocuments = async () => {
+  const currentPage = getPageNumber(jobPage);
   const query = buildParams({
-    page: getPageNumber(jobPage),
+    page: currentPage,
     page_size: jobPageSize.value,
     status: jobStatus.value,
     query: jobQuery.value,
   });
   const data = await safeFetch(`/job-documents${query}`);
+  if (!data.length && currentPage > 1) {
+    updatePageElement(jobPage, currentPage - 1);
+    return loadJobDocuments();
+  }
   renderDocuments(data, jobList, "job");
   updatePagerButtons(jobPrev, jobPage);
 };
@@ -1082,11 +1234,23 @@ applyCvFilters.addEventListener("click", () => {
   loadCvDocuments();
 });
 
+if (deleteCvAll) {
+  deleteCvAll.addEventListener("click", async () => {
+    await handleDeleteAllDocuments("cv");
+  });
+}
+
 applyJobFilters.addEventListener("click", () => {
   updatePageElement(jobPage, 1);
   flashActionState(applyJobFilters, "Filtres offres appliqués");
   loadJobDocuments();
 });
+
+if (deleteJobAll) {
+  deleteJobAll.addEventListener("click", async () => {
+    await handleDeleteAllDocuments("job");
+  });
+}
 
 updateAuthUi();
 loadAuthUser();
