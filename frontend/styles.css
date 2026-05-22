@@ -1434,16 +1434,63 @@ body {
   gap: 8px;
 }
 
+.detail-card__section--preview {
+  gap: 12px;
+}
+
+.detail-preview-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.detail-preview-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 8, 8, 0.88);
+  color: #fff;
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.detail-preview-toggle:hover {
+  background: rgba(18, 18, 18, 0.96);
+}
+
+.detail-preview-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-preview-panel {
+  display: grid;
+  gap: 8px;
+}
+
 .detail-card__section--pdf {
   gap: 10px;
 }
 
 .pdf-frame {
+  position: relative;
   overflow: hidden;
   border-radius: 16px;
   border: 1px solid rgba(17, 26, 29, 0.08);
   background: #0d0d0d;
   min-height: 520px;
+}
+
+.pdf-frame__loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.01em;
 }
 
 .pdf-frame iframe {

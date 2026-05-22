@@ -92,6 +92,10 @@ const deleteJobAll = document.getElementById("deleteJobAll");
 const tabs = Array.from(document.querySelectorAll(".workspace-switcher__button"));
 const panelViews = Array.from(document.querySelectorAll(".panel-view"));
 const documentSelection = { cv: null, job: null };
+const documentPreviewState = {
+  cv: { objectUrl: null },
+  job: { objectUrl: null },
+};
 
 let apiBase = localStorage.getItem("apiBase") || "";
 apiBaseInput.value = apiBase;
@@ -390,6 +394,92 @@ const buildDocumentPdfUrl = (kind, id) => {
     return "";
   }
   return `${apiBase}/${kind}-documents/${id}/pdf`;
+};
+
+const clearDocumentPdfUrl = (kind) => {
+  const state = documentPreviewState[kind];
+  if (state && state.objectUrl) {
+    URL.revokeObjectURL(state.objectUrl);
+    state.objectUrl = null;
+  }
+};
+
+const setDocumentPreviewMode = (target, mode) => {
+  const nextMode = mode === "pdf" ? "pdf" : "text";
+  const textPanel = target.querySelector('[data-document-preview-panel="text"]');
+  const pdfPanel = target.querySelector('[data-document-preview-panel="pdf"]');
+  const toggleButton = target.querySelector('[data-document-preview-toggle]');
+  if (textPanel) {
+    textPanel.hidden = nextMode !== "text";
+  }
+  if (pdfPanel) {
+    pdfPanel.hidden = nextMode !== "pdf";
+  }
+  if (toggleButton) {
+    toggleButton.textContent = nextMode === "text" ? "Voir le PDF" : "Voir le texte extrait";
+    toggleButton.setAttribute("aria-pressed", nextMode === "pdf" ? "true" : "false");
+    toggleButton.dataset.previewMode = nextMode;
+  }
+  target.dataset.previewMode = nextMode;
+};
+
+const loadDocumentPdfPreview = async (kind, docId, iframe, loadingNode) => {
+  const pdfUrl = buildDocumentPdfUrl(kind, docId);
+  if (!pdfUrl || !iframe) {
+    return;
+  }
+
+  if (iframe.dataset.pdfLoading === "true") {
+    return;
+  }
+
+  iframe.dataset.pdfLoading = "true";
+
+  clearDocumentPdfUrl(kind);
+  try {
+    const headers = new Headers();
+    if (authToken) {
+      headers.set("Authorization", `Bearer ${authToken}`);
+    }
+    const response = await fetchWithTimeout(pdfUrl, { method: "GET", headers });
+    if (response.status === 401) {
+      openModal(loginModal);
+      throw new Error("Authentification requise pour afficher le PDF");
+    }
+    if (!response.ok) {
+      throw new Error(`Impossible de charger le PDF (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    documentPreviewState[kind].objectUrl = objectUrl;
+
+    if (!iframe.isConnected) {
+      URL.revokeObjectURL(objectUrl);
+      if (documentPreviewState[kind].objectUrl === objectUrl) {
+        documentPreviewState[kind].objectUrl = null;
+      }
+      return;
+    }
+
+    iframe.src = objectUrl;
+    iframe.hidden = false;
+    if (loadingNode) {
+      loadingNode.hidden = true;
+    }
+  } catch (error) {
+    if (iframe.isConnected) {
+      iframe.hidden = true;
+    }
+    if (loadingNode) {
+      loadingNode.textContent = error instanceof Error ? error.message : "Aperçu PDF indisponible";
+      loadingNode.hidden = false;
+    }
+  } finally {
+    if (iframe.isConnected) {
+      iframe.dataset.pdfLoading = "false";
+    }
+  }
 };
 
 const renderScoreChip = (score) => {
@@ -1335,6 +1425,8 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
   const pdfUrl = buildDocumentPdfUrl(kind, doc.id);
   const hasPdf = typeof doc.path === "string" && doc.path.toLowerCase().endsWith(".pdf");
 
+  clearDocumentPdfUrl(kind);
+
   target.classList.remove("hidden");
   target.innerHTML = `
     <article class="detail-card ${statusTone.className}">
@@ -1369,19 +1461,32 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
 
       ${doc.top_keywords && doc.top_keywords.length ? `<div class="detail-card__section"><div class="meta">Mots-clés principaux</div>${keywordChips}</div>` : ""}
 
-      <div class="detail-card__section">
-        <div class="meta">${previewLabel}</div>
-        <div class="detail-preview">${previewText}</div>
-      </div>
-
-      ${hasPdf && pdfUrl ? `
-        <div class="detail-card__section detail-card__section--pdf">
-          <div class="meta">Aperçu PDF</div>
-          <div class="pdf-frame">
-            <iframe src="${pdfUrl}" title="Aperçu PDF du document ${doc.id}" loading="lazy"></iframe>
+      <div class="detail-card__section detail-card__section--preview">
+        ${hasPdf ? `
+          <div class="detail-preview-toolbar">
+            <button type="button" class="detail-preview-toggle" data-document-preview-toggle>
+              Voir le PDF
+            </button>
           </div>
+        ` : ""}
+
+        <div class="detail-preview-stack" data-document-preview-stack>
+          <div class="detail-preview-panel" data-document-preview-panel="text">
+            <div class="meta">${previewLabel}</div>
+            <div class="detail-preview">${previewText}</div>
+          </div>
+
+          ${hasPdf && pdfUrl ? `
+            <div class="detail-preview-panel" data-document-preview-panel="pdf" hidden>
+              <div class="meta">Aperçu PDF</div>
+              <div class="pdf-frame">
+                <div class="pdf-frame__loading">Chargement du PDF…</div>
+                <iframe title="Aperçu PDF du document ${doc.id}" loading="lazy" hidden></iframe>
+              </div>
+            </div>
+          ` : ""}
         </div>
-      ` : ""}
+      </div>
 
       <div class="section-header"><h2>Meilleures correspondances</h2></div>
       ${matches.length ? "" : "<div class=\"meta\">Aucune correspondance pour ce document.</div>"}
@@ -1417,6 +1522,33 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
       }
     });
   });
+
+  const previewToggle = target.querySelector("[data-document-preview-toggle]");
+  if (previewToggle) {
+    const previewMode = hasPdf ? "text" : "text";
+    setDocumentPreviewMode(target, previewMode);
+    previewToggle.addEventListener("click", async () => {
+      const currentMode = target.dataset.previewMode === "pdf" ? "pdf" : "text";
+      const nextMode = currentMode === "text" ? "pdf" : "text";
+      setDocumentPreviewMode(target, nextMode);
+
+      if (nextMode === "pdf") {
+        const iframe = target.querySelector("[data-document-preview-panel=\"pdf\"] iframe");
+        const loadingNode = target.querySelector("[data-document-preview-panel=\"pdf\"] .pdf-frame__loading");
+        if (iframe && !iframe.src && iframe.dataset.pdfLoading !== "true") {
+          await loadDocumentPdfPreview(kind, doc.id, iframe, loadingNode);
+        }
+      }
+    });
+  }
+
+  if (hasPdf) {
+    const iframe = target.querySelector("[data-document-preview-panel=\"pdf\"] iframe");
+    const loadingNode = target.querySelector("[data-document-preview-panel=\"pdf\"] .pdf-frame__loading");
+    if (iframe) {
+      loadDocumentPdfPreview(kind, doc.id, iframe, loadingNode);
+    }
+  }
 
   // Persist this document detail in the dashboard cache
   try {
