@@ -1439,8 +1439,8 @@ body {
   border-radius: 16px;
   padding: 14px;
   white-space: pre-wrap;
-  max-height: 220px;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
   border: 1px solid rgba(17, 26, 29, 0.06);
   line-height: 1.55;
 }

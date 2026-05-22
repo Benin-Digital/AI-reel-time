@@ -1215,7 +1215,7 @@ const renderDocumentDetails = (doc, target) => {
   const matches = doc.top_matches || [];
   const keywordChips = renderKeywordChips(doc.top_keywords || []);
   const statusTone = documentStatusTone(doc.status);
-  const previewText = (extraction.extracted_text || "Aucun texte extrait").slice(0, 1200);
+  const previewText = extraction.extracted_text || "Aucun texte extrait";
 
   target.classList.remove("hidden");
   target.innerHTML = `
