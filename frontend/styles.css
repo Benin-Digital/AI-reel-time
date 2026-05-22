@@ -1758,6 +1758,7 @@ body {
 .match-card__actions {
   display: flex;
   justify-content: flex-end;
+  margin-top: 10px;
 }
 
 .match-card__button {
