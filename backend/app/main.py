@@ -7,7 +7,7 @@ from time import perf_counter, time
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from sqlalchemy import delete, func, or_, select, text
@@ -82,6 +82,23 @@ from .observability import (
 settings = get_settings()
 logger = logging.getLogger(__name__)
 SUPPORTED_SUFFIXES = {".pdf", ".docx", ".txt"}
+
+
+def _resolve_document_pdf_path(doc_path: str, folder: str) -> Path:
+    pdf_path = Path(doc_path).resolve()
+    root = Path(settings.watch_cv_dir if folder == "cv" else settings.watch_job_dir).resolve()
+    try:
+        pdf_path.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="PDF document not found") from exc
+
+    if pdf_path.suffix.lower() != ".pdf":
+        raise HTTPException(status_code=415, detail="Document is not a PDF")
+
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="PDF document not found")
+
+    return pdf_path
 
 
 class _JsonFormatter(logging.Formatter):
@@ -1306,6 +1323,17 @@ def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead
         )
 
 
+@app.get("/cv-documents/{doc_id}/pdf")
+def get_cv_document_pdf(doc_id: int) -> FileResponse:
+    with SessionLocal() as session:
+        doc = session.get(CvDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="CV document not found")
+
+    pdf_path = _resolve_document_pdf_path(doc.path, "cv")
+    return FileResponse(pdf_path, media_type="application/pdf", filename=pdf_path.name)
+
+
 @app.get("/job-documents", response_model=list[JobDocumentRead])
 def list_job_documents(
     page: int = 1,
@@ -1408,6 +1436,17 @@ def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRe
                 for row in match_rows
             ],
         )
+
+
+@app.get("/job-documents/{doc_id}/pdf")
+def get_job_document_pdf(doc_id: int) -> FileResponse:
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+
+    pdf_path = _resolve_document_pdf_path(doc.path, "job")
+    return FileResponse(pdf_path, media_type="application/pdf", filename=pdf_path.name)
 
 
 @app.get("/extractions/path", response_model=ExtractedTextRead)
