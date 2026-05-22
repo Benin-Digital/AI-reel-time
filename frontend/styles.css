@@ -1794,22 +1794,14 @@ body {
   line-height: 1.45;
 }
 
-.explain-hero,
-.explain-section,
-.explain-closing {
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid var(--stroke);
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.explain-hero {
+.explain-copy {
   display: grid;
-  gap: 8px;
-  background: linear-gradient(180deg, rgba(247, 250, 248, 0.95), rgba(233, 240, 237, 0.95));
+  gap: 10px;
+  padding: 6px 2px 2px;
 }
 
-.explain-hero__eyebrow {
+.explain-copy__eyebrow {
+  margin: 0;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1817,50 +1809,21 @@ body {
   font-weight: 700;
 }
 
-.explain-hero__title {
+.explain-copy__title {
+  margin: 0;
   font-family: "DM Serif Display", serif;
-  font-size: 24px;
-  line-height: 1.1;
+  font-size: 26px;
+  line-height: 1.05;
 }
 
-.explain-hero p,
-.explain-closing p,
-.explain-section p {
+.explain-copy p {
   margin: 0;
   color: var(--ink);
-  line-height: 1.55;
+  line-height: 1.65;
 }
 
-.explain-hero__score {
-  margin-top: 4px;
-}
-
-.explain-section {
-  display: grid;
-  gap: 8px;
-}
-
-.explain-section--two-col {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.explain-list {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 8px;
-}
-
-.explain-list li {
-  line-height: 1.5;
-}
-
-.explain-closing {
-  display: grid;
-  gap: 6px;
-  background: rgba(241, 247, 244, 0.9);
+.explain-copy strong {
+  font-weight: 700;
 }
 
 @keyframes explain-spin {

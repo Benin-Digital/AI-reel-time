@@ -1040,35 +1040,20 @@ const renderExplainContent = (data) => {
   const evidence = (data.evidence || []).filter(Boolean).slice(0, 4);
   const whyMatch = (data.why_match || []).filter(Boolean).slice(0, 4);
   const vigilance = (data.vigilance || []).filter(Boolean).slice(0, 4);
+  const whyText = escapeHtml(whyMatch.length ? whyMatch.join(". ") : "Aucun élément déterminant supplémentaire n'a été remonté.");
+  const vigilanceText = escapeHtml(vigilance.length ? vigilance.join(". ") : "Aucun point de vigilance majeur n'a été identifié à ce stade.");
+  const evidenceText = escapeHtml(evidence.length ? evidence.join(". ") : "Aucun extrait probant n'est disponible pour cette correspondance.");
 
   return `
-    <div class="explain-hero">
-      <div class="explain-hero__eyebrow">Réponse générée</div>
-      <div class="explain-hero__title">${scoreLabel}</div>
+    <div class="explain-copy">
+      <h3 class="explain-copy__title">${scoreLabel}</h3>
       <p>${variant.intro}</p>
-      <div class="explain-hero__score">${renderScoreChip(score)}</div>
-    </div>
-    <div class="explain-section">
-      <div class="item-title"><strong>${variant.lead}</strong></div>
-      ${buildBulletList(whyMatch)}
-    </div>
-    <div class="explain-section">
-      <div class="item-title"><strong>Résumé décisionnel</strong></div>
-      <p>${summary}</p>
-    </div>
-    <div class="explain-section explain-section--two-col">
-      <div class="item">
-        <div class="item-title"><strong>Points de vigilance</strong></div>
-        ${buildBulletList(vigilance)}
-      </div>
-      <div class="item">
-        <div class="item-title"><strong>Extraits probants</strong></div>
-        ${buildBulletList(evidence)}
-      </div>
-    </div>
-    <div class="explain-closing">
-      <strong>${variant.focus}</strong>
-      <p>${variant.close}</p>
+      <p><strong>Score observé :</strong> ${score}%.</p>
+      <p><strong>${variant.lead} :</strong> ${whyText}</p>
+      <p><strong>Résumé décisionnel :</strong> ${summary}</p>
+      <p><strong>Points de vigilance :</strong> ${vigilanceText}</p>
+      <p><strong>Extraits probants :</strong> ${evidenceText}</p>
+      <p><strong>${variant.focus} :</strong> ${variant.close}</p>
     </div>
   `;
 };
