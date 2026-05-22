@@ -1033,27 +1033,53 @@ const renderMatchCard = (match) => {
 };
 
 const renderExplainContent = (data) => {
-  const variant = pickExplainVariant();
   const score = clampScore(data.score);
-  const scoreLabel = score >= 80 ? "Très forte correspondance" : score >= 60 ? "Correspondance solide" : score >= 40 ? "Correspondance intermédiaire" : "Signal plus faible";
-  const summary = escapeHtml(data.summary || "Cette synthèse met en avant les signaux les plus utiles pour la décision RH.");
-  const evidence = (data.evidence || []).filter(Boolean).slice(0, 4);
-  const whyMatch = (data.why_match || []).filter(Boolean).slice(0, 4);
-  const vigilance = (data.vigilance || []).filter(Boolean).slice(0, 4);
-  const whyText = escapeHtml(whyMatch.length ? whyMatch.join(". ") : "Aucun élément déterminant supplémentaire n'a été remonté.");
-  const vigilanceText = escapeHtml(vigilance.length ? vigilance.join(". ") : "Aucun point de vigilance majeur n'a été identifié à ce stade.");
-  const evidenceText = escapeHtml(evidence.length ? evidence.join(". ") : "Aucun extrait probant n'est disponible pour cette correspondance.");
+  const level = score >= 90 ? "Très élevé" : score >= 70 ? "Élevé" : score >= 45 ? "Moyen" : score >= 20 ? "Faible" : "Très faible";
+  const scorePct = Number.isFinite(score) ? `${Math.round(score)}` : "n/a";
+
+  const keywords = (data.common_keywords || data.top_keywords || []).filter(Boolean).slice(0, 12);
+  const keywordsText = keywords.length ? escapeHtml(keywords.join(", ")) : "Aucun mot-clé significatif détecté";
+
+  let experience = "Non identifié";
+  if (data.experience) {
+    experience = `${escapeHtml(String(data.experience))} ans`;
+  } else if (data.summary) {
+    const m = String(data.summary).match(/(\d{1,3})\s*(?:ans|years)/i);
+    if (m) experience = `${m[1]} ans`;
+  }
+
+  const synth = escapeHtml(data.summary || "L'évaluation combine similarité lexicale et vectorielle pour produire ce score.");
+
+  const vigilance = (data.vigilance || []).filter(Boolean).slice(0, 6);
+  const vigilanceText = vigilance.length ? escapeHtml(vigilance.join("; ")) : "Aucun point de vigilance majeur n’a été identifié à ce stade.";
+
+  const evidence = (data.evidence || []).filter(Boolean).slice(0, 6);
+  const evidenceHtml = evidence.length ? evidence.map((e) => `« ${escapeHtml(e)} »`).join("<br/>") : "Aucun extrait représentatif disponible.";
 
   return `
     <div class="explain-copy">
-      <h3 class="explain-copy__title">${scoreLabel}</h3>
-      <p>${variant.intro}</p>
-      <p><strong>Score observé :</strong> ${score}%.</p>
-      <p><strong>${variant.lead} :</strong> ${whyText}</p>
-      <p><strong>Résumé décisionnel :</strong> ${summary}</p>
-      <p><strong>Points de vigilance :</strong> ${vigilanceText}</p>
-      <p><strong>Extraits probants :</strong> ${evidenceText}</p>
-      <p><strong>${variant.focus} :</strong> ${variant.close}</p>
+      <h2>Analyse de la correspondance du profil</h2>
+      <p><strong>Niveau de correspondance :</strong> ${level}</p>
+
+      <p>${escapeHtml( (data.summary && data.summary.length>0) ? data.summary : (level === 'Très élevé' ? 'L’analyse réalisée met en évidence une forte adéquation entre le profil et les critères recherchés.' : 'L’analyse met en évidence une adéquation limitée entre le profil évalué et les exigences du poste.') )}</p>
+
+      <p><strong>Score de compatibilité obtenu :</strong> ${scorePct} %</p>
+
+      <p><strong>Éléments ayant contribué à cette évaluation</strong></p>
+      <p>Correspondance significative des mots-clés identifiés : ${keywordsText}.</p>
+      <p>Expérience professionnelle détectée : ${escapeHtml(String(experience))}.</p>
+
+      <p><strong>Synthèse de l’analyse</strong></p>
+      <p>${synth}</p>
+
+      <p><strong>Points de vigilance</strong></p>
+      <p>${vigilanceText}</p>
+
+      <p><strong>Extraits représentatifs relevés</strong></p>
+      <p>${evidenceHtml}</p>
+
+      <p><strong>Conclusion</strong></p>
+      <p>${level === 'Très élevé' ? 'Dans l’ensemble, l’analyse du dossier est très favorable et met en évidence une excellente adéquation entre le profil évalué et les exigences du poste.' : 'Le dossier reste exploitable pour une première lecture RH mais présente des écarts importants par rapport aux exigences du poste.'}</p>
     </div>
   `;
 };
