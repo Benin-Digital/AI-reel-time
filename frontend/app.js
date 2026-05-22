@@ -982,11 +982,7 @@ const renderMatchCard = (match) => {
       )}
 
       <div class="match-card__actions">
-        <button class="match-card__button" data-explain="${match.id}" aria-expanded="false">Voir l'explication</button>
-      </div>
-
-      <div class="match-card__explanation hidden" data-explanation-panel="${match.id}">
-        <div class="muted">Cliquez pour charger l'explication détaillée du match.</div>
+        <button class="match-card__button" data-explain="${match.id}">Voir l'explication</button>
       </div>
     </article>
   `;
@@ -1032,33 +1028,9 @@ const renderExplainModal = (data) => {
 };
 
 const loadMatchExplanation = async (matchId) => {
-  return safeFetch(`/matches/${matchId}/explain`);
-};
-
-const toggleMatchExplanation = async (button, matchId, target) => {
-  const panel = target.querySelector(`[data-explanation-panel="${matchId}"]`);
-  const isExpanded = button.getAttribute("aria-expanded") === "true";
-
-  if (panel && isExpanded) {
-    panel.classList.add("hidden");
-    button.setAttribute("aria-expanded", "false");
-    button.textContent = "Voir l'explication";
-    return;
-  }
-
-  if (panel) {
-    panel.classList.remove("hidden");
-    panel.innerHTML = '<div class="muted">Chargement de l\'explication...</div>';
-  }
-
-  button.setAttribute("aria-expanded", "true");
-  button.textContent = "Masquer l'explication";
-
   try {
-    const data = await loadMatchExplanation(matchId);
-    if (panel) {
-      panel.innerHTML = renderExplainContent(data);
-    }
+    const data = await safeFetch(`/matches/${matchId}/explain`);
+    renderExplainModal(data);
   } catch (error) {
     const message =
       error instanceof Error && error.name === "AuthError"
@@ -1066,9 +1038,6 @@ const toggleMatchExplanation = async (button, matchId, target) => {
         : error instanceof Error
           ? error.message
           : "Erreur inconnue";
-    if (panel) {
-      panel.innerHTML = `<div class="doc-card__error doc-card__error--large">${message}</div>`;
-    }
     setApiStatus(message);
   }
 };
@@ -1338,10 +1307,7 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
                 <div class="meta">CV ${match.cv_id} • Job ${match.job_id}</div>
                 <div class="score-bar"><span class="score-bar__fill ${scoreTone(score).className}" style="width:${score}%"></span></div>
                 <div class="match-card__actions">
-                  <button class="match-card__button" data-explain="${match.id}" aria-expanded="false">Voir l'explication</button>
-                </div>
-                <div class="match-card__explanation hidden" data-explanation-panel="${match.id}">
-                  <div class="muted">Cliquez pour charger l'explication détaillée du match.</div>
+                  <button class="match-card__button" data-explain="${match.id}">Voir l'explication</button>
                 </div>
               </article>
             `;
@@ -1356,7 +1322,7 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
       event.stopPropagation();
       const matchId = button.getAttribute("data-explain");
       if (matchId) {
-        toggleMatchExplanation(button, matchId, target);
+        loadMatchExplanation(matchId);
       }
     });
   });

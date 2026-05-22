@@ -1,9 +1,9 @@
 :root {
-  --bg: #e4e9e6;
-  --bg-alt: #d6dfdb;
-  --ink: #0f171a;
-  --muted: #43525a;
-  --card: #f7f9f8;
+  --bg: #d8dfdc;
+  --bg-alt: #cbd5d1;
+  --ink: #0d1417;
+  --muted: #3c4b53;
+  --card: #f1f4f2;
   --accent: #0a6b3b;
   --accent-2: #094f2b;
   --accent-3: #b6e0c6;
@@ -11,8 +11,8 @@
   --tone-strong: #d19f1a;
   --tone-medium: #4f6bed;
   --tone-weak: #c9645f;
-  --shadow: 0 18px 40px rgba(20, 32, 35, 0.16);
-  --stroke: #c4d0d4;
+  --shadow: 0 18px 40px rgba(20, 32, 35, 0.2);
+  --stroke: #b4c2c6;
   --radius: 16px;
   --cv-accent: #1f5f8f;
   --cv-accent-2: #17466a;
@@ -55,7 +55,7 @@ body {
   justify-content: space-between;
   gap: 20px;
   border-bottom: 1px solid var(--stroke);
-  background: rgba(247, 249, 248, 0.92);
+  background: rgba(241, 244, 242, 0.94);
 }
 
 .brand {
@@ -71,7 +71,7 @@ body {
   height: 56px;
   border-radius: 14px;
   overflow: hidden;
-  background: linear-gradient(135deg, #f7f9f8, #dfe9e4);
+  background: linear-gradient(135deg, #f1f4f2, #d3ddd8);
   box-shadow: var(--shadow);
 }
 
@@ -106,7 +106,7 @@ body {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(247, 249, 248, 0.92);
+  background: rgba(241, 244, 242, 0.94);
   border: 1px solid var(--stroke);
 }
 
@@ -168,7 +168,7 @@ body {
   border: 1px solid rgba(10, 107, 59, 0.18);
   background:
     radial-gradient(circle at top left, rgba(182, 224, 198, 0.6), transparent 40%),
-    linear-gradient(135deg, #f7f9f8 0%, #eef3f1 100%);
+    linear-gradient(135deg, #f1f4f2 0%, #e5ebe8 100%);
   box-shadow: 0 22px 50px rgba(20, 32, 35, 0.12);
 }
 
@@ -305,7 +305,7 @@ body {
   width: 100%;
   border-radius: 12px;
   border: 1px solid var(--stroke);
-  background: #f4f7f6;
+  background: #edf1ef;
   padding: 12px 14px;
   font-family: inherit;
   font-size: 14px;
@@ -323,7 +323,7 @@ body {
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid var(--stroke);
-  background: #eef2f1;
+  background: #e7ecea;
 }
 
 .admin-user-card strong {
@@ -367,7 +367,7 @@ body {
   align-items: center;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(247, 249, 248, 0.92);
+  background: rgba(241, 244, 242, 0.94);
   border: 1px solid var(--stroke);
 }
 
@@ -403,7 +403,7 @@ body {
 }
 
 .ghost {
-  background: #f4f7f6;
+  background: #edf1ef;
   border: 1px solid var(--stroke);
 }
 
@@ -567,7 +567,7 @@ body {
   padding: 10px 12px;
   border-radius: 14px;
   border: 1px solid var(--stroke);
-  background: rgba(247, 249, 248, 0.92);
+  background: rgba(241, 244, 242, 0.94);
 }
 
 .document-detail-header h3 {
@@ -594,7 +594,7 @@ body {
   border: 1px solid #c7d6dd;
   border-radius: 18px;
   padding: 14px;
-  background: linear-gradient(180deg, #f7f9f8 0%, #edf2f1 100%);
+  background: linear-gradient(180deg, #f1f4f2 0%, #e3e9e6 100%);
   box-shadow: 0 12px 28px rgba(20, 32, 35, 0.08);
   display: grid;
   gap: 10px;
@@ -661,7 +661,7 @@ body {
 .upload-status__item {
   padding: 6px 8px;
   border-radius: 10px;
-  background: #ebf0ef;
+  background: #e2e7e5;
   border: 1px solid #e0e6ea;
 }
 
@@ -707,8 +707,8 @@ body {
 .grid.metrics .card {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--metric-bg, #f7f9f8) 0%, #f4f6f5 100%);
-  border-color: color-mix(in srgb, var(--metric-accent, var(--stroke)) 28%, #f4f6f5);
+  background: linear-gradient(180deg, var(--metric-bg, #f1f4f2) 0%, #eaeeec 100%);
+  border-color: color-mix(in srgb, var(--metric-accent, var(--stroke)) 26%, #eaeeec);
 }
 
 .grid.metrics .card::before {
@@ -1007,7 +1007,7 @@ body {
   padding: 6px 10px;
   font-size: 13px;
   border-radius: 10px;
-  background: #f4f7f6;
+  background: #edf1ef;
   border: 1px solid var(--stroke);
   box-shadow: none;
   height: 36px;
@@ -1047,7 +1047,7 @@ body {
 }
 
 .item {
-  background: #f7f9f8;
+  background: #eef2f0;
   border-radius: 14px;
   padding: 14px 16px;
   border: 1px solid var(--stroke);
@@ -1696,7 +1696,7 @@ body {
   padding: 8px 12px;
   border-radius: 999px;
   border: 1px solid var(--stroke);
-  background: #f4f7f6;
+  background: #edf1ef;
   font-weight: 600;
 }
 
@@ -1704,7 +1704,7 @@ body {
   margin-top: 12px;
   padding: 14px;
   border-radius: 16px;
-  background: rgba(247, 249, 248, 0.9);
+  background: rgba(238, 242, 240, 0.94);
   border: 1px solid rgba(17, 26, 29, 0.08);
 }
 
