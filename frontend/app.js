@@ -938,6 +938,50 @@ const renderInsightPanel = (title, items, variant) => `
   </div>
 `;
 
+const EXPLAIN_VARIANTS = [
+  {
+    intro: "Lecture synthétique: cette correspondance est portée par des signaux forts et des éléments concrets qui justifient le score.",
+    lead: "Ce qui pèse le plus dans l’évaluation",
+    focus: "Points à retenir en priorité",
+    close: "En pratique, ce profil mérite un examen rapide si vous ciblez un candidat aligné sur le cœur du besoin.",
+  },
+  {
+    intro: "Analyse structurée: le moteur a croisé les mots-clés, la proximité des contenus et les indices de cohérence globale.",
+    lead: "Ce qui explique la note obtenue",
+    focus: "Éléments à surveiller avant validation",
+    close: "En synthèse, la lecture du dossier reste favorable, avec un équilibre entre adéquation et vigilance métier.",
+  },
+  {
+    intro: "Interprétation guidée: la correspondance ressort clairement, avec plusieurs signaux utiles pour décider rapidement.",
+    lead: "Signaux les plus déterminants",
+    focus: "Ce qui doit rester visible pour le RH",
+    close: "Au final, le résultat est exploitable immédiatement et met en avant les critères les plus utiles à la décision.",
+  },
+];
+
+const pickExplainVariant = () => EXPLAIN_VARIANTS[Math.floor(Math.random() * EXPLAIN_VARIANTS.length)];
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+const renderExplainLoading = () => `
+  <div class="explain-loading">
+    <div class="explain-loading__spinner" aria-hidden="true"></div>
+    <div class="explain-loading__copy">
+      <strong>Analyse en cours</strong>
+      <p>Le système prépare une explication structurée à partir des données extraites.</p>
+    </div>
+  </div>
+`;
+
+const buildBulletList = (items) =>
+  items && items.length ? `<ul class="explain-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "<p class=\"muted\">Aucun détail disponible.</p>";
+
 const renderMatchCard = (match) => {
   const score = clampScore(match.score);
   const tone = scoreTone(score);
@@ -989,32 +1033,42 @@ const renderMatchCard = (match) => {
 };
 
 const renderExplainContent = (data) => {
-  const buildList = (items) => {
-    if (!items || !items.length) {
-      return "<p class=\"muted\">Aucun detail disponible.</p>";
-    }
-    return `<ul>${items.map((item) => `<li>${item}</li>`).join("")}</ul>`;
-  };
+  const variant = pickExplainVariant();
+  const score = clampScore(data.score);
+  const scoreLabel = score >= 80 ? "Très forte correspondance" : score >= 60 ? "Correspondance solide" : score >= 40 ? "Correspondance intermédiaire" : "Signal plus faible";
+  const summary = escapeHtml(data.summary || "Cette synthèse met en avant les signaux les plus utiles pour la décision RH.");
+  const evidence = (data.evidence || []).filter(Boolean).slice(0, 4);
+  const whyMatch = (data.why_match || []).filter(Boolean).slice(0, 4);
+  const vigilance = (data.vigilance || []).filter(Boolean).slice(0, 4);
 
   return `
-    <div class="item">
-      <div class="item-title">
-        <strong>Resume</strong>
-        ${renderScoreChip(clampScore(data.score))}
+    <div class="explain-hero">
+      <div class="explain-hero__eyebrow">Réponse générée</div>
+      <div class="explain-hero__title">${scoreLabel}</div>
+      <p>${variant.intro}</p>
+      <div class="explain-hero__score">${renderScoreChip(score)}</div>
+    </div>
+    <div class="explain-section">
+      <div class="item-title"><strong>${variant.lead}</strong></div>
+      ${buildBulletList(whyMatch)}
+    </div>
+    <div class="explain-section">
+      <div class="item-title"><strong>Résumé décisionnel</strong></div>
+      <p>${summary}</p>
+    </div>
+    <div class="explain-section explain-section--two-col">
+      <div class="item">
+        <div class="item-title"><strong>Points de vigilance</strong></div>
+        ${buildBulletList(vigilance)}
       </div>
-      <p>${data.summary}</p>
+      <div class="item">
+        <div class="item-title"><strong>Extraits probants</strong></div>
+        ${buildBulletList(evidence)}
+      </div>
     </div>
-    <div class="item">
-      <div class="item-title"><strong>Pourquoi ce match</strong></div>
-      ${buildList(data.why_match)}
-    </div>
-    <div class="item">
-      <div class="item-title"><strong>Points de vigilance</strong></div>
-      ${buildList(data.vigilance)}
-    </div>
-    <div class="item">
-      <div class="item-title"><strong>Extraits probants</strong></div>
-      ${buildList(data.evidence)}
+    <div class="explain-closing">
+      <strong>${variant.focus}</strong>
+      <p>${variant.close}</p>
     </div>
   `;
 };
@@ -1028,6 +1082,11 @@ const renderExplainModal = (data) => {
 };
 
 const loadMatchExplanation = async (matchId) => {
+  if (explainContent) {
+    explainContent.innerHTML = renderExplainLoading();
+    openModal(explainModal);
+  }
+
   try {
     const data = await safeFetch(`/matches/${matchId}/explain`);
     renderExplainModal(data);
@@ -1038,6 +1097,9 @@ const loadMatchExplanation = async (matchId) => {
         : error instanceof Error
           ? error.message
           : "Erreur inconnue";
+    if (explainContent) {
+      explainContent.innerHTML = `<div class="doc-card__error doc-card__error--large">${message}</div>`;
+    }
     setApiStatus(message);
   }
 };

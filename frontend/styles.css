@@ -1733,7 +1733,7 @@ body {
 .modal-card {
   position: relative;
   z-index: 1;
-  background: #ffffff;
+  background: linear-gradient(180deg, #f4f7f6 0%, #edf2f0 100%);
   border-radius: 18px;
   padding: 16px;
   width: min(520px, 92vw);
@@ -1756,6 +1756,117 @@ body {
 .modal-body {
   display: grid;
   gap: 10px;
+}
+
+.explain-loading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 16px;
+  border-radius: 16px;
+  background: rgba(241, 244, 242, 0.95);
+  border: 1px solid var(--stroke);
+}
+
+.explain-loading__spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(10, 107, 59, 0.15);
+  border-top-color: var(--accent);
+  animation: explain-spin 0.9s linear infinite;
+  flex: none;
+}
+
+.explain-loading__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.explain-loading__copy strong {
+  font-size: 14px;
+}
+
+.explain-loading__copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.explain-hero,
+.explain-section,
+.explain-closing {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.explain-hero {
+  display: grid;
+  gap: 8px;
+  background: linear-gradient(180deg, rgba(247, 250, 248, 0.95), rgba(233, 240, 237, 0.95));
+}
+
+.explain-hero__eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.explain-hero__title {
+  font-family: "DM Serif Display", serif;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.explain-hero p,
+.explain-closing p,
+.explain-section p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.55;
+}
+
+.explain-hero__score {
+  margin-top: 4px;
+}
+
+.explain-section {
+  display: grid;
+  gap: 8px;
+}
+
+.explain-section--two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.explain-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.explain-list li {
+  line-height: 1.5;
+}
+
+.explain-closing {
+  display: grid;
+  gap: 6px;
+  background: rgba(241, 247, 244, 0.9);
+}
+
+@keyframes explain-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .modal-body input {
