@@ -1738,6 +1738,9 @@ body {
   padding: 16px;
   width: min(520px, 92vw);
   display: grid;
+  /* Keep modal visually constrained to viewport height to avoid freezing on very long content */
+  max-height: 80vh;
+  overflow: hidden;
   gap: 12px;
   box-shadow: var(--shadow);
 }
@@ -1756,6 +1759,11 @@ body {
 .modal-body {
   display: grid;
   gap: 10px;
+  /* Make the modal body scrollable when content is large */
+  overflow: auto;
+  /* Reserve space for header/footer by limiting body height relative to viewport */
+  max-height: calc(80vh - 120px);
+  padding-right: 8px;
 }
 
 .explain-loading {
