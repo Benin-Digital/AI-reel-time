@@ -33,7 +33,10 @@
 body {
   margin: 0;
   font-family: "Space Grotesk", system-ui, sans-serif;
-  background: linear-gradient(135deg, var(--bg), var(--bg-alt));
+  background-image: url('background-dashbord.avif'), linear-gradient(135deg, var(--bg), var(--bg-alt));
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -55,7 +58,7 @@ body {
   justify-content: space-between;
   gap: 20px;
   border-bottom: 1px solid var(--stroke);
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .brand {
