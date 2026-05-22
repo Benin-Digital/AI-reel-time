@@ -439,15 +439,9 @@ body {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
 }
 
-.workspace-switcher__button[data-panel="admin"] {
-  background: #fff0f0;
-  color: #9e1d1d;
-}
-
 .workspace-switcher__button[data-panel="admin"].is-active {
-  background: linear-gradient(135deg, #e54848, #b91c1c);
-  box-shadow: 0 12px 26px rgba(185, 28, 28, 0.24);
-  color: #fff;
+  background: linear-gradient(135deg, #d94848, #a61f1f);
+  box-shadow: 0 12px 26px rgba(169, 31, 31, 0.22);
 }
 
 .workspace-banner {
