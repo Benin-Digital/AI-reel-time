@@ -52,7 +52,6 @@ const metricExtractions = document.getElementById("metricExtractions");
 const metricScores = document.getElementById("metricScores");
 const metricWorkerStatus = document.getElementById("metricWorkerStatus");
 
-const recentMatches = document.getElementById("recentMatches");
 const cvList = document.getElementById("cvList");
 const jobList = document.getElementById("jobList");
 const matchList = document.getElementById("matchList");
@@ -192,9 +191,6 @@ const hydrateDashboardFromCache = () => {
 
     if (cache.metrics) {
       renderMetrics(cache.metrics);
-    }
-    if (Array.isArray(cache.recentMatches)) {
-      renderMatches(cache.recentMatches, recentMatches);
     }
     if (Array.isArray(cache.cvDocuments)) {
       renderDocuments(cache.cvDocuments, cvList, "cv");
@@ -1057,7 +1053,14 @@ const statusLabel = (status) => {
 
 const renderMetrics = (data) => {
   if (metricUptime) {
-    metricUptime.textContent = data.uptime_seconds ?? "--";
+    metricUptime.innerHTML = `
+      <span class="uptime-animation" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </span>
+      <span class="uptime-label">En continu</span>
+    `;
   }
   if (metricEvents) {
     metricEvents.textContent = data.event_count ?? "--";
@@ -1081,9 +1084,6 @@ const renderMatches = (matches, target) => {
     target.classList.remove("match-grid");
     target.classList.add("stack");
     target.innerHTML = formatEmpty("Aucun résultat de correspondance pour le moment.");
-    if (target === recentMatches) {
-      writeDashboardCache({ recentMatches: matches });
-    }
     return;
   }
 
@@ -1100,10 +1100,6 @@ const renderMatches = (matches, target) => {
       }
     });
   });
-
-  if (target === recentMatches) {
-    writeDashboardCache({ recentMatches: matches });
-  }
 };
 
 const renderDocuments = (docs, target, kind) => {
@@ -1473,23 +1469,11 @@ const loadAll = async () => {
       }
     });
 
-    const recentMatchesPromise = safeFetch("/matches?page=1&page_size=6&sort_by=created_at_desc")
-      .then((recent) => renderMatches(recent, recentMatches))
-      .catch((error) => {
-        if (error instanceof Error && error.name === "AuthError") {
-          throw error;
-        }
-        if (!isTransientFetchError(error)) {
-          console.warn("Recent matches refresh failure:", error);
-        }
-      });
-
     await Promise.all([
       metricsPromise,
       loadCvDocumentsSafe(),
       loadJobDocumentsSafe(),
       loadMatchesSafe(),
-      recentMatchesPromise,
     ]);
   } catch (error) {
     const message =
