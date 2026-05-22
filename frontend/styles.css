@@ -1733,7 +1733,7 @@ body {
 .modal-card {
   position: relative;
   z-index: 1;
-  background: linear-gradient(180deg, #f4f7f6 0%, #edf2f0 100%);
+  background: linear-gradient(180deg, #0b0b0b 0%, #121212 100%);
   border-radius: 18px;
   padding: 16px;
   width: min(520px, 92vw);
@@ -1742,7 +1742,8 @@ body {
   max-height: 80vh;
   overflow: hidden;
   gap: 12px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 10px 30px rgba(2,6,10,0.6);
+  color: #ffffff;
 }
 
 .modal-card--wide {
@@ -1754,6 +1755,12 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* Distinct header styling for dark modal */
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
 }
 
 .modal-body {
@@ -1771,9 +1778,9 @@ body {
   align-items: center;
   gap: 14px;
   padding: 18px 16px;
-  border-radius: 16px;
-  background: rgba(241, 244, 242, 0.95);
-  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
 }
 
 .explain-loading__spinner {
@@ -1822,11 +1829,12 @@ body {
   font-family: "DM Serif Display", serif;
   font-size: 26px;
   line-height: 1.05;
+  color: #fff;
 }
 
 .explain-copy p {
   margin: 0;
-  color: var(--ink);
+  color: rgba(255,255,255,0.92);
   line-height: 1.65;
 }
 
