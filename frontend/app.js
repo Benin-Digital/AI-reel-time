@@ -80,7 +80,6 @@ const cvPageSize = document.getElementById("cvPageSize");
 const cvPrev = document.getElementById("cvPrev");
 const cvNext = document.getElementById("cvNext");
 const applyCvFilters = document.getElementById("applyCvFilters");
-const deleteCvAll = document.getElementById("deleteCvAll");
 
 const jobQuery = document.getElementById("jobQuery");
 const jobStatus = document.getElementById("jobStatus");
@@ -89,7 +88,6 @@ const jobPageSize = document.getElementById("jobPageSize");
 const jobPrev = document.getElementById("jobPrev");
 const jobNext = document.getElementById("jobNext");
 const applyJobFilters = document.getElementById("applyJobFilters");
-const deleteJobAll = document.getElementById("deleteJobAll");
 
 const tabs = Array.from(document.querySelectorAll(".workspace-switcher__button"));
 const panelViews = Array.from(document.querySelectorAll(".panel-view"));
@@ -2166,11 +2164,6 @@ applyCvFilters.addEventListener("click", () => {
   loadCvDocuments();
 });
 
-if (deleteCvAll) {
-  deleteCvAll.addEventListener("click", async () => {
-    await handleDeleteAllDocuments("cv");
-  });
-}
 
 applyJobFilters.addEventListener("click", () => {
   updatePageElement(jobPage, 1);
@@ -2178,11 +2171,7 @@ applyJobFilters.addEventListener("click", () => {
   loadJobDocuments();
 });
 
-if (deleteJobAll) {
-  deleteJobAll.addEventListener("click", async () => {
-    await handleDeleteAllDocuments("job");
-  });
-}
+// 'Supprimer tout' buttons removed from UI; individual delete actions remain available.
 
 if (adminCreateUserForm) {
   adminCreateUserForm.addEventListener("submit", async (event) => {
