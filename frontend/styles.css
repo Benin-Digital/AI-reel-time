@@ -393,8 +393,8 @@ body {
 
 .workspace-switcher {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
   padding: 10px;
   border-radius: 18px;
   background: #ffffff;
@@ -403,11 +403,12 @@ body {
 }
 
 .workspace-switcher__button {
+  width: 100%;
   border: 1px solid transparent;
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
   background: #f3f7f6;
   cursor: pointer;
@@ -436,6 +437,17 @@ body {
 
 .workspace-switcher__button[data-panel="matches"].is-active {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+
+.workspace-switcher__button[data-panel="admin"] {
+  background: #fff0f0;
+  color: #9e1d1d;
+}
+
+.workspace-switcher__button[data-panel="admin"].is-active {
+  background: linear-gradient(135deg, #e54848, #b91c1c);
+  box-shadow: 0 12px 26px rgba(185, 28, 28, 0.24);
+  color: #fff;
 }
 
 .workspace-banner {
