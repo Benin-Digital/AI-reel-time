@@ -1513,19 +1513,6 @@ body {
   line-height: 1.55;
 }
 
-/* For job offer previews, use a dark background and white text for better contrast */
-.panel-view--job .detail-preview {
-  background: #0b0b0b;
-  color: #ffffff;
-  border: 1px solid rgba(255,255,255,0.06);
-}
-.panel-view--job .detail-card__section .meta {
-  color: rgba(255,255,255,0.9);
-}
-.panel-view--job .detail-card__section .detail-preview a {
-  color: #9fe6c9;
-}
-
 .detail-matches {
   display: grid;
   gap: 10px;
@@ -1842,6 +1829,25 @@ body {
   background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   border-top-left-radius: 14px;
   border-top-right-radius: 14px;
+}
+
+.explain-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.explain-action-btn {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.06);
+  font-weight: 700;
+}
+
+.explain-action-btn:hover {
+  background: rgba(255,255,255,0.06);
 }
 
 .modal-body {
