@@ -7,6 +7,7 @@ from time import perf_counter, time
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from sqlalchemy import delete, func, or_, select, text
@@ -786,7 +787,12 @@ async def security_middleware(request: Request, call_next):
     request_id = request.headers.get("x-request-id", str(uuid4()))
     request.state.request_id = request_id
     start = perf_counter()
-    enforce_security(request)
+    try:
+        enforce_security(request)
+    except HTTPException as exc:
+        response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        response.headers["x-request-id"] = request_id
+        return response
     response = await call_next(request)
     response.headers["x-request-id"] = request_id
     duration_ms = (perf_counter() - start) * 1000
