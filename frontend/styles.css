@@ -609,6 +609,54 @@ body {
   gap: 10px;
 }
 
+.grid.metrics .card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--metric-bg, #ffffff) 0%, #ffffff 100%);
+  border-color: color-mix(in srgb, var(--metric-accent, var(--stroke)) 32%, #ffffff);
+}
+
+.grid.metrics .card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 6px;
+  background: var(--metric-accent, var(--accent));
+}
+
+.grid.metrics .card h3,
+.grid.metrics .card .metric,
+.grid.metrics .card .hint {
+  position: relative;
+  z-index: 1;
+}
+
+.grid.metrics .card:nth-child(1) {
+  --metric-bg: #eefaf3;
+  --metric-accent: #2f8f5b;
+}
+
+.grid.metrics .card:nth-child(2) {
+  --metric-bg: #eef6ff;
+  --metric-accent: #2d6cdf;
+}
+
+.grid.metrics .card:nth-child(3) {
+  --metric-bg: #fff5ea;
+  --metric-accent: #d67a12;
+}
+
+.grid.metrics .card:nth-child(4) {
+  --metric-bg: #f3efff;
+  --metric-accent: #6a4fe0;
+}
+
+.grid.metrics .card:nth-child(5) {
+  --metric-bg: #edf8f8;
+  --metric-accent: #0f8a8a;
+}
+
 .board {
   display: grid;
   grid-template-columns: 1fr;
