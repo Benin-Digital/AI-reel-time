@@ -10,7 +10,7 @@ services:
       AI_REALTIME_REDIS_URL: redis://redis:6379/0
       AI_REALTIME_WATCH_CV_DIR: /srv/ai-realtime/storage/cv
       AI_REALTIME_WATCH_JOB_DIR: /srv/ai-realtime/storage/job
-      AI_REALTIME_CORS_ALLOW_ORIGINS: "*"
+      AI_REALTIME_CORS_ALLOW_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       AI_REALTIME_LOG_LEVEL: INFO
       AI_REALTIME_LOG_JSON: "false"
       AI_REALTIME_DATABASE_AUTO_CREATE: "true"
