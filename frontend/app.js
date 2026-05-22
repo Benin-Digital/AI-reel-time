@@ -1187,92 +1187,86 @@ const renderExplainModal = (data) => {
   }
   explainContent.innerHTML = renderExplainContent(data);
 
-  // Add action buttons to modal header: view CV PDF, view Job PDF, copy text, download report
-  const header = explainModal.querySelector(".modal-header");
-  if (header) {
-    // remove existing actions container if any
-    const existing = header.querySelector(".explain-actions");
-    if (existing) existing.remove();
+  // Add action buttons at the bottom of the modal body (footer area)
+  // remove existing footer actions if present
+  const existingFooter = explainContent.querySelector(".explain-actions--footer");
+  if (existingFooter) existingFooter.remove();
 
-    const actions = document.createElement("div");
-    actions.className = "explain-actions";
+  const footerActions = document.createElement("div");
+  footerActions.className = "explain-actions--footer";
 
-    const makeBtn = (label, cls = "ghost") => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = cls + " explain-action-btn";
-      b.textContent = label;
-      return b;
-    };
+  const makeBtn = (label, cls = "ghost") => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = cls + " explain-action-btn";
+    b.textContent = label;
+    return b;
+  };
 
-    const cvBtn = makeBtn("Voir le CV (PDF)");
-    const jobBtn = makeBtn("Voir l'offre (PDF)");
-    const copyBtn = makeBtn("Copier le texte");
-    const dlBtn = makeBtn("Télécharger le rapport");
+  const cvBtn = makeBtn("Voir le CV (PDF)");
+  const jobBtn = makeBtn("Voir l'offre (PDF)");
+  const copyBtn = makeBtn("Copier le texte");
+  const dlBtn = makeBtn("Télécharger le rapport");
 
-    actions.appendChild(cvBtn);
-    actions.appendChild(jobBtn);
-    actions.appendChild(copyBtn);
-    actions.appendChild(dlBtn);
+  footerActions.appendChild(cvBtn);
+  footerActions.appendChild(jobBtn);
+  footerActions.appendChild(copyBtn);
+  footerActions.appendChild(dlBtn);
 
-    header.insertBefore(actions, header.querySelector(".modal-close"));
+  explainContent.appendChild(footerActions);
 
-    // Handlers
-    cvBtn.addEventListener("click", () => {
-      const matchId = data.match_id || data.matchId || null;
-      if (!matchId) return;
-      // fetch match to get cv_id
-      safeFetch(`/matches/${matchId}`)
-        .then((m) => {
-          const url = buildDocumentPdfUrl("cv", m.cv_id);
-          if (url) window.open(url, "_blank");
-        })
-        .catch((e) => setApiStatus("Impossible d'ouvrir le PDF CV"));
-    });
+  // Handlers (same behavior as before)
+  cvBtn.addEventListener("click", () => {
+    const matchId = data.match_id || data.matchId || null;
+    if (!matchId) return;
+    safeFetch(`/matches/${matchId}`)
+      .then((m) => {
+        const url = buildDocumentPdfUrl("cv", m.cv_id);
+        if (url) window.open(url, "_blank");
+      })
+      .catch((e) => setApiStatus("Impossible d'ouvrir le PDF CV"));
+  });
 
-    jobBtn.addEventListener("click", () => {
-      const matchId = data.match_id || data.matchId || null;
-      if (!matchId) return;
-      safeFetch(`/matches/${matchId}`)
-        .then((m) => {
-          const url = buildDocumentPdfUrl("job", m.job_id);
-          if (url) window.open(url, "_blank");
-        })
-        .catch((e) => setApiStatus("Impossible d'ouvrir le PDF de l'offre"));
-    });
+  jobBtn.addEventListener("click", () => {
+    const matchId = data.match_id || data.matchId || null;
+    if (!matchId) return;
+    safeFetch(`/matches/${matchId}`)
+      .then((m) => {
+        const url = buildDocumentPdfUrl("job", m.job_id);
+        if (url) window.open(url, "_blank");
+      })
+      .catch((e) => setApiStatus("Impossible d'ouvrir le PDF de l'offre"));
+  });
 
-    copyBtn.addEventListener("click", async () => {
-      try {
-        const textParts = [];
-        if (data.summary) textParts.push(`Résumé:\n${data.summary}`);
-        if (data.why_match && data.why_match.length) textParts.push(`Pourquoi: \n- ${data.why_match.join("\n- ")}`);
-        if (data.vigilance && data.vigilance.length) textParts.push(`Points de vigilance:\n- ${data.vigilance.join("\n- ")}`);
-        if (data.evidence && data.evidence.length) textParts.push(`Extraits:\n${data.evidence.join("\n\n")}`);
-        const final = textParts.join("\n\n");
-        await navigator.clipboard.writeText(final);
-        setApiStatus("Texte copié dans le presse-papiers");
-      } catch (err) {
-        setApiStatus("La copie a échoué");
-      }
-    });
+  copyBtn.addEventListener("click", async () => {
+    try {
+      const textParts = [];
+      if (data.summary) textParts.push(`Résumé:\n${data.summary}`);
+      if (data.why_match && data.why_match.length) textParts.push(`Pourquoi: \n- ${data.why_match.join("\n- ")}`);
+      if (data.vigilance && data.vigilance.length) textParts.push(`Points de vigilance:\n- ${data.vigilance.join("\n- ")}`);
+      if (data.evidence && data.evidence.length) textParts.push(`Extraits:\n${data.evidence.join("\n\n")}`);
+      const final = textParts.join("\n\n");
+      await navigator.clipboard.writeText(final);
+      setApiStatus("Texte copié dans le presse-papiers");
+    } catch (err) {
+      setApiStatus("La copie a échoué");
+    }
+  });
 
-    dlBtn.addEventListener("click", () => {
-      // open printable report in new window and trigger print (user can save as PDF)
-      const html = `<!doctype html><html><head><meta charset="utf-8"><title>Rapport d'analyse</title><style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:20px}pre{white-space:pre-wrap}</style></head><body><h1>Rapport d'analyse - Match ${escapeHtml(String(data.match_id || ""))}</h1><h2>Résumé</h2><p>${escapeHtml(data.summary || "")}</p><h2>Pourquoi</h2><pre>${escapeHtml((data.why_match||[]).join("\n- "))}</pre><h2>Points de vigilance</h2><pre>${escapeHtml((data.vigilance||[]).join("\n- "))}</pre><h2>Extraits</h2><pre>${escapeHtml((data.evidence||[]).join("\n\n"))}</pre></body></html>`;
-      const w = window.open("", "_blank");
-      if (!w) return setApiStatus("Impossible d'ouvrir la fenêtre de téléchargement");
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
-      // try to invoke print - user can save as PDF
-      try {
-        w.focus();
-        w.print();
-      } catch (e) {
-        // ignore
-      }
-    });
-  }
+  dlBtn.addEventListener("click", () => {
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Rapport d'analyse</title><style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h1{font-size:20px}pre{white-space:pre-wrap}</style></head><body><h1>Rapport d'analyse - Match ${escapeHtml(String(data.match_id || ""))}</h1><h2>Résumé</h2><p>${escapeHtml(data.summary || "")}</p><h2>Pourquoi</h2><pre>${escapeHtml((data.why_match||[]).join("\n- "))}</pre><h2>Points de vigilance</h2><pre>${escapeHtml((data.vigilance||[]).join("\n- "))}</pre><h2>Extraits</h2><pre>${escapeHtml((data.evidence||[]).join("\n\n"))}</pre></body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) return setApiStatus("Impossible d'ouvrir la fenêtre de téléchargement");
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    try {
+      w.focus();
+      w.print();
+    } catch (e) {
+      // ignore
+    }
+  });
 
   openModal(explainModal);
 };

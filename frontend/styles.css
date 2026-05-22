@@ -1850,6 +1850,15 @@ body {
   background: rgba(255,255,255,0.06);
 }
 
+.explain-actions--footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
 .modal-body {
   display: grid;
   gap: 10px;
