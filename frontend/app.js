@@ -1063,15 +1063,7 @@ const renderMetrics = (data) => {
     `;
   }
   if (metricEvents) {
-    metricEvents.classList.add("metric--events");
-    metricEvents.innerHTML = `
-      <span class="events-animation" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
-      </span>
-      <span class="events-label">Watcher en action</span>
-    `;
+    metricEvents.textContent = data.event_count ?? "--";
   }
   if (metricExtractions) {
     metricExtractions.textContent = data.extraction_count ?? "--";
