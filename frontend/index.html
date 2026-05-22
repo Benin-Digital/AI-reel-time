@@ -36,13 +36,38 @@
 
     <section id="authGate" class="auth-gate" hidden>
       <div class="auth-gate__card">
-        <p class="auth-gate__eyebrow">Accès sécurisé</p>
-        <h1>Connectez-vous pour accéder au dashboard.</h1>
-        <p>
-          Les comptes sont créés par le super-admin ou l’admin autorisé. Aucun compte public n’est disponible.
-        </p>
-        <div class="auth-gate__actions">
-          <button id="openLoginModal" class="primary" type="button">Se connecter</button>
+        <div class="auth-gate__content">
+          <div class="auth-gate__text">
+            <p class="auth-gate__eyebrow">Accès sécurisé</p>
+            <h1>Connectez-vous pour accéder au dashboard.</h1>
+            <p>
+              Les comptes sont créés par le super-admin ou l’admin autorisé. Aucun compte public n’est disponible.
+            </p>
+            <div class="auth-gate__actions">
+              <button id="openLoginModal" class="primary" type="button">Se connecter</button>
+            </div>
+          </div>
+          <div class="auth-gate__illustration" aria-hidden="true">
+            <!-- Simple, lightweight SVG illustration with subtle animation -->
+            <svg width="320" height="220" viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <linearGradient id="g1" x1="0" x2="1">
+                  <stop offset="0%" stop-color="#f7fbfa" />
+                  <stop offset="100%" stop-color="#eef7fb" />
+                </linearGradient>
+              </defs>
+              <rect x="0" y="0" width="320" height="220" rx="18" fill="url(#g1)" />
+              <g id="shapes" transform="translate(40,30)">
+                <circle class="il-circle il-circle-1" cx="40" cy="40" r="28" fill="#bfe6d0" />
+                <rect class="il-rect il-rect-1" x="110" y="18" width="72" height="48" rx="8" fill="#cfe6ff" />
+                <circle class="il-circle il-circle-2" cx="200" cy="90" r="18" fill="#ffdcb0" />
+                <g class="il-lines" transform="translate(36,140)">
+                  <rect x="0" y="0" width="220" height="8" rx="4" fill="#ffffff" opacity="0.12" />
+                  <rect x="0" y="18" width="160" height="8" rx="4" fill="#ffffff" opacity="0.1" />
+                </g>
+              </g>
+            </svg>
+          </div>
         </div>
       </div>
     </section>

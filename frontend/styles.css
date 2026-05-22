@@ -172,6 +172,65 @@ body {
   box-shadow: 0 22px 50px rgba(20, 32, 35, 0.12);
 }
 
+.auth-gate__content {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 20px;
+  align-items: center;
+}
+
+.auth-gate__text h1 {
+  margin-bottom: 12px;
+}
+
+.auth-gate__illustration {
+  display: grid;
+  place-items: center;
+}
+
+.auth-gate__illustration svg {
+  width: 100%;
+  height: auto;
+  max-width: 320px;
+  filter: drop-shadow(0 10px 20px rgba(20,32,35,0.06));
+}
+
+/* subtle animations for the illustration shapes */
+.il-circle-1 { animation: il-float 4s ease-in-out infinite; transform-origin: center; }
+.il-rect-1 { animation: il-sway 5s ease-in-out infinite; transform-origin: center; }
+.il-circle-2 { animation: il-bob 3.6s ease-in-out infinite; transform-origin: center; }
+
+@keyframes il-float {
+  0% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-8px) scale(1.02); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes il-sway {
+  0% { transform: translateX(0) rotate(0deg); }
+  50% { transform: translateX(4px) rotate(1deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+@keyframes il-bob {
+  0% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-6px) scale(1.03); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* Responsive: stack on small viewports and reduce illustration size */
+@media (max-width: 920px) {
+  .auth-gate__content {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .auth-gate__illustration {
+    order: -1;
+    opacity: 0.95;
+  }
+  .auth-gate__illustration svg { max-width: 260px; }
+}
+
 .auth-gate__eyebrow {
   margin: 0 0 8px;
   font-size: 12px;
