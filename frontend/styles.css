@@ -1,9 +1,9 @@
 :root {
-  --bg: #d0d8d4;
-  --bg-alt: #c1ccc7;
-  --ink: #0d1417;
-  --muted: #3c4b53;
-  --card: #f1f4f2;
+  --bg: #000000;
+  --bg-alt: #070707;
+  --ink: rgba(255,255,255,0.95);
+  --muted: rgba(255,255,255,0.65);
+  --card: #0b0b0b;
   --accent: #0a6b3b;
   --accent-2: #094f2b;
   --accent-3: #b6e0c6;
@@ -11,15 +11,15 @@
   --tone-strong: #d19f1a;
   --tone-medium: #4f6bed;
   --tone-weak: #c9645f;
-  --shadow: 0 18px 40px rgba(20, 32, 35, 0.2);
-  --stroke: #b4c2c6;
+  --shadow: 0 18px 40px rgba(2,6,10,0.6);
+  --stroke: rgba(255,255,255,0.06);
   --radius: 16px;
   --cv-accent: #1f5f8f;
   --cv-accent-2: #17466a;
-  --cv-soft: #dbeaf6;
+  --cv-soft: #0f1a26;
   --job-accent: #1f6f8b;
   --job-accent-2: #13485c;
-  --job-soft: #e7f4f8;
+  --job-soft: #081218;
 }
 
 * {
@@ -54,8 +54,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  border-bottom: 1px solid var(--stroke);
-  background: rgba(241, 244, 242, 0.94);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
 }
 
 .brand {
@@ -71,7 +71,7 @@ body {
   height: 56px;
   border-radius: 14px;
   overflow: hidden;
-  background: linear-gradient(135deg, #f1f4f2, #d3ddd8);
+  background: linear-gradient(135deg, #0c0c0c, #141414);
   box-shadow: var(--shadow);
 }
 
@@ -106,8 +106,8 @@ body {
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(241, 244, 242, 0.94);
-  border: 1px solid var(--stroke);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
 }
 
 .auth-status {
@@ -1558,7 +1558,7 @@ body {
 
 .footer {
   padding: 10px 24px 16px;
-  color: var(--muted);
+  color: #ffffff;
   text-align: center;
   font-size: 12px;
 }
