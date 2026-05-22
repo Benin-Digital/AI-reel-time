@@ -1155,7 +1155,6 @@ const renderExplainContent = (data) => {
 
   return `
     <div class="explain-copy">
-      <h2>Analyse de la correspondance du profil</h2>
       <p><strong>Niveau de correspondance :</strong> ${level}</p>
 
       <p>${escapeHtml( (data.summary && data.summary.length>0) ? data.summary : (level === 'Très élevé' ? 'L’analyse réalisée met en évidence une forte adéquation entre le profil et les critères recherchés.' : 'L’analyse met en évidence une adéquation limitée entre le profil évalué et les exigences du poste.') )}</p>

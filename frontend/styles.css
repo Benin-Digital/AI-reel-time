@@ -1824,8 +1824,8 @@ body {
   justify-content: space-between;
   gap: 8px;
   /* Distinct header styling for dark modal */
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 12px 12px 16px 12px;
+  border-bottom: 2px solid rgba(255,255,255,0.08);
   background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   border-top-left-radius: 14px;
   border-top-right-radius: 14px;
@@ -1867,6 +1867,7 @@ body {
   /* Reserve space for header/footer by limiting body height relative to viewport */
   max-height: calc(80vh - 120px);
   padding-right: 8px;
+  padding-top: 18px;
 }
 
 .explain-loading {
