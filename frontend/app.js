@@ -1210,12 +1210,13 @@ const renderDocuments = (docs, target, kind) => {
   }
 };
 
-const renderDocumentDetails = (doc, target) => {
+const renderDocumentDetails = (doc, target, kind = "cv") => {
   const extraction = doc.extraction || {};
   const matches = doc.top_matches || [];
   const keywordChips = renderKeywordChips(doc.top_keywords || []);
   const statusTone = documentStatusTone(doc.status);
   const previewText = extraction.extracted_text || "Aucun texte extrait";
+  const previewLabel = kind === "job" ? "Aperçu de l’offre" : "Aperçu du texte";
 
   target.classList.remove("hidden");
   target.innerHTML = `
@@ -1252,7 +1253,7 @@ const renderDocumentDetails = (doc, target) => {
       ${doc.top_keywords && doc.top_keywords.length ? `<div class="detail-card__section"><div class="meta">Mots-clés principaux</div>${keywordChips}</div>` : ""}
 
       <div class="detail-card__section">
-        <div class="meta">Aperçu du texte</div>
+        <div class="meta">${previewLabel}</div>
         <div class="detail-preview">${previewText}</div>
       </div>
 
@@ -1309,7 +1310,7 @@ const loadDocumentDetails = async (kind, id) => {
   const detailsTarget = kind === "cv" ? cvDetails : jobDetails;
   try {
     const doc = await safeFetch(`/${kind}-documents/${id}/details`);
-    renderDocumentDetails(doc, detailsTarget);
+    renderDocumentDetails(doc, detailsTarget, kind);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erreur inconnue";
     if (error instanceof Error && error.name === "AuthError") {
@@ -1325,7 +1326,7 @@ const loadDocumentDetails = async (kind, id) => {
         const details = (cache.documentDetails || {})[kind] || {};
         const cached = details[String(id)];
         if (cached) {
-          renderDocumentDetails(cached, detailsTarget);
+          renderDocumentDetails(cached, detailsTarget, kind);
           return;
         }
       } catch (e) {
