@@ -102,6 +102,7 @@ const REQUEST_TIMEOUT_MS = 12000;
 const MAX_UPLOAD_MB = 20;
 const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt"];
 const DASHBOARD_CACHE_KEY = "aiRealtimeDashboardCache";
+const THEME_KEY = "aiRealtimeTheme";
 let authToken = localStorage.getItem("authToken") || "";
 let authUser = JSON.parse(localStorage.getItem("authUser") || "null");
 let authMode = "login";
@@ -118,6 +119,45 @@ let pendingDeleteResolve = null;
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Theme management: add a toggle button to the header and persist choice
+const setTheme = (theme) => {
+  try {
+    if (!theme) return;
+    document.body.classList.remove("theme-light", "theme-dark");
+    document.body.classList.add(theme === "dark" ? "theme-dark" : "theme-light");
+    localStorage.setItem(THEME_KEY, theme);
+    const btn = document.getElementById("themeToggle");
+    if (btn) {
+      btn.textContent = theme === "dark" ? "Mode clair" : "Mode sombre";
+    }
+  } catch (e) {
+    // ignore
+  }
+};
+
+const toggleTheme = () => {
+  const current = localStorage.getItem(THEME_KEY) || "dark";
+  setTheme(current === "dark" ? "light" : "dark");
+};
+
+const initTheme = () => {
+  const saved = localStorage.getItem(THEME_KEY);
+  const prefer = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  setTheme(prefer);
+  // add a button to hero actions if present
+  const actions = document.querySelector('.hero-actions');
+  if (actions && !document.getElementById('themeToggle')) {
+    const btn = document.createElement('button');
+    btn.id = 'themeToggle';
+    btn.className = 'theme-toggle';
+    btn.type = 'button';
+    btn.addEventListener('click', toggleTheme);
+    actions.insertBefore(btn, actions.firstChild);
+    // set initial label
+    btn.textContent = (document.body.classList.contains('theme-dark') ? 'Mode clair' : 'Mode sombre');
+  }
+};
 
 const setApiStatus = (message) => {
   if (!apiStatus) {
@@ -202,6 +242,9 @@ const hydrateDashboardFromCache = () => {
     isHydratingDashboard = false;
   }
 };
+
+// Initialize theme on load
+initTheme();
 
 const isTransientFetchError = (error) => {
   if (!(error instanceof Error)) {
