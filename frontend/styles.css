@@ -17,9 +17,9 @@
   --cv-accent: #1f5f8f;
   --cv-accent-2: #17466a;
   --cv-soft: #dbeaf6;
-  --job-accent: #9a4f0f;
-  --job-accent-2: #703808;
-  --job-soft: #f8e8d9;
+  --job-accent: #1f6f8b;
+  --job-accent-2: #13485c;
+  --job-soft: #e7f4f8;
 }
 
 * {
@@ -431,7 +431,7 @@ body {
 
 .workspace-switcher__button[data-panel="job"].is-active {
   background: linear-gradient(135deg, var(--job-accent), var(--job-accent-2));
-  box-shadow: 0 12px 26px rgba(154, 79, 15, 0.22);
+  box-shadow: 0 12px 26px rgba(31, 111, 139, 0.22);
 }
 
 .workspace-switcher__button[data-panel="matches"].is-active {
@@ -576,7 +576,7 @@ body {
 }
 
 .panel-view--job .document-detail-header {
-  border-color: #e9cdb2;
+  border-color: #b6d8e4;
   background: var(--job-soft);
 }
 
@@ -691,7 +691,7 @@ body {
   background: var(--cv-soft);
 }
 .panel-view--job .panel-header {
-  border-bottom: 1px solid #e9cdb2;
+  border-bottom: 1px solid #b6d8e4;
   background: var(--job-soft);
 }
 
@@ -732,6 +732,60 @@ body {
   font-size: 22px;
   margin: 8px 0 2px;
   font-weight: 700;
+}
+
+.metric--uptime {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  justify-items: start;
+}
+
+.uptime-animation {
+  display: inline-flex;
+  align-items: end;
+  gap: 6px;
+  height: 24px;
+}
+
+.uptime-animation span {
+  width: 8px;
+  border-radius: 999px;
+  background: var(--metric-accent, var(--accent));
+  animation: uptimePulse 1.2s ease-in-out infinite;
+}
+
+.uptime-animation span:nth-child(1) {
+  height: 12px;
+  animation-delay: 0s;
+}
+
+.uptime-animation span:nth-child(2) {
+  height: 20px;
+  animation-delay: 0.15s;
+}
+
+.uptime-animation span:nth-child(3) {
+  height: 14px;
+  animation-delay: 0.3s;
+}
+
+.uptime-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+@keyframes uptimePulse {
+  0%,
+  100% {
+    transform: scaleY(0.7);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scaleY(1.15);
+    opacity: 1;
+  }
 }
 
 .hint {
@@ -790,9 +844,9 @@ body {
 }
 
 .panel-view--job .doc-row.is-active {
-  border-color: #d7a778;
-  box-shadow: 0 16px 32px rgba(154, 79, 15, 0.12);
-  background: #fbf1e7;
+  border-color: #8ec0d4;
+  box-shadow: 0 16px 32px rgba(31, 111, 139, 0.14);
+  background: #eaf6fb;
 }
 
 .doc-row__main {
@@ -881,8 +935,8 @@ body {
 }
 
 .panel-view--job .doc-row .doc-card__button[data-action="matches"] {
-  background: #faefe3;
-  border-color: #d7a778;
+  background: #eaf6fb;
+  border-color: #8ec0d4;
   color: var(--job-accent-2);
 }
 
@@ -1402,8 +1456,8 @@ body {
 }
 
 .panel-view--job .ghost.is-applied {
-  border-color: #d7a778;
-  background: #faefe3;
+  border-color: #8ec0d4;
+  background: #eaf6fb;
   color: var(--job-accent-2);
 }
 
