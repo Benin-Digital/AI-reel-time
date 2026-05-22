@@ -1,6 +1,5 @@
 const apiBaseInput = document.getElementById("apiBase");
 const applyApiButton = document.getElementById("applyApi");
-const refreshButton = document.getElementById("refreshAll");
 const apiStatus = document.getElementById("apiStatus");
 const loginButton = document.getElementById("loginButton");
 const logoutButton = document.getElementById("logoutButton");
@@ -8,6 +7,7 @@ const authStatus = document.getElementById("authStatus");
 const authGate = document.getElementById("authGate");
 const dashboardShell = document.getElementById("dashboardShell");
 const appFooter = document.getElementById("appFooter");
+const appLogo = document.getElementById("appLogo");
 const openLoginModalButton = document.getElementById("openLoginModal");
 const openRegisterModalButton = document.getElementById("openRegisterModal");
 const adminTab = document.getElementById("tabAdmin");
@@ -1793,19 +1793,25 @@ applyApiButton.addEventListener("click", () => {
   }
 });
 
-refreshButton.addEventListener("click", () => {
-  if (!authUser) {
-    openAuthModal("login");
-    return;
-  }
-  loadAll();
-});
-
 applyFilters.addEventListener("click", () => {
   updatePageElement(matchesPage, 1);
   flashActionState(applyFilters, "Filtres appliqués");
   loadMatches();
 });
+
+const reloadPage = () => {
+  window.location.reload();
+};
+
+if (appLogo) {
+  appLogo.addEventListener("click", reloadPage);
+  appLogo.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      reloadPage();
+    }
+  });
+}
 
 clearFilters.addEventListener("click", () => {
   filterCv.value = "";
