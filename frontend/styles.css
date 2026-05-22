@@ -741,6 +741,13 @@ body {
   justify-items: start;
 }
 
+.metric--events {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  justify-items: start;
+}
+
 .uptime-animation {
   display: inline-flex;
   align-items: end;
@@ -768,6 +775,100 @@ body {
 .uptime-animation span:nth-child(3) {
   height: 14px;
   animation-delay: 0.3s;
+}
+
+.events-animation {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  padding-left: 12px;
+}
+
+.events-animation::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--metric-accent, var(--accent));
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--metric-accent, var(--accent)) 35%, transparent);
+  animation: watcherPulse 1.6s ease-in-out infinite;
+}
+
+.events-animation::after {
+  content: "";
+  width: 52px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--metric-accent, var(--accent)) 75%, #ffffff), transparent);
+  opacity: 0.9;
+  animation: watcherSweep 1.8s ease-in-out infinite;
+}
+
+.events-animation span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--metric-accent, var(--accent));
+  opacity: 0.85;
+  animation: watcherBlink 1.2s ease-in-out infinite;
+}
+
+.events-animation span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.events-animation span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.events-animation span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.events-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+@keyframes watcherPulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--metric-accent, var(--accent)) 35%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--metric-accent, var(--accent)) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--metric-accent, var(--accent)) 0%, transparent);
+  }
+}
+
+@keyframes watcherSweep {
+  0%, 100% {
+    transform: scaleX(0.82);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes watcherBlink {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
 }
 
 .uptime-label {
