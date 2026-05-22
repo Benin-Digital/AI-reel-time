@@ -525,10 +525,11 @@ body {
 }
 
 .upload-card {
-  border: 1px dashed #c7d6dd;
-  border-radius: 14px;
-  padding: 12px;
-  background: #ffffff;
+  border: 1px solid #c7d6dd;
+  border-radius: 18px;
+  padding: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfc 100%);
+  box-shadow: 0 12px 28px rgba(20, 32, 35, 0.08);
   display: grid;
   gap: 10px;
 }
@@ -539,27 +540,48 @@ body {
   align-items: center;
   justify-content: space-between;
   grid-template-columns: 1fr auto;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #f7fbfa;
-  border: 1px dashed #bfd4da;
+  padding: 18px 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f4fbf7 0%, #eef7fb 100%);
+  border: 2px dashed #9fbfc9;
   cursor: pointer;
+  min-height: 110px;
 }
 
 .upload-zone h4 {
-  margin: 0 0 4px;
-  font-size: 15px;
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 800;
 }
 
 .upload-zone p {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 42ch;
+}
+
+.upload-zone button,
+.upload-zone .ghost {
+  min-width: 170px;
+  padding: 13px 18px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border: none;
+  box-shadow: 0 12px 24px rgba(10, 107, 59, 0.22);
+}
+
+.upload-zone button:hover,
+.upload-zone .ghost:hover {
+  box-shadow: 0 14px 28px rgba(10, 107, 59, 0.28);
 }
 
 .upload-zone.is-dragging {
   background: #e6f3ee;
-  border-color: #8fc5ac;
+  border-color: #5ca67d;
 }
 
 .upload-status {
@@ -1672,6 +1694,16 @@ body {
   .api-config input {
     flex: 1;
     min-width: 120px;
+  }
+
+  .upload-zone {
+    grid-template-columns: 1fr;
+  }
+
+  .upload-zone button,
+  .upload-zone .ghost {
+    width: 100%;
+    min-width: 0;
   }
 
   .workspace-switcher {
