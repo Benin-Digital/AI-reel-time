@@ -163,6 +163,8 @@ class UserRead(BaseModel):
 
     id: int
     email: str
+    first_name: str | None = None
+    last_name: str | None = None
     role: str
     is_active: bool
     created_at: datetime
@@ -172,6 +174,8 @@ class UserRead(BaseModel):
 class UserCreate(BaseModel):
     email: str
     password: str
+    first_name: str | None = None
+    last_name: str | None = None
     role: Literal["admin", "member"] = "member"
 
 

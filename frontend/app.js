@@ -15,6 +15,8 @@ const adminPanel = document.getElementById("adminPanel");
 const adminUsersList = document.getElementById("adminUsersList");
 const adminCreateUserForm = document.getElementById("adminCreateUserForm");
 const adminUserEmail = document.getElementById("adminUserEmail");
+const adminUserFirst = document.getElementById("adminUserFirst");
+const adminUserLast = document.getElementById("adminUserLast");
 const adminUserPassword = document.getElementById("adminUserPassword");
 const adminUserRole = document.getElementById("adminUserRole");
 const adminCreateUserError = document.getElementById("adminCreateUserError");
@@ -494,7 +496,8 @@ const updateAuthUi = () => {
     return;
   }
   if (authUser) {
-    authStatus.textContent = `${authUser.email} (${authUser.role})`;
+    const displayName = authUser.first_name || authUser.last_name ? `${authUser.first_name || ""} ${authUser.last_name || ""}`.trim() : authUser.email;
+    authStatus.textContent = `${displayName} (${authUser.role})`;
   } else {
     authStatus.textContent = "Accès restreint";
   }
@@ -610,7 +613,7 @@ const renderAdminUsers = (users) => {
     .map((user) => `
       <article class="admin-user-card">
         <div>
-          <strong>${user.email}</strong>
+          <strong>${user.first_name || user.last_name ? `${user.first_name || ""} ${user.last_name || ""}`.trim() : user.email}</strong>
           <div class="admin-user-meta">Créé le ${new Date(user.created_at).toLocaleString("fr-FR")}</div>
         </div>
         <div class="admin-user-controls" data-user-card="${user.id}">
@@ -643,7 +646,7 @@ const loadAdminUsers = async () => {
   syncAdminRoleOptions();
 };
 
-const createAdminUser = async (email, password, role) => {
+const createAdminUser = async (email, firstName, lastName, password, role) => {
   clearAdminError();
   if (!canManageUsers()) {
     throw new Error("Accès admin requis.");
@@ -653,7 +656,7 @@ const createAdminUser = async (email, password, role) => {
   }
   await safeFetch("/auth/users", {
     method: "POST",
-    body: JSON.stringify({ email, password, role }),
+    body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName, role }),
     json: true,
   });
   await loadAdminUsers();
@@ -2187,6 +2190,8 @@ if (adminCreateUserForm) {
     try {
       await createAdminUser(
         adminUserEmail.value.trim(),
+        adminUserFirst.value.trim(),
+        adminUserLast.value.trim(),
         adminUserPassword.value,
         adminUserRole ? adminUserRole.value : "member",
       );

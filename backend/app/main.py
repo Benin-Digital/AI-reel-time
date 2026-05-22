@@ -973,6 +973,8 @@ def create_user(payload: UserCreate, request: Request) -> UserRead:
         user = User(
             email=payload.email,
             password_hash=hash_password(payload.password),
+            first_name=payload.first_name,
+            last_name=payload.last_name,
             role=payload.role,
             is_active=True,
         )
