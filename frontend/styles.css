@@ -1102,7 +1102,7 @@ body {
 .match-grid {
   width: 100%;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  align-items: stretch;
+  align-items: start;
 }
 
 .match-card {

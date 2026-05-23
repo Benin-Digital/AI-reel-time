@@ -93,8 +93,8 @@ const tabs = Array.from(document.querySelectorAll(".workspace-switcher__button")
 const panelViews = Array.from(document.querySelectorAll(".panel-view"));
 const documentSelection = { cv: null, job: null };
 const documentPreviewState = {
-  cv: { objectUrl: null },
-  job: { objectUrl: null },
+  cv: { objectUrl: null, previewMode: "text" },
+  job: { objectUrl: null, previewMode: "text" },
 };
 
 let apiBase = localStorage.getItem("apiBase") || "";
@@ -406,9 +406,13 @@ const clearDocumentPdfUrl = (kind) => {
 
 const setDocumentPreviewMode = (target, mode) => {
   const nextMode = mode === "pdf" ? "pdf" : "text";
+  const kind = target.querySelector("[data-document-kind]")?.getAttribute("data-document-kind");
   const textPanel = target.querySelector('[data-document-preview-panel="text"]');
   const pdfPanel = target.querySelector('[data-document-preview-panel="pdf"]');
   const toggleButton = target.querySelector('[data-document-preview-toggle]');
+  if (kind && documentPreviewState[kind]) {
+    documentPreviewState[kind].previewMode = nextMode;
+  }
   if (textPanel) {
     textPanel.hidden = nextMode !== "text";
   }
@@ -713,7 +717,11 @@ const clearLoginError = () => {
 };
 
 const setSelectedDocument = (kind, id) => {
-  documentSelection[kind] = String(id);
+  const nextId = String(id);
+  if (documentSelection[kind] !== nextId) {
+    documentPreviewState[kind].previewMode = "text";
+  }
+  documentSelection[kind] = nextId;
 };
 
 const setActivePanel = (panelName) => {
@@ -1511,7 +1519,7 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
 
   target.classList.remove("hidden");
   target.innerHTML = `
-    <article class="detail-card ${statusTone.className}">
+    <article class="detail-card ${statusTone.className}" data-document-kind="${kind}">
       <div class="detail-card__top">
         <div>
           <strong class="detail-card__title">${doc.path}</strong>
@@ -1607,7 +1615,7 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
 
   const previewToggle = target.querySelector("[data-document-preview-toggle]");
   if (previewToggle) {
-    const previewMode = hasPdf ? "text" : "text";
+    const previewMode = documentPreviewState[kind]?.previewMode || "text";
     setDocumentPreviewMode(target, previewMode);
     previewToggle.addEventListener("click", async () => {
       const currentMode = target.dataset.previewMode === "pdf" ? "pdf" : "text";
