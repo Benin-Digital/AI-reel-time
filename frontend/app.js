@@ -92,6 +92,7 @@ const applyJobFilters = document.getElementById("applyJobFilters");
 const tabs = Array.from(document.querySelectorAll(".workspace-switcher__button"));
 const panelViews = Array.from(document.querySelectorAll(".panel-view"));
 const documentSelection = { cv: null, job: null };
+const matchDetailsState = Object.create(null);
 const documentPreviewState = {
   cv: { objectUrl: null, previewMode: "text" },
   job: { objectUrl: null, previewMode: "text" },
@@ -1027,8 +1028,8 @@ const documentStatusTone = (status) => {
   return { className: "doc-status doc-status--pending", label: "En attente" };
 };
 
-const renderDetailsAccordion = (title, details, open = false) => `
-  <details class="match-details" ${open ? "open" : ""}>
+const renderDetailsAccordion = (title, details, open = false, matchId = "") => `
+  <details class="match-details" data-match-details="${matchId}" ${open ? "open" : ""}>
     <summary>
       <span>${title}</span>
       <span class="chevron">⌄</span>
@@ -1128,7 +1129,8 @@ const renderMatchCard = (match) => {
             ${renderKeywordChips(keywords)}
           </div>
         `,
-        score >= 85,
+        Boolean(matchDetailsState[String(match.id)]) || score >= 85,
+        match.id,
       )}
 
       <div class="match-card__actions">
@@ -1393,6 +1395,19 @@ const renderMatches = (matches, target) => {
             panel.innerHTML = `<div class="doc-card__error doc-card__error--large">${message}</div>`;
           });
       }
+    });
+  });
+
+  target.querySelectorAll("[data-match-details]").forEach((details) => {
+    const matchId = details.getAttribute("data-match-details");
+    if (!matchId) {
+      return;
+    }
+
+    matchDetailsState[matchId] = details.open;
+
+    details.addEventListener("toggle", () => {
+      matchDetailsState[matchId] = details.open;
     });
   });
 };
