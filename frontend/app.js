@@ -437,6 +437,19 @@ const loadDocumentPdfPreview = async (kind, docId, iframe, loadingNode) => {
   if (iframe.dataset.pdfLoading === "true") {
     return;
   }
+  const state = documentPreviewState[kind] || {};
+  // If we're already in PDF preview mode and the iframe already has
+  // the same object URL loaded, don't reload — this prevents the
+  // periodic auto-refresh from reloading the iframe every AUTO_REFRESH_MS.
+  if (state.previewMode === "pdf" && state.objectUrl && iframe.src && iframe.src === state.objectUrl) {
+    if (iframe.isConnected) {
+      iframe.hidden = false;
+    }
+    if (loadingNode) {
+      loadingNode.hidden = true;
+    }
+    return;
+  }
 
   iframe.dataset.pdfLoading = "true";
 
