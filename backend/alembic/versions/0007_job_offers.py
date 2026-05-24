@@ -30,8 +30,6 @@ def upgrade() -> None:
         sa.Column("salary_min", sa.Integer(), nullable=True),
         sa.Column("salary_max", sa.Integer(), nullable=True),
         sa.Column("languages", sa.JSON(), nullable=False),
-        sa.Column("location", sa.String(length=255), nullable=True),
-        sa.Column("headcount", sa.Integer(), nullable=True),
         sa.Column("publish_start", sa.DateTime(timezone=True), nullable=True),
         sa.Column("publish_end", sa.DateTime(timezone=True), nullable=True),
         sa.Column("description", sa.Text(), nullable=False),

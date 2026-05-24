@@ -892,8 +892,6 @@ const buildJobOfferPreviewPayload = (form) => ({
   job_type: form.jobOfferType?.value || null,
   salary_min: parseOptionalInteger(form.jobOfferSalaryMin?.value),
   languages: ["Français"],
-  location: form.jobOfferLocation?.value.trim() || null,
-  headcount: parseOptionalInteger(form.jobOfferHeadcount?.value),
   publish_start: form.jobOfferStart?.value || null,
   publish_end: form.jobOfferEnd?.value || null,
   description: form.jobOfferDescription?.value.trim() || "Aucune description renseignée.",
@@ -942,7 +940,6 @@ const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
     `Département: ${offer.department || "Non renseigné"}`,
     `Catégorie: ${offer.category}`,
     `Type de contrat: ${offer.contract_type}`,
-    `Localisation: ${offer.location || "Non renseigné"}`,
     `Langues: ${(offer.languages || []).join(", ") || "Français"}`,
     `Compétences: ${(offer.skills || []).join(", ") || "Aucune"}`,
     `Contraintes: ${(offer.strong_constraints || []).join(", ") || "Aucune"}`,
@@ -961,7 +958,6 @@ const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
       <div class="detail-card__stats">
         ${renderStat("Contrat", offer.contract_type)}
         ${renderStat("Statut", offer.status === "published" ? "Publié" : "Brouillon")}
-        ${renderStat("Localisation", offer.location || "Non renseigné")}
       </div>
 
       <div class="detail-card__meta-row">

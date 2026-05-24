@@ -491,8 +491,6 @@ def _render_job_offer_text(offer: JobOfferCreate) -> str:
         f"Catégorie: {offer.category}",
         f"Type de contrat: {offer.contract_type}",
         f"Type de poste: {offer.job_type or 'Non renseigné'}",
-        f"Localisation: {offer.location or 'Non renseigné'}",
-        f"Nombre de poste: {_format_optional_number(offer.headcount)}",
         f"Rémunération minimum: {_format_optional_number(offer.salary_min)}",
         f"Langue(s): {', '.join(languages) if languages else 'Français'}",
         f"Méta mots-clés: {', '.join(meta_keywords) if meta_keywords else 'Aucun'}",
@@ -544,8 +542,6 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
       <div class="item"><strong>Catégorie</strong><span>{escape(offer.category)}</span></div>
       <div class="item"><strong>Type de contrat</strong><span>{escape(offer.contract_type)}</span></div>
       <div class="item"><strong>Type de poste</strong><span>{escape(offer.job_type or 'Non renseigné')}</span></div>
-      <div class="item"><strong>Localisation</strong><span>{escape(offer.location or 'Non renseigné')}</span></div>
-      <div class="item"><strong>Nombre de poste</strong><span>{escape(str(offer.headcount) if offer.headcount is not None else 'Non renseigné')}</span></div>
       <div class="item"><strong>Début de publication</strong><span>{escape(_format_optional_datetime(offer.publish_start))}</span></div>
       <div class="item"><strong>Fin de publication</strong><span>{escape(_format_optional_datetime(offer.publish_end))}</span></div>
     </div>
@@ -571,7 +567,6 @@ def _render_job_offer_focus_text(offer: JobOffer) -> str:
         f"Département: {offer.department or 'Non renseigné'}",
         f"Type de contrat: {offer.contract_type}",
         f"Type de poste: {offer.job_type or 'Non renseigné'}",
-        f"Localisation: {offer.location or 'Non renseigné'}",
         f"Méta mots-clés: {', '.join(_normalize_lines(offer.meta_keywords)) or 'Aucun'}",
         f"Compétences requises: {', '.join(_normalize_lines(offer.skills)) or 'Aucune'}",
         f"Contraintes fortes: {', '.join(_normalize_lines(offer.strong_constraints)) or 'Aucune'}",
@@ -1254,8 +1249,6 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
         salary_min=payload.salary_min,
         salary_max=payload.salary_max,
         languages=normalized_languages,
-        location=payload.location.strip() if payload.location else None,
-        headcount=payload.headcount,
         publish_start=payload.publish_start,
         publish_end=payload.publish_end,
         description=payload.description.strip(),
@@ -1281,8 +1274,6 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
             salary_min=offer_input.salary_min,
             salary_max=offer_input.salary_max,
             languages=offer_input.languages,
-            location=offer_input.location,
-            headcount=offer_input.headcount,
             publish_start=offer_input.publish_start,
             publish_end=offer_input.publish_end,
             description=offer_input.description,
