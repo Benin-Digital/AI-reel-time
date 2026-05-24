@@ -377,20 +377,6 @@ body {
   min-width: 180px;
 }
 
-.detail-preview-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.detail-export-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .admin-user-list {
   display: grid;
   gap: 10px;
@@ -1590,6 +1576,16 @@ body {
   overflow: auto;
   border: 1px solid rgba(17, 26, 29, 0.06);
   line-height: 1.55;
+}
+
+.detail-preview pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+}
+
+.job-offer-detail-panel {
+  min-height: 520px;
 }
 
 .detail-matches {

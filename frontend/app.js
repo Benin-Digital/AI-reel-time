@@ -46,6 +46,7 @@ const uploadJobZone = document.getElementById("uploadJobZone");
 const uploadJobInput = document.getElementById("uploadJobInput");
 const uploadJobButton = document.getElementById("uploadJobButton");
 const uploadJobStatus = document.getElementById("uploadJobStatus");
+const jobOfferDetails = document.getElementById("jobOfferDetails");
 const jobOfferForm = document.getElementById("jobOfferForm");
 const jobOfferFeedback = document.getElementById("jobOfferFeedback");
 
@@ -871,6 +872,139 @@ const getDocumentConfig = (kind) => {
 
 const getDocumentLabel = (kind) => (kind === "cv" ? "CV" : "offre");
 
+const formatOfferDate = (value) => {
+  if (!value) {
+    return "Non renseigné";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString("fr-FR");
+};
+
+const buildJobOfferPreviewPayload = (form) => ({
+  title: form.jobOfferTitle?.value.trim() || "Titre de l’offre",
+  meta_keywords: splitOfferItems(form.jobOfferMetaKeywords?.value),
+  department: form.jobOfferDepartment?.value.trim() || null,
+  contract_type: form.jobOfferContractType?.value || "CDI",
+  company: form.jobOfferCompany?.value.trim() || "Société",
+  category: form.jobOfferCategory?.value.trim() || "Catégorie",
+  job_type: form.jobOfferType?.value || null,
+  salary_min: parseOptionalInteger(form.jobOfferSalaryMin?.value),
+  salary_max: parseOptionalInteger(form.jobOfferSalaryMax?.value),
+  salary_period: form.jobOfferSalaryPeriod?.value || null,
+  tjm: parseOptionalInteger(form.jobOfferTjm?.value),
+  languages: splitOfferItems(form.jobOfferLanguages?.value),
+  location: form.jobOfferLocation?.value.trim() || null,
+  headcount: parseOptionalInteger(form.jobOfferHeadcount?.value),
+  publish_start: form.jobOfferStart?.value || null,
+  publish_end: form.jobOfferEnd?.value || null,
+  description: form.jobOfferDescription?.value.trim() || "Aucune description renseignée.",
+  visual_code: form.jobOfferVisualCode?.value.trim() || null,
+  paragraph: form.jobOfferParagraph?.value.trim() || null,
+  skills: splitOfferItems(form.jobOfferSkills?.value),
+  strong_constraints: splitOfferItems(form.jobOfferStrongConstraints?.value),
+  status: form.jobOfferStatus?.value || "published",
+});
+
+const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
+  if (!target) {
+    return;
+  }
+
+  if (!offer) {
+    target.innerHTML = `
+      <article class="detail-card">
+        <div class="meta">Aperçu de l’offre</div>
+        <h4>Remplissez le formulaire</h4>
+        <p class="muted">Le détail de l’offre apparaîtra ici en direct pendant la saisie.</p>
+      </article>
+    `;
+    return;
+  }
+
+  const keywordHtml = (offer.meta_keywords || []).length
+    ? `<div class="chip-row">${offer.meta_keywords.map((keyword) => `<span class="chip">${escapeHtml(keyword)}</span>`).join("")}</div>`
+    : '<p class="meta muted">Aucun méta mot-clé.</p>';
+
+  const skillHtml = (offer.skills || []).length
+    ? `<ul class="explain-list">${offer.skills.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : '<p class="meta muted">Aucune compétence saisie.</p>';
+
+  const constraintHtml = (offer.strong_constraints || []).length
+    ? `<ul class="explain-list">${offer.strong_constraints.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : '<p class="meta muted">Aucune contrainte forte saisie.</p>';
+
+  const renderStat = (label, value) => `
+    <div class="detail-stat">
+      <span class="detail-stat__label">${label}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+
+  const canonicalText = [
+    `Titre: ${offer.title}`,
+    `Entreprise: ${offer.company}`,
+    `Département: ${offer.department || "Non renseigné"}`,
+    `Catégorie: ${offer.category}`,
+    `Type de contrat: ${offer.contract_type}`,
+    `Localisation: ${offer.location || "Non renseigné"}`,
+    `Langues: ${(offer.languages || []).join(", ") || "Français"}`,
+    `Compétences: ${(offer.skills || []).join(", ") || "Aucune"}`,
+    `Contraintes: ${(offer.strong_constraints || []).join(", ") || "Aucune"}`,
+    `Description: ${offer.description}`,
+  ].join("\n");
+
+  target.innerHTML = `
+    <article class="detail-card">
+      <div class="detail-card__top">
+        <div>
+          <strong class="detail-card__title">${escapeHtml(offer.title)}</strong>
+          <div class="doc-card__meta">${escapeHtml(offer.company)}${offer.department ? ` • ${escapeHtml(offer.department)}` : ""}</div>
+        </div>
+      </div>
+
+      <div class="detail-card__stats">
+        ${renderStat("Contrat", offer.contract_type)}
+        ${renderStat("Statut", offer.status === "published" ? "Publié" : "Brouillon")}
+        ${renderStat("Localisation", offer.location || "Non renseigné")}
+      </div>
+
+      <div class="detail-card__meta-row">
+        <div class="doc-card__meta">Catégorie : ${escapeHtml(offer.category)}</div>
+        <div class="doc-card__meta">Début : ${escapeHtml(formatOfferDate(offer.publish_start))}</div>
+        <div class="doc-card__meta">Fin : ${escapeHtml(formatOfferDate(offer.publish_end))}</div>
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Méta mots-clés</div>
+        ${keywordHtml}
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Description du poste</div>
+        <div class="detail-preview">${escapeHtml(offer.description).replace(/\n/g, "<br />")}</div>
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Compétences</div>
+        ${skillHtml}
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Contrainte forte du projet</div>
+        ${constraintHtml}
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Texte canonique pour le matching</div>
+        <div class="detail-preview"><pre>${escapeHtml(canonicalText)}</pre></div>
+      </div>
+    </article>
+  `;
+};
+
 const deleteDocument = async (kind, filename) => {
   await safeFetch("/ingest/delete", {
     method: "POST",
@@ -1052,30 +1186,7 @@ const setOfferFeedback = (message, tone = "info") => {
 };
 
 const createStructuredJobOffer = async (form) => {
-  const payload = {
-    title: form.jobOfferTitle.value.trim(),
-    meta_keywords: splitOfferItems(form.jobOfferMetaKeywords.value),
-    department: form.jobOfferDepartment.value.trim() || null,
-    contract_type: form.jobOfferContractType.value,
-    company: form.jobOfferCompany.value.trim(),
-    category: form.jobOfferCategory.value.trim(),
-    job_type: form.jobOfferType.value || null,
-    salary_min: parseOptionalInteger(form.jobOfferSalaryMin.value),
-    salary_max: parseOptionalInteger(form.jobOfferSalaryMax.value),
-    salary_period: form.jobOfferSalaryPeriod.value || null,
-    tjm: parseOptionalInteger(form.jobOfferTjm.value),
-    languages: splitOfferItems(form.jobOfferLanguages.value),
-    location: form.jobOfferLocation.value.trim() || null,
-    headcount: parseOptionalInteger(form.jobOfferHeadcount.value),
-    publish_start: form.jobOfferStart.value || null,
-    publish_end: form.jobOfferEnd.value || null,
-    description: form.jobOfferDescription.value.trim(),
-    visual_code: form.jobOfferVisualCode.value.trim() || null,
-    paragraph: form.jobOfferParagraph.value.trim() || null,
-    skills: splitOfferItems(form.jobOfferSkills.value),
-    strong_constraints: splitOfferItems(form.jobOfferStrongConstraints.value),
-    status: form.jobOfferStatus.value,
-  };
+  const payload = buildJobOfferPreviewPayload(form);
 
   if (!payload.title || !payload.company || !payload.category || !payload.contract_type || !payload.description) {
     throw new Error("Merci de remplir les champs obligatoires en français.");
@@ -1677,12 +1788,6 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
             <button type="button" class="detail-preview-toggle" data-document-preview-toggle>
               Voir le PDF
             </button>
-            ${kind === "job" ? `
-              <div class="detail-export-actions">
-                <button class="ghost" type="button" data-export-html>Exporter HTML</button>
-                <button class="ghost" type="button" data-export-pdf>Exporter PDF</button>
-              </div>
-            ` : ""}
           </div>
         ` : ""}
 
@@ -1764,47 +1869,6 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
     if (iframe) {
       loadDocumentPdfPreview(kind, doc.id, iframe, loadingNode);
     }
-  }
-
-  // Export buttons (HTML / PDF)
-  const exportHtmlBtn = target.querySelector("[data-export-html]");
-  const exportPdfBtn = target.querySelector("[data-export-pdf]");
-  const exportJobOffer = async (jobDocId, type) => {
-    if (!apiBase) throw new Error("Base API manquante");
-    const url = `${apiBase}/job-offers/by-job/${jobDocId}/export/${type}`;
-    const headers = new Headers();
-    if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
-
-    const response = await fetchWithTimeout(url, { method: "GET", headers });
-    if (response.status === 401) {
-      openModal(loginModal);
-      throw new Error("Authentification requise pour exporter");
-    }
-    if (!response.ok) {
-      throw new Error(`Échec de l'export (${response.status})`);
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const popup = window.open(objectUrl, "_blank");
-    if (!popup) {
-      URL.revokeObjectURL(objectUrl);
-      throw new Error("Impossible d'ouvrir la fenêtre d'export");
-    }
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-  };
-
-  if (exportHtmlBtn) {
-    exportHtmlBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      exportJobOffer(doc.id, "html").catch((err) => console.warn("Export HTML failed:", err));
-    });
-  }
-  if (exportPdfBtn) {
-    exportPdfBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      exportJobOffer(doc.id, "pdf").catch((err) => console.warn("Export PDF failed:", err));
-    });
   }
 
   // Persist this document detail in the dashboard cache
@@ -2234,6 +2298,13 @@ initUploadZone("cv", uploadCvZone, uploadCvInput, uploadCvButton, uploadCvStatus
 initUploadZone("job", uploadJobZone, uploadJobInput, uploadJobButton, uploadJobStatus);
 
 if (jobOfferForm) {
+  const refreshJobOfferPreview = () => {
+    renderJobOfferDetails(buildJobOfferPreviewPayload(jobOfferForm), jobOfferDetails);
+  };
+
+  jobOfferForm.addEventListener("input", refreshJobOfferPreview);
+  jobOfferForm.addEventListener("change", refreshJobOfferPreview);
+
   jobOfferForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     try {
@@ -2241,6 +2312,7 @@ if (jobOfferForm) {
       const createdOffer = await createStructuredJobOffer(jobOfferForm);
       const publishedLabel = createdOffer.status === "published" ? "publiée et indexée" : "enregistrée en brouillon";
       setOfferFeedback(`Offre ${publishedLabel}.`, "success");
+      renderJobOfferDetails(createdOffer, jobOfferDetails);
       if (createdOffer.status === "published") {
         jobOfferForm.reset();
         const languageField = jobOfferForm.querySelector("[name='jobOfferLanguages']");
@@ -2255,6 +2327,8 @@ if (jobOfferForm) {
       setApiStatus(message);
     }
   });
+
+  refreshJobOfferPreview();
 }
 
 const startAutoRefresh = () => {
