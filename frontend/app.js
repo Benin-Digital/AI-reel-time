@@ -47,18 +47,7 @@ const uploadJobInput = document.getElementById("uploadJobInput");
 const uploadJobButton = document.getElementById("uploadJobButton");
 const uploadJobStatus = document.getElementById("uploadJobStatus");
 const jobOfferForm = document.getElementById("jobOfferForm");
-const jobOfferId = document.getElementById("jobOfferId");
-const jobOfferSubmitButton = document.getElementById("jobOfferSubmitButton");
 const jobOfferFeedback = document.getElementById("jobOfferFeedback");
-const jobOffersQuery = document.getElementById("jobOffersQuery");
-const jobOffersStatus = document.getElementById("jobOffersStatus");
-const jobOffersPage = document.getElementById("jobOffersPage");
-const jobOffersPageSize = document.getElementById("jobOffersPageSize");
-const jobOffersPrev = document.getElementById("jobOffersPrev");
-const jobOffersNext = document.getElementById("jobOffersNext");
-const jobOfferList = document.getElementById("jobOfferList");
-const applyJobOffersFilters = document.getElementById("applyJobOffersFilters");
-const refreshJobOffers = document.getElementById("refreshJobOffers");
 
 
 const metricUptime = document.getElementById("metricUptime");
@@ -127,7 +116,6 @@ let autoRefreshTimer = null;
 let autoRefreshDelayMs = AUTO_REFRESH_MS;
 let autoRefreshInFlight = false;
 let activePanel = "cv";
-let jobOfferListCache = [];
 let adminUsersCache = [];
 let isHydratingDashboard = false;
 let pendingDeleteKind = null;
@@ -409,40 +397,6 @@ const buildDocumentPdfUrl = (kind, id) => {
     return "";
   }
   return `${apiBase}/${kind}-documents/${id}/pdf`;
-};
-
-const openAuthenticatedHtmlRoute = async (path) => {
-  if (!apiBase) {
-    throw new Error("Base API manquante");
-  }
-
-  const popup = window.open("", "_blank");
-  if (!popup) {
-    throw new Error("Impossible d’ouvrir la fenêtre d’export");
-  }
-
-  const headers = new Headers();
-  if (authToken) {
-    headers.set("Authorization", `Bearer ${authToken}`);
-  }
-
-  const response = await fetchWithTimeout(`${apiBase}${path}`, { method: "GET", headers });
-  if (response.status === 401) {
-    popup.close();
-    openModal(loginModal);
-    throw new Error("Authentification requise pour accéder à l’export");
-  }
-  if (!response.ok) {
-    popup.close();
-    throw new Error(`Impossible d’ouvrir l’export (${response.status})`);
-  }
-
-  const html = await response.text();
-  popup.document.open();
-  popup.document.write(html);
-  popup.document.close();
-  popup.focus();
-  return popup;
 };
 
 const openAuthenticatedPdf = async (kind, id) => {
@@ -1097,7 +1051,8 @@ const setOfferFeedback = (message, tone = "info") => {
   jobOfferFeedback.dataset.tone = tone;
 };
 
-const buildJobOfferPayloadFromForm = (form) => ({
+const createStructuredJobOffer = async (form) => {
+  const payload = {
     title: form.jobOfferTitle.value.trim(),
     meta_keywords: splitOfferItems(form.jobOfferMetaKeywords.value),
     department: form.jobOfferDepartment.value.trim() || null,
@@ -1120,95 +1075,19 @@ const buildJobOfferPayloadFromForm = (form) => ({
     skills: splitOfferItems(form.jobOfferSkills.value),
     strong_constraints: splitOfferItems(form.jobOfferStrongConstraints.value),
     status: form.jobOfferStatus.value,
-  });
+  };
 
-const submitStructuredJobOffer = async (form) => {
-  const payload = buildJobOfferPayloadFromForm(form);
   if (!payload.title || !payload.company || !payload.category || !payload.contract_type || !payload.description) {
     throw new Error("Merci de remplir les champs obligatoires en français.");
   }
 
-  const offerIdValue = form.jobOfferId?.value?.trim();
-  const isEdit = Boolean(offerIdValue);
-  const response = await safeFetch(isEdit ? `/job-offers/${offerIdValue}` : "/job-offers", {
-    method: isEdit ? "PATCH" : "POST",
+  const response = await safeFetch("/job-offers", {
+    method: "POST",
     body: JSON.stringify(payload),
     json: true,
   });
 
   return response;
-};
-
-const setJobOfferEditorMode = (offerId = "") => {
-  if (jobOfferId) {
-    jobOfferId.value = offerId ? String(offerId) : "";
-  }
-  if (jobOfferSubmitButton) {
-    jobOfferSubmitButton.textContent = offerId ? "Mettre à jour l’offre" : "Enregistrer l’offre";
-  }
-};
-
-const toLocalDatetimeValue = (value) => {
-  if (!value) {
-    return "";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return offsetDate.toISOString().slice(0, 16);
-};
-
-const resetJobOfferForm = () => {
-  if (!jobOfferForm) {
-    return;
-  }
-  jobOfferForm.reset();
-  const languageField = jobOfferForm.querySelector("[name='jobOfferLanguages']");
-  if (languageField) {
-    languageField.value = "Français";
-  }
-  setJobOfferEditorMode("");
-};
-
-const fillJobOfferForm = (offer) => {
-  if (!jobOfferForm || !offer) {
-    return;
-  }
-  const setValue = (name, value) => {
-    const field = jobOfferForm.querySelector(`[name='${name}']`);
-    if (!field) {
-      return;
-    }
-    field.value = value ?? "";
-  };
-
-  setJobOfferEditorMode(String(offer.id));
-  setValue("jobOfferTitle", offer.title);
-  setValue("jobOfferCompany", offer.company);
-  setValue("jobOfferDepartment", offer.department || "");
-  setValue("jobOfferCategory", offer.category);
-  setValue("jobOfferContractType", offer.contract_type);
-  setValue("jobOfferType", offer.job_type || "");
-  setValue("jobOfferSalaryMin", offer.salary_min ?? "");
-  setValue("jobOfferSalaryMax", offer.salary_max ?? "");
-  setValue("jobOfferSalaryPeriod", offer.salary_period || "");
-  setValue("jobOfferTjm", offer.tjm ?? "");
-  setValue("jobOfferLanguages", (offer.languages || []).join(", ") || "Français");
-  setValue("jobOfferLocation", offer.location || "");
-  setValue("jobOfferHeadcount", offer.headcount ?? "");
-  setValue("jobOfferStart", toLocalDatetimeValue(offer.publish_start));
-  setValue("jobOfferEnd", toLocalDatetimeValue(offer.publish_end));
-  setValue("jobOfferMetaKeywords", (offer.meta_keywords || []).join(", "));
-  setValue("jobOfferDescription", offer.description || "");
-  setValue("jobOfferVisualCode", offer.visual_code || "");
-  setValue("jobOfferParagraph", offer.paragraph || "");
-  setValue("jobOfferSkills", (offer.skills || []).join(", "));
-  setValue("jobOfferStrongConstraints", (offer.strong_constraints || []).join(", "));
-  setValue("jobOfferStatus", offer.status || "published");
-  setApiStatus("");
-  setOfferFeedback(`Offre ${offer.id} chargée dans l’éditeur.`, "info");
 };
 
 const initUploadZone = (kind, zone, input, button, statusTarget) => {
@@ -1798,6 +1677,10 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
             <button type="button" class="detail-preview-toggle" data-document-preview-toggle>
               Voir le PDF
             </button>
+            <div class="detail-export-actions">
+              <button class="ghost" type="button" data-export-html>Exporter HTML</button>
+              <button class="ghost" type="button" data-export-pdf>Exporter PDF</button>
+            </div>
           </div>
         ` : ""}
 
@@ -1879,6 +1762,47 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
     if (iframe) {
       loadDocumentPdfPreview(kind, doc.id, iframe, loadingNode);
     }
+  }
+
+  // Export buttons (HTML / PDF)
+  const exportHtmlBtn = target.querySelector("[data-export-html]");
+  const exportPdfBtn = target.querySelector("[data-export-pdf]");
+  const exportJobOffer = async (jobDocId, type) => {
+    if (!apiBase) throw new Error("Base API manquante");
+    const url = `${apiBase}/job-offers/by-job/${jobDocId}/export/${type}`;
+    const headers = new Headers();
+    if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
+
+    const response = await fetchWithTimeout(url, { method: "GET", headers });
+    if (response.status === 401) {
+      openModal(loginModal);
+      throw new Error("Authentification requise pour exporter");
+    }
+    if (!response.ok) {
+      throw new Error(`Échec de l'export (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const popup = window.open(objectUrl, "_blank");
+    if (!popup) {
+      URL.revokeObjectURL(objectUrl);
+      throw new Error("Impossible d'ouvrir la fenêtre d'export");
+    }
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+  };
+
+  if (exportHtmlBtn) {
+    exportHtmlBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      exportJobOffer(doc.id, "html").catch((err) => console.warn("Export HTML failed:", err));
+    });
+  }
+  if (exportPdfBtn) {
+    exportPdfBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      exportJobOffer(doc.id, "pdf").catch((err) => console.warn("Export PDF failed:", err));
+    });
   }
 
   // Persist this document detail in the dashboard cache
@@ -2032,270 +1956,6 @@ const loadJobDocumentsSafe = async () => {
   }
 };
 
-const formatJobOfferCardMeta = (offer) => {
-  const parts = [
-    offer.company,
-    offer.category,
-    offer.department,
-    offer.location,
-    offer.contract_type,
-    offer.status === "published" ? "Publié" : "Brouillon",
-  ].filter(Boolean);
-  return parts.join(" • ");
-};
-
-const renderJobOffers = (offers) => {
-  if (!jobOfferList) {
-    return;
-  }
-  if (!Array.isArray(offers) || !offers.length) {
-    jobOfferList.innerHTML = formatEmpty("Aucune offre RH trouvée.");
-    return;
-  }
-
-  jobOfferList.innerHTML = offers
-    .map((offer) => {
-      const isPublished = offer.status === "published";
-      const statusLabel = isPublished ? "Publié" : "Brouillon";
-      const skills = Array.isArray(offer.skills) ? offer.skills.slice(0, 4) : [];
-      const languages = Array.isArray(offer.languages) && offer.languages.length ? offer.languages.join(", ") : "Français";
-      return `
-        <article class="card job-offer-item ${isPublished ? "job-offer-item--published" : "job-offer-item--draft"}" data-job-offer-id="${offer.id}">
-          <div class="job-offer-item__top">
-            <div>
-              <strong>${offer.title}</strong>
-              <div class="meta">${formatJobOfferCardMeta(offer)}</div>
-            </div>
-            <span class="tone ${isPublished ? "tone--strong" : "tone--medium"}">${statusLabel}</span>
-          </div>
-          <div class="job-offer-item__summary">
-            <div><span>Langue(s)</span><strong>${languages}</strong></div>
-            <div><span>Compétences</span><strong>${skills.length ? skills.join(", ") : "Non renseigné"}</strong></div>
-            <div><span>Publication</span><strong>${offer.publish_start ? new Date(offer.publish_start).toLocaleDateString("fr-FR") : "—"} → ${offer.publish_end ? new Date(offer.publish_end).toLocaleDateString("fr-FR") : "—"}</strong></div>
-          </div>
-          <div class="job-offer-item__actions">
-            <button type="button" class="ghost" data-job-offer-edit="${offer.id}">Modifier</button>
-            <button type="button" class="ghost" data-job-offer-html="${offer.id}">HTML</button>
-            <button type="button" class="ghost" data-job-offer-pdf="${offer.id}">PDF</button>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-
-  jobOfferList.querySelectorAll("[data-job-offer-edit]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const offerId = button.getAttribute("data-job-offer-edit");
-      if (!offerId) {
-        return;
-      }
-      try {
-        const offer = await safeFetch(`/job-offers/${offerId}`);
-        fillJobOfferForm(offer);
-        setActivePanel("job");
-        if (jobOfferForm) {
-          jobOfferForm.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-        loadJobDocuments();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Erreur inconnue";
-        setApiStatus(message);
-      }
-    });
-  });
-
-  jobOfferList.querySelectorAll("[data-job-offer-html]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const offerId = button.getAttribute("data-job-offer-html");
-      if (!offerId) {
-        return;
-      }
-      try {
-        await openAuthenticatedHtmlRoute(`/job-offers/${offerId}/html`);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Erreur inconnue";
-        setApiStatus(message);
-      }
-    });
-  });
-
-  jobOfferList.querySelectorAll("[data-job-offer-pdf]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const offerId = button.getAttribute("data-job-offer-pdf");
-      if (!offerId) {
-        return;
-      }
-      try {
-        await openAuthenticatedHtmlRoute(`/job-offers/${offerId}/pdf`);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Erreur inconnue";
-        setApiStatus(message);
-      }
-    });
-  });
-  // Attach click handler to show details in the RH offers detail panel
-  jobOfferList.querySelectorAll(".job-offer-item").forEach((item) => {
-    item.addEventListener("click", async (ev) => {
-      // ignore clicks on action buttons inside the card
-      if (ev.target.closest("[data-job-offer-edit], [data-job-offer-html], [data-job-offer-pdf]")) {
-        return;
-      }
-      const offerId = item.getAttribute("data-job-offer-id");
-      if (!offerId) return;
-      try {
-        const offer = await safeFetch(`/job-offers/${offerId}`);
-        const detailsTarget = document.getElementById("jobOfferDetails");
-        renderJobOfferDetails(offer, detailsTarget);
-        // ensure the details panel is visible
-        if (detailsTarget) detailsTarget.classList.remove("hidden");
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Erreur inconnue";
-        setApiStatus(message);
-      }
-    });
-  });
-};
-
-const renderJobOfferDetails = (offer, target) => {
-  if (!target) return;
-  if (!offer) {
-    target.innerHTML = '<div class="item"><p class="meta">Aucune offre sélectionnée.</p></div>';
-    return;
-  }
-  const skills = Array.isArray(offer.skills) && offer.skills.length ? offer.skills.join(', ') : '—';
-  const languages = Array.isArray(offer.languages) && offer.languages.length ? offer.languages.join(', ') : 'Français';
-  const constraints = Array.isArray(offer.strong_constraints) && offer.strong_constraints.length ? offer.strong_constraints.join(', ') : 'Aucune';
-  const publishedPath = offer.published_document_path || offer.rendered_path || '';
-
-  target.innerHTML = `
-    <div class="card">
-      <div class="section-header compact">
-        <h4>${escapeHtml(offer.title)}</h4>
-        <div class="meta">${escapeHtml(offer.company || '')} • ${escapeHtml(offer.category || '')} • ${escapeHtml(offer.location || '')}</div>
-      </div>
-      <div class="card-body">
-        <p><strong>Chemin</strong></p>
-        <p class="muted">${escapeHtml(publishedPath || '—')}</p>
-        <p><strong>ID</strong></p>
-        <p class="muted">${String(offer.id)}</p>
-        <p><strong>Mis à jour</strong></p>
-        <p class="muted">${offer.updated_at ? new Date(offer.updated_at).toLocaleString('fr-FR') : '—'}</p>
-        <p><strong>Méthode d’extraction</strong></p>
-        <p class="muted">${offer.extraction?.extraction_method || '—'}</p>
-        <p><strong>Hash du contenu</strong></p>
-        <p class="muted">${offer.rendered_text ? (offer.rendered_text.slice(0,1), '') : '—'}</p>
-        <p><strong>Mots-clés principaux</strong></p>
-        <p class="muted">${(offer.meta_keywords || []).slice(0,10).map(escapeHtml).join(', ') || '—'}</p>
-        <p><strong>Voir le PDF</strong></p>
-        <p><button class="ghost" id="jobOfferOpenPdf">Voir le PDF</button></p>
-        <hr/>
-        <h4>Aperçu de l’offre</h4>
-        <div class="muted">${escapeHtml(offer.rendered_text || offer.description || '—')}</div>
-      </div>
-      <div class="card-actions">
-        <button class="ghost" data-job-offer-edit="${offer.id}">Modifier</button>
-        <button class="ghost" data-job-offer-html="${offer.id}">Ouvrir HTML</button>
-        <button class="ghost" data-job-offer-pdf="${offer.id}">Ouvrir PDF</button>
-      </div>
-      <div class="card-body">
-        <h4>Meilleures correspondances</h4>
-        <div id="jobOfferMatches" class="stack"></div>
-      </div>
-    </div>
-  `;
-
-  // open PDF handler
-  const pdfOpenBtn = target.querySelector('#jobOfferOpenPdf');
-  if (pdfOpenBtn) {
-    pdfOpenBtn.addEventListener('click', async () => {
-      try {
-        await openAuthenticatedHtmlRoute(`/job-offers/${offer.id}/pdf`);
-      } catch (e) {
-        setApiStatus('Impossible d\'ouvrir le PDF');
-      }
-    });
-  }
-
-  // wire the inline action buttons
-  const editBtn = target.querySelector('[data-job-offer-edit]');
-  if (editBtn) {
-    editBtn.addEventListener('click', async () => {
-      try {
-        fillJobOfferForm(offer);
-        setActivePanel('job');
-        if (jobOfferForm) jobOfferForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } catch (e) {
-        setApiStatus(e instanceof Error ? e.message : 'Erreur');
-      }
-    });
-  }
-  const htmlBtn = target.querySelector('[data-job-offer-html]');
-  if (htmlBtn) htmlBtn.addEventListener('click', async () => openAuthenticatedHtmlRoute(`/job-offers/${offer.id}/html`));
-  const pdfBtn = target.querySelector('[data-job-offer-pdf]');
-  if (pdfBtn) pdfBtn.addEventListener('click', async () => openAuthenticatedHtmlRoute(`/job-offers/${offer.id}/pdf`));
-
-  // Load top matches for this offer
-  (async () => {
-    try {
-      const q = buildParams({ job_id: offer.id, page: 1, page_size: 5, sort_by: 'score_desc' });
-      const matches = await safeFetch(`/matches${q}`);
-      const matchesContainer = target.querySelector('#jobOfferMatches');
-      if (matchesContainer) {
-        if (!Array.isArray(matches) || matches.length === 0) {
-          matchesContainer.innerHTML = '<div class="muted">Aucune correspondance trouvée.</div>';
-        } else {
-          matchesContainer.innerHTML = matches.map(renderMatchCard).join('');
-          // attach explain handlers inside the matches block
-          matchesContainer.querySelectorAll('[data-explain]').forEach((btn) => {
-            btn.addEventListener('click', (ev) => {
-              ev.stopPropagation();
-              const matchId = btn.getAttribute('data-explain');
-              if (matchId) {
-                loadMatchExplanation(matchId);
-              }
-            });
-          });
-        }
-      }
-    } catch (e) {
-      // ignore match load failure
-    }
-  })();
-};
-
-const loadJobOffers = async () => {
-  const currentPage = getPageNumber(jobOffersPage);
-  const query = buildParams({
-    page: currentPage,
-    page_size: jobOffersPageSize?.value || 25,
-    status: jobOffersStatus?.value || "",
-    query: jobOffersQuery?.value || "",
-  });
-  const data = await safeFetch(`/job-offers${query}`);
-  if (!data.length && currentPage > 1) {
-    updatePageElement(jobOffersPage, currentPage - 1);
-    return loadJobOffers();
-  }
-  renderJobOffers(data);
-  updatePagerButtons(jobOffersPrev, jobOffersPage);
-  if (jobOffersNext) {
-    jobOffersNext.disabled = !Array.isArray(data) || data.length < Number(jobOffersPageSize?.value || 25);
-  }
-};
-
-const loadJobOffersSafe = async () => {
-  try {
-    await loadJobOffers();
-  } catch (error) {
-    if (error instanceof Error && error.name === "AuthError") {
-      throw error;
-    }
-    if (!isTransientFetchError(error)) {
-      console.warn("Job offer refresh failure:", error);
-    }
-  }
-};
-
 const loadMatchesSafe = async () => {
   try {
     await loadMatches();
@@ -2336,7 +1996,6 @@ const loadAll = async () => {
       metricsPromise,
       loadCvDocumentsSafe(),
       loadJobDocumentsSafe(),
-      loadJobOffersSafe(),
       loadMatchesSafe(),
     ]);
   } catch (error) {
@@ -2461,9 +2120,6 @@ tabs.forEach((tab) => {
       if (panelName === "job") {
         loadJobDocuments();
       }
-      if (panelName === "jobOffers") {
-        loadJobOffers();
-      }
       if (panelName === "matches") {
         loadMatches();
       }
@@ -2580,11 +2236,17 @@ if (jobOfferForm) {
     event.preventDefault();
     try {
       setOfferFeedback("");
-      const createdOffer = await submitStructuredJobOffer(jobOfferForm);
+      const createdOffer = await createStructuredJobOffer(jobOfferForm);
       const publishedLabel = createdOffer.status === "published" ? "publiée et indexée" : "enregistrée en brouillon";
       setOfferFeedback(`Offre ${publishedLabel}.`, "success");
-      resetJobOfferForm();
-      await loadAll();
+      if (createdOffer.status === "published") {
+        jobOfferForm.reset();
+        const languageField = jobOfferForm.querySelector("[name='jobOfferLanguages']");
+        if (languageField) {
+          languageField.value = "Français";
+        }
+        await loadAll();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erreur inconnue";
       setOfferFeedback(message, "error");
@@ -2659,23 +2321,6 @@ matchesNext.addEventListener("click", () => {
   loadMatches();
 });
 
-if (jobOffersPrev) {
-  jobOffersPrev.addEventListener("click", () => {
-    const nextPage = getPageNumber(jobOffersPage) - 1;
-    if (nextPage >= 1) {
-      updatePageElement(jobOffersPage, nextPage);
-      loadJobOffers();
-    }
-  });
-}
-
-if (jobOffersNext) {
-  jobOffersNext.addEventListener("click", () => {
-    updatePageElement(jobOffersPage, getPageNumber(jobOffersPage) + 1);
-    loadJobOffers();
-  });
-}
-
 applyApiButton.addEventListener("click", () => {
   apiBase = apiBaseInput.value.trim();
   localStorage.setItem("apiBase", apiBase);
@@ -2692,21 +2337,6 @@ applyFilters.addEventListener("click", () => {
   flashActionState(applyFilters, "Filtres appliqués");
   loadMatches();
 });
-
-if (applyJobOffersFilters) {
-  applyJobOffersFilters.addEventListener("click", () => {
-    updatePageElement(jobOffersPage, 1);
-    flashActionState(applyJobOffersFilters, "Filtres appliqués");
-    loadJobOffers();
-  });
-}
-
-if (refreshJobOffers) {
-  refreshJobOffers.addEventListener("click", () => {
-    flashActionState(refreshJobOffers, "Rafraîchi");
-    loadJobOffers();
-  });
-}
 
 const reloadPage = () => {
   window.location.reload();
