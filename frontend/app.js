@@ -895,7 +895,7 @@ const buildJobOfferPreviewPayload = (form) => ({
   salary_max: parseOptionalInteger(form.jobOfferSalaryMax?.value),
   salary_period: form.jobOfferSalaryPeriod?.value || null,
   tjm: parseOptionalInteger(form.jobOfferTjm?.value),
-  languages: splitOfferItems(form.jobOfferLanguages?.value),
+  languages: ["Français"],
   location: form.jobOfferLocation?.value.trim() || null,
   headcount: parseOptionalInteger(form.jobOfferHeadcount?.value),
   publish_start: form.jobOfferStart?.value || null,
@@ -2313,10 +2313,6 @@ if (jobOfferForm) {
       renderJobOfferDetails(createdOffer, jobOfferDetails);
       if (createdOffer.status === "published") {
         jobOfferForm.reset();
-        const languageField = jobOfferForm.querySelector("[name='jobOfferLanguages']");
-        if (languageField) {
-          languageField.value = "Français";
-        }
         await loadAll();
       }
     } catch (error) {

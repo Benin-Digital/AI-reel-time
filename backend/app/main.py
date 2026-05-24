@@ -480,7 +480,7 @@ def _format_optional_datetime(value) -> str:
 
 def _render_job_offer_text(offer: JobOfferCreate) -> str:
     meta_keywords = _normalize_lines(offer.meta_keywords)
-    languages = _normalize_lines(offer.languages)
+    languages = _normalize_lines(offer.languages) or ["Français"]
     skills = _normalize_lines(offer.skills)
     strong_constraints = _normalize_lines(offer.strong_constraints)
 
@@ -550,7 +550,6 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
       <div class="item"><strong>Type de poste</strong><span>{escape(offer.job_type or 'Non renseigné')}</span></div>
       <div class="item"><strong>Localisation</strong><span>{escape(offer.location or 'Non renseigné')}</span></div>
       <div class="item"><strong>Nombre de poste</strong><span>{escape(str(offer.headcount) if offer.headcount is not None else 'Non renseigné')}</span></div>
-      <div class="item"><strong>Langue(s)</strong><span>{escape(', '.join(_normalize_lines(offer.languages)) or 'Français')}</span></div>
       <div class="item"><strong>Début de publication</strong><span>{escape(_format_optional_datetime(offer.publish_start))}</span></div>
       <div class="item"><strong>Fin de publication</strong><span>{escape(_format_optional_datetime(offer.publish_end))}</span></div>
     </div>
@@ -578,7 +577,6 @@ def _render_job_offer_focus_text(offer: JobOffer) -> str:
         f"Type de contrat: {offer.contract_type}",
         f"Type de poste: {offer.job_type or 'Non renseigné'}",
         f"Localisation: {offer.location or 'Non renseigné'}",
-        f"Langues prioritaires: {', '.join(_normalize_lines(offer.languages)) or 'Français'}",
         f"Méta mots-clés: {', '.join(_normalize_lines(offer.meta_keywords)) or 'Aucun'}",
         f"Compétences requises: {', '.join(_normalize_lines(offer.skills)) or 'Aucune'}",
         f"Contraintes fortes: {', '.join(_normalize_lines(offer.strong_constraints)) or 'Aucune'}",
@@ -1245,7 +1243,7 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
     _require_admin(request)
 
     normalized_status = payload.status if payload.status in {"draft", "published"} else "published"
-    normalized_languages = _normalize_lines(payload.languages) or ["Français"]
+    normalized_languages = ["Français"]
     normalized_meta_keywords = _normalize_lines(payload.meta_keywords)
     normalized_skills = _normalize_lines(payload.skills)
     normalized_constraints = _normalize_lines(payload.strong_constraints)
