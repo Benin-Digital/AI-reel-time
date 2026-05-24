@@ -901,8 +901,6 @@ const buildJobOfferPreviewPayload = (form) => ({
   publish_start: form.jobOfferStart?.value || null,
   publish_end: form.jobOfferEnd?.value || null,
   description: form.jobOfferDescription?.value.trim() || "Aucune description renseignée.",
-  visual_code: form.jobOfferVisualCode?.value.trim() || null,
-  paragraph: form.jobOfferParagraph?.value.trim() || null,
   skills: splitOfferItems(form.jobOfferSkills?.value),
   strong_constraints: splitOfferItems(form.jobOfferStrongConstraints?.value),
   status: form.jobOfferStatus?.value || "published",

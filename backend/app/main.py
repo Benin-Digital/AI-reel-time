@@ -3,13 +3,12 @@ import json
 from html import escape
 import logging
 from pathlib import Path
-from types import SimpleNamespace
 import tempfile
 from time import perf_counter, time
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from sqlalchemy import delete, func, or_, select, text
@@ -504,12 +503,6 @@ def _render_job_offer_text(offer: JobOfferCreate) -> str:
         f"Début de publication: {_format_optional_datetime(offer.publish_start)}",
         f"Fin de publication: {_format_optional_datetime(offer.publish_end)}",
         "",
-        "VisuelCode",
-        offer.visual_code.strip() if offer.visual_code else "Aucun",
-        "",
-        "Paragraphe",
-        offer.paragraph.strip() if offer.paragraph else "Aucun",
-        "",
         "Description du poste",
         offer.description.strip(),
         "",
@@ -565,10 +558,6 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
     {_list_html(_normalize_lines(offer.meta_keywords))}
     <h2>Description du poste</h2>
     <p>{escape(offer.description).replace('\n', '<br />')}</p>
-    <h2>VisuelCode</h2>
-    <p>{escape(offer.visual_code or 'Aucun').replace('\n', '<br />')}</p>
-    <h2>Paragraphe</h2>
-    <p>{escape(offer.paragraph or 'Aucun').replace('\n', '<br />')}</p>
     <h2>Compétences</h2>
     {_list_html(_normalize_lines(offer.skills))}
     <h2>Contrainte forte du projet</h2>
@@ -594,38 +583,8 @@ def _render_job_offer_focus_text(offer: JobOffer) -> str:
         f"Compétences requises: {', '.join(_normalize_lines(offer.skills)) or 'Aucune'}",
         f"Contraintes fortes: {', '.join(_normalize_lines(offer.strong_constraints)) or 'Aucune'}",
         f"Description du poste: {offer.description}",
-        f"Paragraphe: {offer.paragraph or 'Non renseigné'}",
-        f"VisuelCode: {offer.visual_code or 'Non renseigné'}",
     ]
     return "\n".join(sections).strip()
-
-
-def _model_to_offer_like(offer_model: JobOffer):
-    # Provide a lightweight object with attributes expected by _render_job_offer_html
-    return SimpleNamespace(
-        title=offer_model.title,
-        company=offer_model.company,
-        department=offer_model.department,
-        category=offer_model.category,
-        contract_type=offer_model.contract_type,
-        job_type=offer_model.job_type,
-        location=offer_model.location,
-        headcount=offer_model.headcount,
-        salary_min=offer_model.salary_min,
-        salary_max=offer_model.salary_max,
-        salary_period=offer_model.salary_period,
-        tjm=offer_model.tjm,
-        languages=offer_model.languages or [],
-        meta_keywords=offer_model.meta_keywords or [],
-        publish_start=offer_model.publish_start,
-        publish_end=offer_model.publish_end,
-        visual_code=offer_model.visual_code,
-        paragraph=offer_model.paragraph,
-        description=offer_model.description,
-        skills=offer_model.skills or [],
-        strong_constraints=offer_model.strong_constraints or [],
-    )
-
 
 
 def _vector_match_cv(
@@ -1366,66 +1325,6 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
         _score_against_counterparts(snapshot_path, "job")
 
     return JobOfferRead.model_validate(offer)
-
-
-@app.get("/job-offers/by-job/{job_doc_id}/export/html")
-def export_job_offer_html(job_doc_id: int, request: Request):
-    _require_admin(request)
-    with SessionLocal() as session:
-        job_doc = session.get(JobDocument, job_doc_id)
-        if not job_doc:
-            raise HTTPException(status_code=404, detail="Job document not found")
-        offer = session.scalar(select(JobOffer).where(JobOffer.published_document_path == job_doc.path))
-        if not offer:
-            raise HTTPException(status_code=404, detail="Aucune offre structurée publiée pour ce document")
-
-    html = offer.rendered_html
-    if not html:
-        offer_like = _model_to_offer_like(offer)
-        html = _render_job_offer_html(offer_like, offer.rendered_text or "")
-
-    filename = f"{offer.title[:60].strip().replace(' ', '_')}.html"
-    return HTMLResponse(
-        content=html,
-        status_code=200,
-        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
-    )
-
-
-@app.get("/job-offers/by-job/{job_doc_id}/export/pdf")
-def export_job_offer_pdf(job_doc_id: int, request: Request):
-    _require_admin(request)
-    with SessionLocal() as session:
-        job_doc = session.get(JobDocument, job_doc_id)
-        if not job_doc:
-            raise HTTPException(status_code=404, detail="Job document not found")
-        offer = session.scalar(select(JobOffer).where(JobOffer.published_document_path == job_doc.path))
-        if not offer:
-            raise HTTPException(status_code=404, detail="Aucune offre structurée publiée pour ce document")
-
-    html = offer.rendered_html
-    if not html:
-        offer_like = _model_to_offer_like(offer)
-        html = _render_job_offer_html(offer_like, offer.rendered_text or "")
-
-    try:
-        from weasyprint import HTML
-
-        pdf_bytes = HTML(string=html).write_pdf()
-        filename = f"{offer.title[:60].strip().replace(' ', '_')}.pdf"
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
-        )
-    except Exception as exc:
-        logger.warning("PDF generation failed: %s", exc)
-        fallback_name = f"{offer.title[:60].strip().replace(' ', '_')}.html"
-        return HTMLResponse(
-            content=html,
-            status_code=200,
-            headers={"Content-Disposition": f"attachment; filename=\"{fallback_name}\""},
-        )
 
 
 @app.post("/ingest/delete")
