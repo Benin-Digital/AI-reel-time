@@ -165,8 +165,6 @@ class JobOffer(Base):
     salary_min: Mapped[int | None] = mapped_column(nullable=True)
     salary_max: Mapped[int | None] = mapped_column(nullable=True)
     languages: Mapped[list[str]] = mapped_column(JSON, default=list)
-    publish_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    publish_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     description: Mapped[str] = mapped_column(Text)
     visual_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     paragraph: Mapped[str | None] = mapped_column(Text, nullable=True)

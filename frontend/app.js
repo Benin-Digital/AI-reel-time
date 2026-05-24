@@ -892,8 +892,6 @@ const buildJobOfferPreviewPayload = (form) => ({
   job_type: form.jobOfferType?.value || null,
   salary_min: parseOptionalInteger(form.jobOfferSalaryMin?.value),
   languages: ["Français"],
-  publish_start: form.jobOfferStart?.value || null,
-  publish_end: form.jobOfferEnd?.value || null,
   description: form.jobOfferDescription?.value.trim() || "Aucune description renseignée.",
   skills: splitOfferItems(form.jobOfferSkills?.value),
   strong_constraints: splitOfferItems(form.jobOfferStrongConstraints?.value),
@@ -962,8 +960,6 @@ const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
 
       <div class="detail-card__meta-row">
         <div class="doc-card__meta">Catégorie : ${escapeHtml(offer.category)}</div>
-        <div class="doc-card__meta">Début : ${escapeHtml(formatOfferDate(offer.publish_start))}</div>
-        <div class="doc-card__meta">Fin : ${escapeHtml(formatOfferDate(offer.publish_end))}</div>
       </div>
 
       <div class="detail-card__section">

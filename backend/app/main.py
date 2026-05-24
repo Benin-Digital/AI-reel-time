@@ -494,8 +494,6 @@ def _render_job_offer_text(offer: JobOfferCreate) -> str:
         f"Rémunération minimum: {_format_optional_number(offer.salary_min)}",
         f"Langue(s): {', '.join(languages) if languages else 'Français'}",
         f"Méta mots-clés: {', '.join(meta_keywords) if meta_keywords else 'Aucun'}",
-        f"Début de publication: {_format_optional_datetime(offer.publish_start)}",
-        f"Fin de publication: {_format_optional_datetime(offer.publish_end)}",
         "",
         "Description du poste",
         offer.description.strip(),
@@ -542,8 +540,6 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
       <div class="item"><strong>Catégorie</strong><span>{escape(offer.category)}</span></div>
       <div class="item"><strong>Type de contrat</strong><span>{escape(offer.contract_type)}</span></div>
       <div class="item"><strong>Type de poste</strong><span>{escape(offer.job_type or 'Non renseigné')}</span></div>
-      <div class="item"><strong>Début de publication</strong><span>{escape(_format_optional_datetime(offer.publish_start))}</span></div>
-      <div class="item"><strong>Fin de publication</strong><span>{escape(_format_optional_datetime(offer.publish_end))}</span></div>
     </div>
     <h2>Méta mots-clés</h2>
     {_list_html(_normalize_lines(offer.meta_keywords))}
@@ -1249,8 +1245,6 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
         salary_min=payload.salary_min,
         salary_max=payload.salary_max,
         languages=normalized_languages,
-        publish_start=payload.publish_start,
-        publish_end=payload.publish_end,
         description=payload.description.strip(),
         visual_code=payload.visual_code.strip() if payload.visual_code else None,
         paragraph=payload.paragraph.strip() if payload.paragraph else None,
@@ -1274,8 +1268,6 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
             salary_min=offer_input.salary_min,
             salary_max=offer_input.salary_max,
             languages=offer_input.languages,
-            publish_start=offer_input.publish_start,
-            publish_end=offer_input.publish_end,
             description=offer_input.description,
             visual_code=offer_input.visual_code,
             paragraph=offer_input.paragraph,

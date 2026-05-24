@@ -114,8 +114,6 @@ class JobOfferCreate(BaseModel):
     salary_min: int | None = None
     salary_max: int | None = None
     languages: list[str] = Field(default_factory=list)
-    publish_start: datetime | None = None
-    publish_end: datetime | None = None
     description: str
     visual_code: str | None = None
     paragraph: str | None = None
@@ -138,8 +136,6 @@ class JobOfferRead(BaseModel):
     salary_min: int | None
     salary_max: int | None
     languages: list[str]
-    publish_start: datetime | None
-    publish_end: datetime | None
     description: str
     visual_code: str | None
     paragraph: str | None
