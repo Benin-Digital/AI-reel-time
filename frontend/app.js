@@ -397,6 +397,39 @@ const buildDocumentPdfUrl = (kind, id) => {
   return `${apiBase}/${kind}-documents/${id}/pdf`;
 };
 
+const openAuthenticatedPdf = async (kind, id) => {
+  const pdfUrl = buildDocumentPdfUrl(kind, id);
+  if (!pdfUrl) {
+    throw new Error("Base API manquante");
+  }
+
+  const headers = new Headers();
+  if (authToken) {
+    headers.set("Authorization", `Bearer ${authToken}`);
+  }
+
+  const response = await fetchWithTimeout(pdfUrl, { method: "GET", headers });
+  if (response.status === 401) {
+    openModal(loginModal);
+    throw new Error("Authentification requise pour afficher le PDF");
+  }
+  if (!response.ok) {
+    throw new Error(`Impossible de charger le PDF (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const popup = window.open(objectUrl, "_blank");
+  if (!popup) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error("Impossible d'ouvrir la fenêtre PDF");
+  }
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 60000);
+};
+
 const clearDocumentPdfUrl = (kind) => {
   const state = documentPreviewState[kind];
   if (state && state.objectUrl) {
@@ -1244,10 +1277,7 @@ const renderExplainModal = (data) => {
     const matchId = data.match_id || data.matchId || null;
     if (!matchId) return;
     safeFetch(`/matches/${matchId}`)
-      .then((m) => {
-        const url = buildDocumentPdfUrl("cv", m.cv_id);
-        if (url) window.open(url, "_blank");
-      })
+      .then((m) => openAuthenticatedPdf("cv", m.cv_id))
       .catch((e) => setApiStatus("Impossible d'ouvrir le PDF CV"));
   });
 
@@ -1255,10 +1285,7 @@ const renderExplainModal = (data) => {
     const matchId = data.match_id || data.matchId || null;
     if (!matchId) return;
     safeFetch(`/matches/${matchId}`)
-      .then((m) => {
-        const url = buildDocumentPdfUrl("job", m.job_id);
-        if (url) window.open(url, "_blank");
-      })
+      .then((m) => openAuthenticatedPdf("job", m.job_id))
       .catch((e) => setApiStatus("Impossible d'ouvrir le PDF de l'offre"));
   });
 
