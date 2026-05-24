@@ -104,9 +104,8 @@
         </div>
 
         <div class="workspace-switcher" role="tablist" aria-label="Navigation des bibliothèques">
-          <button id="tabCv" class="workspace-switcher__button is-active" type="button" data-panel="cv" role="tab" aria-selected="true">Bibliothèque CV</button>
-          <button id="tabJob" class="workspace-switcher__button" type="button" data-panel="job" role="tab" aria-selected="false">Bibliothèque offres</button>
-          <button id="tabJobOffers" class="workspace-switcher__button" type="button" data-panel="jobOffers" role="tab" aria-selected="false">Offres RH</button>
+          <button id="tabCv" class="workspace-switcher__button is-active" type="button" data-panel="cv" role="tab" aria-selected="true">Ajout de CV</button>
+          <button id="tabJob" class="workspace-switcher__button" type="button" data-panel="job" role="tab" aria-selected="false">Publication d’offre</button>
           <button id="tabMatches" class="workspace-switcher__button" type="button" data-panel="matches" role="tab" aria-selected="false">Correspondances</button>
           <button id="tabAdmin" class="workspace-switcher__button" type="button" data-panel="admin" role="tab" aria-selected="false" hidden>Administration</button>
         </div>
@@ -120,8 +119,8 @@
                     <div id="uploadCvZone" class="upload-zone" data-kind="cv">
                       <input id="uploadCvInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />
                       <div>
-                        <h4>Ajouter des CV</h4>
-                        <p>Glisser-deposer vos fichiers ici ou choisir depuis votre ordinateur.</p>
+                        <h4>Déposer les CV</h4>
+                        <p>Glisser-déposer vos fichiers ici ou choisir depuis votre ordinateur.</p>
                       </div>
                       <button id="uploadCvButton" class="ghost">Choisir des fichiers</button>
                     </div>
@@ -163,13 +162,135 @@
             <div class="panel-body">
               <div class="document-workspace">
                 <div class="document-list-column">
-                  
+                  <div class="card job-offer-card">
+                    <div class="section-header compact">
+                      <h4>Publier une offre structurée</h4>
+                      <p>Renseignez l’offre en français pour générer une fiche propre, exportable en HTML/PDF et exploitable par le matching.</p>
+                    </div>
+                    <form id="jobOfferForm" class="job-offer-form">
+                      <div class="job-offer-form__grid">
+                        <label>
+                          Titre *
+                          <input id="jobOfferTitle" name="jobOfferTitle" type="text" placeholder="Ex. Développeur Python Senior" required />
+                        </label>
+                        <label>
+                          Société *
+                          <input id="jobOfferCompany" name="jobOfferCompany" type="text" placeholder="Ex. Aïrealtime" required />
+                        </label>
+                        <label>
+                          Département
+                          <input id="jobOfferDepartment" name="jobOfferDepartment" type="text" placeholder="Ex. Tech / Produit" />
+                        </label>
+                        <label>
+                          Catégorie *
+                          <input id="jobOfferCategory" name="jobOfferCategory" type="text" placeholder="Ex. Développeur" required />
+                        </label>
+                        <label>
+                          CDD/CDI *
+                          <select id="jobOfferContractType" name="jobOfferContractType" required>
+                            <option value="CDD">CDD</option>
+                            <option value="CDI" selected>CDI</option>
+                            <option value="Freelance">Freelance</option>
+                            <option value="Stage">Stage</option>
+                          </select>
+                        </label>
+                        <label>
+                          Type
+                          <select id="jobOfferType" name="jobOfferType">
+                            <option value="">Non renseigné</option>
+                            <option value="Temps plein" selected>Temps plein</option>
+                            <option value="Temps partiel">Temps partiel</option>
+                            <option value="Hybride">Hybride</option>
+                            <option value="Télétravail">Télétravail</option>
+                          </select>
+                        </label>
+                        <label>
+                          Salaire minimum
+                          <input id="jobOfferSalaryMin" name="jobOfferSalaryMin" type="number" min="0" placeholder="1000" />
+                        </label>
+                        <label>
+                          Salaire maximum
+                          <input id="jobOfferSalaryMax" name="jobOfferSalaryMax" type="number" min="0" placeholder="1500" />
+                        </label>
+                        <label>
+                          Période de salaire
+                          <select id="jobOfferSalaryPeriod" name="jobOfferSalaryPeriod">
+                            <option value="">Non renseigné</option>
+                            <option value="Par mois">Par mois</option>
+                            <option value="Par an">Par an</option>
+                            <option value="Par jour">Par jour</option>
+                          </select>
+                        </label>
+                        <label>
+                          TJM
+                          <input id="jobOfferTjm" name="jobOfferTjm" type="number" min="0" placeholder="Ex. 500" />
+                        </label>
+                        <label>
+                          Langue(s)
+                          <input id="jobOfferLanguages" name="jobOfferLanguages" type="text" value="Français" placeholder="Français, Anglais" />
+                        </label>
+                        <label>
+                          Localisation *
+                          <input id="jobOfferLocation" name="jobOfferLocation" type="text" placeholder="Ex. Cotonou, hybride" required />
+                        </label>
+                        <label>
+                          Nombre de poste
+                          <input id="jobOfferHeadcount" name="jobOfferHeadcount" type="number" min="1" placeholder="1" />
+                        </label>
+                        <label>
+                          Début de publication
+                          <input id="jobOfferStart" name="jobOfferStart" type="datetime-local" />
+                        </label>
+                        <label>
+                          Fin de publication
+                          <input id="jobOfferEnd" name="jobOfferEnd" type="datetime-local" />
+                        </label>
+                      </div>
+                      <label>
+                        Méta mots-clés
+                        <textarea id="jobOfferMetaKeywords" name="jobOfferMetaKeywords" rows="3" placeholder="recrutement, ERP, frontend, backend"></textarea>
+                      </label>
+                      <label>
+                        Description du poste *
+                        <textarea id="jobOfferDescription" name="jobOfferDescription" rows="5" placeholder="Décrivez les missions, le contexte et les attentes principales." required></textarea>
+                      </label>
+                      <div class="job-offer-form__grid job-offer-form__grid--stacked">
+                        <label>
+                          VisuelCode
+                          <textarea id="jobOfferVisualCode" name="jobOfferVisualCode" rows="4" placeholder="Bloc visuel ou code du visuel"></textarea>
+                        </label>
+                        <label>
+                          Paragraphe
+                          <textarea id="jobOfferParagraph" name="jobOfferParagraph" rows="4" placeholder="Paragraphe synthétique de l’offre"></textarea>
+                        </label>
+                        <label>
+                          Compétences
+                          <textarea id="jobOfferSkills" name="jobOfferSkills" rows="4" placeholder="Python, FastAPI, PostgreSQL"></textarea>
+                        </label>
+                        <label>
+                          Contrainte forte du projet
+                          <textarea id="jobOfferStrongConstraints" name="jobOfferStrongConstraints" rows="4" placeholder="Disponibilité immédiate, anglais obligatoire, présence locale"></textarea>
+                        </label>
+                      </div>
+                      <div class="job-offer-form__actions">
+                        <label>
+                          Statut
+                          <select id="jobOfferStatus" name="jobOfferStatus">
+                            <option value="draft">Brouillon</option>
+                            <option value="published" selected>Publier maintenant</option>
+                          </select>
+                        </label>
+                        <button class="primary" type="submit">Enregistrer l’offre</button>
+                      </div>
+                    </form>
+                    <div id="jobOfferFeedback" class="upload-status" hidden></div>
+                  </div>
                   <div class="upload-card">
                     <div id="uploadJobZone" class="upload-zone" data-kind="job">
                       <input id="uploadJobInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />
                       <div>
-                        <h4>Ajouter des offres</h4>
-                        <p>Glisser-deposer vos fichiers ici ou choisir depuis votre ordinateur.</p>
+                        <h4>Importer des offres sources</h4>
+                        <p>Glisser-déposer vos fichiers ici ou choisir depuis votre ordinateur.</p>
                       </div>
                       <button id="uploadJobButton" class="ghost">Choisir des fichiers</button>
                     </div>
@@ -199,174 +320,10 @@
                 </div>
                 <aside class="document-detail-column">
                   <div class="document-detail-header">
-                    <h3>Détail de l’offre</h3>
+                    <h3>Détail de l’offre publiée</h3>
                   </div>
                   <div id="jobDetails" class="document-detail-panel hidden"></div>
                 </aside>
-              </div>
-            </div>
-          </section>
-
-          <section class="panel panel-view panel-view--job-offers" data-panel="jobOffers" role="tabpanel" aria-labelledby="tabJobOffers" hidden>
-            <div class="panel-body">
-              <div class="section-header compact">
-                <h3>Gestion des offres RH</h3>
-                <p>Consultez les brouillons et les offres publiées, puis ouvrez l’éditeur français pour les modifier.</p>
-              </div>
-              <div class="card job-offer-card">
-                <div class="section-header compact">
-                  <h4>Publier une offre structurée</h4>
-                  <p>Le formulaire est prioritairement en français et alimente le matching avec des sections métier.</p>
-                </div>
-                <form id="jobOfferForm" class="job-offer-form">
-                  <input id="jobOfferId" name="jobOfferId" type="hidden" value="" />
-                  <div class="job-offer-form__grid">
-                    <label>
-                      Titre *
-                      <input id="jobOfferTitle" name="jobOfferTitle" type="text" placeholder="Ex. Développeur Python Senior" required />
-                    </label>
-                    <label>
-                      Société *
-                      <input id="jobOfferCompany" name="jobOfferCompany" type="text" placeholder="Ex. Aïrealtime" required />
-                    </label>
-                    <label>
-                      Département
-                      <input id="jobOfferDepartment" name="jobOfferDepartment" type="text" placeholder="Ex. Tech / Produit" />
-                    </label>
-                    <label>
-                      Catégorie *
-                      <input id="jobOfferCategory" name="jobOfferCategory" type="text" placeholder="Ex. Développeur" required />
-                    </label>
-                    <label>
-                      CDD/CDI *
-                      <select id="jobOfferContractType" name="jobOfferContractType" required>
-                        <option value="CDD">CDD</option>
-                        <option value="CDI" selected>CDI</option>
-                        <option value="Freelance">Freelance</option>
-                        <option value="Stage">Stage</option>
-                      </select>
-                    </label>
-                    <label>
-                      Type
-                      <select id="jobOfferType" name="jobOfferType">
-                        <option value="">Non renseigné</option>
-                        <option value="Temps plein" selected>Temps plein</option>
-                        <option value="Temps partiel">Temps partiel</option>
-                        <option value="Hybride">Hybride</option>
-                        <option value="Télétravail">Télétravail</option>
-                      </select>
-                    </label>
-                    <label>
-                      Salaire minimum
-                      <input id="jobOfferSalaryMin" name="jobOfferSalaryMin" type="number" min="0" placeholder="1000" />
-                    </label>
-                    <label>
-                      Salaire maximum
-                      <input id="jobOfferSalaryMax" name="jobOfferSalaryMax" type="number" min="0" placeholder="1500" />
-                    </label>
-                    <label>
-                      Période de salaire
-                      <select id="jobOfferSalaryPeriod" name="jobOfferSalaryPeriod">
-                        <option value="">Non renseigné</option>
-                        <option value="Par mois">Par mois</option>
-                        <option value="Par an">Par an</option>
-                        <option value="Par jour">Par jour</option>
-                      </select>
-                    </label>
-                    <label>
-                      TJM
-                      <input id="jobOfferTjm" name="jobOfferTjm" type="number" min="0" placeholder="Ex. 500" />
-                    </label>
-                    <label>
-                      Langue(s)
-                      <input id="jobOfferLanguages" name="jobOfferLanguages" type="text" value="Français" placeholder="Français, Anglais" />
-                    </label>
-                    <label>
-                      Localisation *
-                      <input id="jobOfferLocation" name="jobOfferLocation" type="text" placeholder="Ex. Cotonou, hybride" required />
-                    </label>
-                    <label>
-                      Nombre de poste
-                      <input id="jobOfferHeadcount" name="jobOfferHeadcount" type="number" min="1" placeholder="1" />
-                    </label>
-                    <label>
-                      Début de publication
-                      <input id="jobOfferStart" name="jobOfferStart" type="datetime-local" />
-                    </label>
-                    <label>
-                      Fin de publication
-                      <input id="jobOfferEnd" name="jobOfferEnd" type="datetime-local" />
-                    </label>
-                  </div>
-                  <label>
-                    Méta mots-clés
-                    <textarea id="jobOfferMetaKeywords" name="jobOfferMetaKeywords" rows="3" placeholder="recrutement, ERP, frontend, backend"></textarea>
-                  </label>
-                  <label>
-                    Description du poste *
-                    <textarea id="jobOfferDescription" name="jobOfferDescription" rows="5" placeholder="Décrivez les missions, le contexte et les attentes principales." required></textarea>
-                  </label>
-                  <div class="job-offer-form__grid job-offer-form__grid--stacked">
-                    <label>
-                      VisuelCode
-                      <textarea id="jobOfferVisualCode" name="jobOfferVisualCode" rows="4" placeholder="Bloc visuel ou code du visuel"></textarea>
-                    </label>
-                    <label>
-                      Paragraphe
-                      <textarea id="jobOfferParagraph" name="jobOfferParagraph" rows="4" placeholder="Paragraphe synthétique de l’offre"></textarea>
-                    </label>
-                    <label>
-                      Compétences
-                      <textarea id="jobOfferSkills" name="jobOfferSkills" rows="4" placeholder="Python, FastAPI, PostgreSQL"></textarea>
-                    </label>
-                    <label>
-                      Contrainte forte du projet
-                      <textarea id="jobOfferStrongConstraints" name="jobOfferStrongConstraints" rows="4" placeholder="Disponibilité immédiate, anglais obligatoire, présence locale"></textarea>
-                    </label>
-                  </div>
-                  <div class="job-offer-form__actions">
-                    <label>
-                      Statut
-                      <select id="jobOfferStatus" name="jobOfferStatus">
-                        <option value="draft">Brouillon</option>
-                        <option value="published" selected>Publier maintenant</option>
-                      </select>
-                    </label>
-                    <button id="jobOfferSubmitButton" class="primary" type="submit">Enregistrer l’offre</button>
-                  </div>
-                </form>
-                <div id="jobOfferFeedback" class="upload-status" hidden></div>
-              </div>
-              <div class="document-workspace">
-                <div class="document-list-column">
-                  <div class="filters document-filters">
-                <input id="jobOffersQuery" type="text" placeholder="Rechercher par titre, entreprise, catégorie ou localisation" />
-                <select id="jobOffersStatus">
-                  <option value="">Tous les statuts</option>
-                  <option value="draft">Brouillon</option>
-                  <option value="published">Publié</option>
-                </select>
-                <select id="jobOffersPageSize">
-                  <option value="10">10 / page</option>
-                  <option value="25" selected>25 / page</option>
-                  <option value="50">50 / page</option>
-                </select>
-                <button id="applyJobOffersFilters" class="ghost">Appliquer</button>
-                <button id="refreshJobOffers" class="ghost">Rafraîchir</button>
-              </div>
-                  <div class="pagination-controls document-pagination">
-                <button id="jobOffersPrev" class="ghost">Précédent</button>
-                <span>Page <strong id="jobOffersPage">1</strong></span>
-                <button id="jobOffersNext" class="ghost">Suivant</button>
-              </div>
-                  <div id="jobOfferList" class="stack job-offer-list"></div>
-                </div>
-                <aside class="document-detail-column">
-                <div class="document-detail-header">
-                  <h3>Détail de l'offre RH</h3>
-                </div>
-                <div id="jobOfferDetails" class="document-detail-panel hidden"></div>
-              </aside>
               </div>
             </div>
           </section>

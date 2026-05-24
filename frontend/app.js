@@ -1677,10 +1677,12 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
             <button type="button" class="detail-preview-toggle" data-document-preview-toggle>
               Voir le PDF
             </button>
-            <div class="detail-export-actions">
-              <button class="ghost" type="button" data-export-html>Exporter HTML</button>
-              <button class="ghost" type="button" data-export-pdf>Exporter PDF</button>
-            </div>
+            ${kind === "job" ? `
+              <div class="detail-export-actions">
+                <button class="ghost" type="button" data-export-html>Exporter HTML</button>
+                <button class="ghost" type="button" data-export-pdf>Exporter PDF</button>
+              </div>
+            ` : ""}
           </div>
         ` : ""}
 
