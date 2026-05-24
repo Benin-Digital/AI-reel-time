@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EventCreate(BaseModel):
@@ -99,6 +99,64 @@ class JobDocumentRead(BaseModel):
     content_hash: str | None
     status: str
     last_error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class JobOfferCreate(BaseModel):
+    title: str
+    meta_keywords: list[str] = Field(default_factory=list)
+    department: str | None = None
+    contract_type: str
+    company: str
+    category: str
+    job_type: str | None = None
+    salary_min: int | None = None
+    salary_max: int | None = None
+    salary_period: str | None = None
+    tjm: int | None = None
+    languages: list[str] = Field(default_factory=list)
+    location: str | None = None
+    headcount: int | None = None
+    publish_start: datetime | None = None
+    publish_end: datetime | None = None
+    description: str
+    visual_code: str | None = None
+    paragraph: str | None = None
+    skills: list[str] = Field(default_factory=list)
+    strong_constraints: list[str] = Field(default_factory=list)
+    status: Literal["draft", "published"] = "published"
+
+
+class JobOfferRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    meta_keywords: list[str]
+    department: str | None
+    contract_type: str
+    company: str
+    category: str
+    job_type: str | None
+    salary_min: int | None
+    salary_max: int | None
+    salary_period: str | None
+    tjm: int | None
+    languages: list[str]
+    location: str | None
+    headcount: int | None
+    publish_start: datetime | None
+    publish_end: datetime | None
+    description: str
+    visual_code: str | None
+    paragraph: str | None
+    skills: list[str]
+    strong_constraints: list[str]
+    status: str
+    rendered_text: str
+    rendered_html: str | None
+    published_document_path: str | None
     created_at: datetime
     updated_at: datetime
 

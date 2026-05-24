@@ -17,7 +17,7 @@ def _split_sentences(text: str) -> list[str]:
 
 def _extract_years(text: str) -> int:
     matches = re.findall(
-        r"(\d{1,2})\s*(?:\+|\-)?\s*(?:years|year|ans|annee|annees)",
+        r"(\d{1,2})\s*(?:\+|\-)?\s*(?:years|year|ans|ann[eé]e?s?)",
         text.lower(),
     )
     values = [int(value) for value in matches if value.isdigit()]

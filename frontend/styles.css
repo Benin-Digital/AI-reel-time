@@ -312,6 +312,71 @@ body {
   outline: none;
 }
 
+.admin-form textarea,
+.job-offer-form textarea,
+.job-offer-form input,
+.job-offer-form select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: #edf1ef;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.job-offer-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.job-offer-form {
+  display: grid;
+  gap: 14px;
+}
+
+.job-offer-form__grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.job-offer-form__grid--stacked {
+  grid-template-columns: 1fr;
+}
+
+.job-offer-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.job-offer-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.job-offer-form__actions {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.job-offer-form__actions label {
+  min-width: 220px;
+  flex: 1 1 220px;
+}
+
+.job-offer-form__actions button {
+  min-width: 180px;
+}
+
 .admin-user-list {
   display: grid;
   gap: 10px;
@@ -1685,6 +1750,10 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .job-offer-form__grid {
+    grid-template-columns: 1fr;
+  }
+
   .doc-row {
     grid-template-columns: 1fr;
   }
@@ -1738,6 +1807,17 @@ body {
   .upload-zone .ghost {
     width: 100%;
     min-width: 0;
+  }
+
+  .job-offer-form__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .job-offer-form__actions label,
+  .job-offer-form__actions button {
+    min-width: 0;
+    width: 100%;
   }
 
   .workspace-switcher {

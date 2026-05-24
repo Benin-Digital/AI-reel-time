@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import json
+from html import escape
 import logging
 from pathlib import Path
 import tempfile
@@ -29,6 +30,7 @@ from .models import (
     MatchResult,
     CvEmbedding,
     JobEmbedding,
+    JobOffer,
     User,
 )
 from .schemas import (
@@ -45,6 +47,8 @@ from .schemas import (
     CvDocumentDetailRead,
     JobDocumentRead,
     JobDocumentDetailRead,
+    JobOfferCreate,
+    JobOfferRead,
     MatchRead,
     SearchRequest,
     SearchHit,
@@ -458,6 +462,143 @@ def _hybrid_score_with_weights(
     return round(combined, 2)
 
 
+def _normalize_lines(values: list[str] | None) -> list[str]:
+    return [value.strip() for value in (values or []) if value and value.strip()]
+
+
+def _format_optional_number(value: int | None, suffix: str = "") -> str:
+    if value is None:
+        return "Non renseigné"
+    return f"{value}{suffix}"
+
+
+def _format_optional_datetime(value) -> str:
+    if value is None:
+        return "Non renseigné"
+    return value.isoformat(sep=" ", timespec="minutes")
+
+
+def _render_job_offer_text(offer: JobOfferCreate) -> str:
+    meta_keywords = _normalize_lines(offer.meta_keywords)
+    languages = _normalize_lines(offer.languages)
+    skills = _normalize_lines(offer.skills)
+    strong_constraints = _normalize_lines(offer.strong_constraints)
+
+    sections = [
+        "OFFRE STRUCTURÉE",
+        f"Titre: {offer.title}",
+        f"Entreprise: {offer.company}",
+        f"Département: {offer.department or 'Non renseigné'}",
+        f"Catégorie: {offer.category}",
+        f"Type de contrat: {offer.contract_type}",
+        f"Type de poste: {offer.job_type or 'Non renseigné'}",
+        f"Localisation: {offer.location or 'Non renseigné'}",
+        f"Nombre de poste: {_format_optional_number(offer.headcount)}",
+        f"Rémunération minimum: {_format_optional_number(offer.salary_min)}",
+        f"Rémunération maximum: {_format_optional_number(offer.salary_max)}",
+        f"Période de salaire: {offer.salary_period or 'Non renseigné'}",
+        f"TJM: {_format_optional_number(offer.tjm)}",
+        f"Langue(s): {', '.join(languages) if languages else 'Français'}",
+        f"Méta mots-clés: {', '.join(meta_keywords) if meta_keywords else 'Aucun'}",
+        f"Début de publication: {_format_optional_datetime(offer.publish_start)}",
+        f"Fin de publication: {_format_optional_datetime(offer.publish_end)}",
+        "",
+        "VisuelCode",
+        offer.visual_code.strip() if offer.visual_code else "Aucun",
+        "",
+        "Paragraphe",
+        offer.paragraph.strip() if offer.paragraph else "Aucun",
+        "",
+        "Description du poste",
+        offer.description.strip(),
+        "",
+        "Compétences",
+        "\n".join(f"- {item}" for item in skills) if skills else "Aucune",
+        "",
+        "Contrainte forte du projet",
+        "\n".join(f"- {item}" for item in strong_constraints) if strong_constraints else "Aucune",
+    ]
+
+    return "\n".join(sections).strip() + "\n"
+
+
+def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
+    def _list_html(values: list[str]) -> str:
+        if not values:
+            return "<p>Aucune</p>"
+        return "<ul>" + "".join(f"<li>{escape(value)}</li>" for value in values) + "</ul>"
+
+    return f"""<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(offer.title)}</title>
+  <style>
+    body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 32px; color: #1b1f1d; background: #f5f7f6; }}
+    .card {{ max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #d9e3df; border-radius: 20px; padding: 28px; box-shadow: 0 24px 70px rgba(22, 34, 28, 0.08); }}
+    h1 {{ margin-top: 0; font-size: 30px; }}
+    h2 {{ margin-top: 24px; font-size: 18px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 18px; }}
+    .item strong {{ display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b746f; margin-bottom: 4px; }}
+    .item span {{ font-size: 15px; }}
+    ul {{ margin: 8px 0 0 18px; }}
+    pre {{ white-space: pre-wrap; background: #f0f4f2; border-radius: 14px; padding: 16px; border: 1px solid #d9e3df; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>{escape(offer.title)}</h1>
+    <p>{escape(offer.company)}{f" - {escape(offer.department)}" if offer.department else ""}</p>
+    <div class="grid">
+      <div class="item"><strong>Catégorie</strong><span>{escape(offer.category)}</span></div>
+      <div class="item"><strong>Type de contrat</strong><span>{escape(offer.contract_type)}</span></div>
+      <div class="item"><strong>Type de poste</strong><span>{escape(offer.job_type or 'Non renseigné')}</span></div>
+      <div class="item"><strong>Localisation</strong><span>{escape(offer.location or 'Non renseigné')}</span></div>
+      <div class="item"><strong>Nombre de poste</strong><span>{escape(str(offer.headcount) if offer.headcount is not None else 'Non renseigné')}</span></div>
+      <div class="item"><strong>Langue(s)</strong><span>{escape(', '.join(_normalize_lines(offer.languages)) or 'Français')}</span></div>
+      <div class="item"><strong>Début de publication</strong><span>{escape(_format_optional_datetime(offer.publish_start))}</span></div>
+      <div class="item"><strong>Fin de publication</strong><span>{escape(_format_optional_datetime(offer.publish_end))}</span></div>
+    </div>
+    <h2>Méta mots-clés</h2>
+    {_list_html(_normalize_lines(offer.meta_keywords))}
+    <h2>Description du poste</h2>
+    <p>{escape(offer.description).replace('\n', '<br />')}</p>
+    <h2>VisuelCode</h2>
+    <p>{escape(offer.visual_code or 'Aucun').replace('\n', '<br />')}</p>
+    <h2>Paragraphe</h2>
+    <p>{escape(offer.paragraph or 'Aucun').replace('\n', '<br />')}</p>
+    <h2>Compétences</h2>
+    {_list_html(_normalize_lines(offer.skills))}
+    <h2>Contrainte forte du projet</h2>
+    {_list_html(_normalize_lines(offer.strong_constraints))}
+    <h2>Texte canonique de matching</h2>
+    <pre>{escape(rendered_text)}</pre>
+  </div>
+</body>
+</html>"""
+
+
+def _render_job_offer_focus_text(offer: JobOffer) -> str:
+    sections = [
+        f"Titre du poste: {offer.title}",
+        f"Entreprise: {offer.company}",
+        f"Catégorie: {offer.category}",
+        f"Département: {offer.department or 'Non renseigné'}",
+        f"Type de contrat: {offer.contract_type}",
+        f"Type de poste: {offer.job_type or 'Non renseigné'}",
+        f"Localisation: {offer.location or 'Non renseigné'}",
+        f"Langues prioritaires: {', '.join(_normalize_lines(offer.languages)) or 'Français'}",
+        f"Méta mots-clés: {', '.join(_normalize_lines(offer.meta_keywords)) or 'Aucun'}",
+        f"Compétences requises: {', '.join(_normalize_lines(offer.skills)) or 'Aucune'}",
+        f"Contraintes fortes: {', '.join(_normalize_lines(offer.strong_constraints)) or 'Aucune'}",
+        f"Description du poste: {offer.description}",
+        f"Paragraphe: {offer.paragraph or 'Non renseigné'}",
+        f"VisuelCode: {offer.visual_code or 'Non renseigné'}",
+    ]
+    return "\n".join(sections).strip()
+
+
 def _vector_match_cv(
     cv_doc: CvDocumentRead,
     extraction: ExtractedTextRead,
@@ -528,6 +669,12 @@ def _vector_match_job(
 
     _upsert_job_embedding(job_doc.id, extraction.content_hash, vector)
 
+    structured_offer = None
+    with SessionLocal() as session:
+        structured_offer = session.scalar(
+            select(JobOffer).where(JobOffer.published_document_path == job_doc.path)
+        )
+
     with SessionLocal() as session:
         distance = CvEmbedding.embedding.cosine_distance(vector).label("distance")
         rows = session.execute(
@@ -552,6 +699,14 @@ def _vector_match_job(
         common: list[str] = []
         if cv_text:
             lexical_score, common = score_texts(cv_text, text_value)
+            if structured_offer is not None:
+                structured_score, structured_common = score_texts(
+                    cv_text,
+                    _render_job_offer_focus_text(structured_offer),
+                )
+                if structured_score > lexical_score:
+                    lexical_score = structured_score
+                    common = structured_common
         vector_score = _vector_score(float(row.distance))
         score = _hybrid_score(vector_score, lexical_score)
         _insert_score_result(Path(row.path), Path(job_doc.path), score, common)
@@ -1095,6 +1250,93 @@ def ingest_file(
         "status": "stored",
         "path": str(target_path),
     }
+
+
+@app.post("/job-offers", response_model=JobOfferRead)
+def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
+    _require_admin(request)
+
+    normalized_status = payload.status if payload.status in {"draft", "published"} else "published"
+    normalized_languages = _normalize_lines(payload.languages) or ["Français"]
+    normalized_meta_keywords = _normalize_lines(payload.meta_keywords)
+    normalized_skills = _normalize_lines(payload.skills)
+    normalized_constraints = _normalize_lines(payload.strong_constraints)
+
+    offer_input = JobOfferCreate(
+        title=payload.title.strip(),
+        meta_keywords=normalized_meta_keywords,
+        department=payload.department.strip() if payload.department else None,
+        contract_type=payload.contract_type.strip(),
+        company=payload.company.strip(),
+        category=payload.category.strip(),
+        job_type=payload.job_type.strip() if payload.job_type else None,
+        salary_min=payload.salary_min,
+        salary_max=payload.salary_max,
+        salary_period=payload.salary_period.strip() if payload.salary_period else None,
+        tjm=payload.tjm,
+        languages=normalized_languages,
+        location=payload.location.strip() if payload.location else None,
+        headcount=payload.headcount,
+        publish_start=payload.publish_start,
+        publish_end=payload.publish_end,
+        description=payload.description.strip(),
+        visual_code=payload.visual_code.strip() if payload.visual_code else None,
+        paragraph=payload.paragraph.strip() if payload.paragraph else None,
+        skills=normalized_skills,
+        strong_constraints=normalized_constraints,
+        status=normalized_status,
+    )
+
+    rendered_text = _render_job_offer_text(offer_input)
+    rendered_html = _render_job_offer_html(offer_input, rendered_text)
+
+    with SessionLocal() as session:
+        offer = JobOffer(
+            title=offer_input.title,
+            meta_keywords=offer_input.meta_keywords,
+            department=offer_input.department,
+            contract_type=offer_input.contract_type,
+            company=offer_input.company,
+            category=offer_input.category,
+            job_type=offer_input.job_type,
+            salary_min=offer_input.salary_min,
+            salary_max=offer_input.salary_max,
+            salary_period=offer_input.salary_period,
+            tjm=offer_input.tjm,
+            languages=offer_input.languages,
+            location=offer_input.location,
+            headcount=offer_input.headcount,
+            publish_start=offer_input.publish_start,
+            publish_end=offer_input.publish_end,
+            description=offer_input.description,
+            visual_code=offer_input.visual_code,
+            paragraph=offer_input.paragraph,
+            skills=offer_input.skills,
+            strong_constraints=offer_input.strong_constraints,
+            status=offer_input.status,
+            rendered_text=rendered_text,
+            rendered_html=rendered_html,
+            published_document_path=None,
+        )
+        session.add(offer)
+        session.commit()
+        session.refresh(offer)
+
+        snapshot_path = None
+        if offer.status == "published":
+            job_root = Path(settings.watch_job_dir)
+            job_root.mkdir(parents=True, exist_ok=True)
+            snapshot_path = job_root / f"offre-structuree-{offer.id}.txt"
+            snapshot_path.write_text(rendered_text, encoding="utf-8")
+            offer.published_document_path = str(snapshot_path)
+            session.add(offer)
+            session.commit()
+            session.refresh(offer)
+
+    if snapshot_path is not None:
+        _score_against_counterparts(snapshot_path, "job")
+
+    return JobOfferRead.model_validate(offer)
 
 
 @app.post("/ingest/delete")

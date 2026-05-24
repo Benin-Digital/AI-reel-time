@@ -162,6 +162,129 @@
             <div class="panel-body">
               <div class="document-workspace">
                 <div class="document-list-column">
+                  <div class="card job-offer-card">
+                    <div class="section-header compact">
+                      <h4>Publier une offre structurée</h4>
+                      <p>Le formulaire est prioritairement en français et alimente le matching avec des sections métier.</p>
+                    </div>
+                    <form id="jobOfferForm" class="job-offer-form">
+                      <div class="job-offer-form__grid">
+                        <label>
+                          Titre *
+                          <input id="jobOfferTitle" name="jobOfferTitle" type="text" placeholder="Ex. Développeur Python Senior" required />
+                        </label>
+                        <label>
+                          Société *
+                          <input id="jobOfferCompany" name="jobOfferCompany" type="text" placeholder="Ex. Aïrealtime" required />
+                        </label>
+                        <label>
+                          Département
+                          <input id="jobOfferDepartment" name="jobOfferDepartment" type="text" placeholder="Ex. Tech / Produit" />
+                        </label>
+                        <label>
+                          Catégorie *
+                          <input id="jobOfferCategory" name="jobOfferCategory" type="text" placeholder="Ex. Développeur" required />
+                        </label>
+                        <label>
+                          CDD/CDI *
+                          <select id="jobOfferContractType" name="jobOfferContractType" required>
+                            <option value="CDD">CDD</option>
+                            <option value="CDI" selected>CDI</option>
+                            <option value="Freelance">Freelance</option>
+                            <option value="Stage">Stage</option>
+                          </select>
+                        </label>
+                        <label>
+                          Type
+                          <select id="jobOfferType" name="jobOfferType">
+                            <option value="">Non renseigné</option>
+                            <option value="Temps plein" selected>Temps plein</option>
+                            <option value="Temps partiel">Temps partiel</option>
+                            <option value="Hybride">Hybride</option>
+                            <option value="Télétravail">Télétravail</option>
+                          </select>
+                        </label>
+                        <label>
+                          Salaire minimum
+                          <input id="jobOfferSalaryMin" name="jobOfferSalaryMin" type="number" min="0" placeholder="1000" />
+                        </label>
+                        <label>
+                          Salaire maximum
+                          <input id="jobOfferSalaryMax" name="jobOfferSalaryMax" type="number" min="0" placeholder="1500" />
+                        </label>
+                        <label>
+                          Période de salaire
+                          <select id="jobOfferSalaryPeriod" name="jobOfferSalaryPeriod">
+                            <option value="">Non renseigné</option>
+                            <option value="Par mois">Par mois</option>
+                            <option value="Par an">Par an</option>
+                            <option value="Par jour">Par jour</option>
+                          </select>
+                        </label>
+                        <label>
+                          TJM
+                          <input id="jobOfferTjm" name="jobOfferTjm" type="number" min="0" placeholder="Ex. 500" />
+                        </label>
+                        <label>
+                          Langue(s)
+                          <input id="jobOfferLanguages" name="jobOfferLanguages" type="text" value="Français" placeholder="Français, Anglais" />
+                        </label>
+                        <label>
+                          Localisation *
+                          <input id="jobOfferLocation" name="jobOfferLocation" type="text" placeholder="Ex. Cotonou, hybride" required />
+                        </label>
+                        <label>
+                          Nombre de poste
+                          <input id="jobOfferHeadcount" name="jobOfferHeadcount" type="number" min="1" placeholder="1" />
+                        </label>
+                        <label>
+                          Début de publication
+                          <input id="jobOfferStart" name="jobOfferStart" type="datetime-local" />
+                        </label>
+                        <label>
+                          Fin de publication
+                          <input id="jobOfferEnd" name="jobOfferEnd" type="datetime-local" />
+                        </label>
+                      </div>
+                      <label>
+                        Méta mots-clés
+                        <textarea id="jobOfferMetaKeywords" name="jobOfferMetaKeywords" rows="3" placeholder="recrutement, ERP, frontend, backend"></textarea>
+                      </label>
+                      <label>
+                        Description du poste *
+                        <textarea id="jobOfferDescription" name="jobOfferDescription" rows="5" placeholder="Décrivez les missions, le contexte et les attentes principales." required></textarea>
+                      </label>
+                      <div class="job-offer-form__grid job-offer-form__grid--stacked">
+                        <label>
+                          VisuelCode
+                          <textarea id="jobOfferVisualCode" name="jobOfferVisualCode" rows="4" placeholder="Bloc visuel ou code du visuel"></textarea>
+                        </label>
+                        <label>
+                          Paragraphe
+                          <textarea id="jobOfferParagraph" name="jobOfferParagraph" rows="4" placeholder="Paragraphe synthétique de l’offre"></textarea>
+                        </label>
+                        <label>
+                          Compétences
+                          <textarea id="jobOfferSkills" name="jobOfferSkills" rows="4" placeholder="Python, FastAPI, PostgreSQL"></textarea>
+                        </label>
+                        <label>
+                          Contrainte forte du projet
+                          <textarea id="jobOfferStrongConstraints" name="jobOfferStrongConstraints" rows="4" placeholder="Disponibilité immédiate, anglais obligatoire, présence locale"></textarea>
+                        </label>
+                      </div>
+                      <div class="job-offer-form__actions">
+                        <label>
+                          Statut
+                          <select id="jobOfferStatus" name="jobOfferStatus">
+                            <option value="draft">Brouillon</option>
+                            <option value="published" selected>Publier maintenant</option>
+                          </select>
+                        </label>
+                        <button class="primary" type="submit">Enregistrer l’offre</button>
+                      </div>
+                    </form>
+                    <div id="jobOfferFeedback" class="upload-status" hidden></div>
+                  </div>
                   <div class="upload-card">
                     <div id="uploadJobZone" class="upload-zone" data-kind="job">
                       <input id="uploadJobInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />

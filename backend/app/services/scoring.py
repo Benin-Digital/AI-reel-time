@@ -123,7 +123,7 @@ def _normalize_token(token: str, synonyms: dict[str, str]) -> str:
 
 
 def _tokenize(text: str, stopwords: set[str], synonyms: dict[str, str]) -> list[str]:
-    tokens = re.findall(r"[a-zA-Z0-9]+", text.lower())
+    tokens = re.findall(r"[^\W_]+", text.lower())
     normalized = (_normalize_token(token, synonyms) for token in tokens)
     return [token for token in normalized if len(token) >= 3 and token not in stopwords]
 
@@ -143,7 +143,7 @@ def _weighted_jaccard(common: set[str], union: set[str], weights: dict[str, floa
 
 
 def _extract_years(text: str) -> int:
-    matches = re.findall(r"(\d{1,2})\s*(?:\+|\-)?\s*(?:years|year|ans|annee|annees)", text.lower())
+    matches = re.findall(r"(\d{1,2})\s*(?:\+|\-)?\s*(?:years|year|ans|ann[eé]e?s?)", text.lower())
     values = [int(value) for value in matches if value.isdigit()]
     return max(values) if values else 0
 

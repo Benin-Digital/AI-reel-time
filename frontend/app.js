@@ -46,6 +46,8 @@ const uploadJobZone = document.getElementById("uploadJobZone");
 const uploadJobInput = document.getElementById("uploadJobInput");
 const uploadJobButton = document.getElementById("uploadJobButton");
 const uploadJobStatus = document.getElementById("uploadJobStatus");
+const jobOfferForm = document.getElementById("jobOfferForm");
+const jobOfferFeedback = document.getElementById("jobOfferFeedback");
 
 
 const metricUptime = document.getElementById("metricUptime");
@@ -1023,6 +1025,69 @@ const handleUploadFiles = async (kind, files, statusTarget) => {
   } else {
     loadJobDocuments();
   }
+};
+
+const splitOfferItems = (value) =>
+  String(value || "")
+    .split(/[\n,;]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const parseOptionalInteger = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? Math.round(parsed) : null;
+};
+
+const setOfferFeedback = (message, tone = "info") => {
+  if (!jobOfferFeedback) {
+    return;
+  }
+  jobOfferFeedback.hidden = !message;
+  jobOfferFeedback.textContent = message || "";
+  jobOfferFeedback.dataset.tone = tone;
+};
+
+const createStructuredJobOffer = async (form) => {
+  const payload = {
+    title: form.jobOfferTitle.value.trim(),
+    meta_keywords: splitOfferItems(form.jobOfferMetaKeywords.value),
+    department: form.jobOfferDepartment.value.trim() || null,
+    contract_type: form.jobOfferContractType.value,
+    company: form.jobOfferCompany.value.trim(),
+    category: form.jobOfferCategory.value.trim(),
+    job_type: form.jobOfferType.value || null,
+    salary_min: parseOptionalInteger(form.jobOfferSalaryMin.value),
+    salary_max: parseOptionalInteger(form.jobOfferSalaryMax.value),
+    salary_period: form.jobOfferSalaryPeriod.value || null,
+    tjm: parseOptionalInteger(form.jobOfferTjm.value),
+    languages: splitOfferItems(form.jobOfferLanguages.value),
+    location: form.jobOfferLocation.value.trim() || null,
+    headcount: parseOptionalInteger(form.jobOfferHeadcount.value),
+    publish_start: form.jobOfferStart.value || null,
+    publish_end: form.jobOfferEnd.value || null,
+    description: form.jobOfferDescription.value.trim(),
+    visual_code: form.jobOfferVisualCode.value.trim() || null,
+    paragraph: form.jobOfferParagraph.value.trim() || null,
+    skills: splitOfferItems(form.jobOfferSkills.value),
+    strong_constraints: splitOfferItems(form.jobOfferStrongConstraints.value),
+    status: form.jobOfferStatus.value,
+  };
+
+  if (!payload.title || !payload.company || !payload.category || !payload.contract_type || !payload.description) {
+    throw new Error("Merci de remplir les champs obligatoires en français.");
+  }
+
+  const response = await safeFetch("/job-offers", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    json: true,
+  });
+
+  return response;
 };
 
 const initUploadZone = (kind, zone, input, button, statusTarget) => {
@@ -2120,6 +2185,30 @@ if (deleteConfirmConfirmBtn) {
 
 initUploadZone("cv", uploadCvZone, uploadCvInput, uploadCvButton, uploadCvStatus);
 initUploadZone("job", uploadJobZone, uploadJobInput, uploadJobButton, uploadJobStatus);
+
+if (jobOfferForm) {
+  jobOfferForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      setOfferFeedback("");
+      const createdOffer = await createStructuredJobOffer(jobOfferForm);
+      const publishedLabel = createdOffer.status === "published" ? "publiée et indexée" : "enregistrée en brouillon";
+      setOfferFeedback(`Offre ${publishedLabel}.`, "success");
+      if (createdOffer.status === "published") {
+        jobOfferForm.reset();
+        const languageField = jobOfferForm.querySelector("[name='jobOfferLanguages']");
+        if (languageField) {
+          languageField.value = "Français";
+        }
+        await loadAll();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erreur inconnue";
+      setOfferFeedback(message, "error");
+      setApiStatus(message);
+    }
+  });
+}
 
 const startAutoRefresh = () => {
   clearAutoRefreshTimer();
