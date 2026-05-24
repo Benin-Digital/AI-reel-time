@@ -108,7 +108,7 @@ class JobOfferCreate(BaseModel):
     meta_keywords: list[str] = Field(default_factory=list)
     department: str | None = None
     contract_type: str
-    company: str
+    company: str | None = None
     category: str
     job_type: str | None = None
     salary_min: int | None = None
@@ -126,31 +126,6 @@ class JobOfferCreate(BaseModel):
     skills: list[str] = Field(default_factory=list)
     strong_constraints: list[str] = Field(default_factory=list)
     status: Literal["draft", "published"] = "published"
-
-
-class JobOfferUpdate(BaseModel):
-    title: str | None = None
-    meta_keywords: list[str] | None = None
-    department: str | None = None
-    contract_type: str | None = None
-    company: str | None = None
-    category: str | None = None
-    job_type: str | None = None
-    salary_min: int | None = None
-    salary_max: int | None = None
-    salary_period: str | None = None
-    tjm: int | None = None
-    languages: list[str] | None = None
-    location: str | None = None
-    headcount: int | None = None
-    publish_start: datetime | None = None
-    publish_end: datetime | None = None
-    description: str | None = None
-    visual_code: str | None = None
-    paragraph: str | None = None
-    skills: list[str] | None = None
-    strong_constraints: list[str] | None = None
-    status: Literal["draft", "published"] | None = None
 
 
 class JobOfferRead(BaseModel):

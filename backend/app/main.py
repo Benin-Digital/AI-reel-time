@@ -487,7 +487,6 @@ def _render_job_offer_text(offer: JobOfferCreate) -> str:
     sections = [
         "OFFRE STRUCTURÉE",
         f"Titre: {offer.title}",
-        f"Entreprise: {offer.company}",
         f"Département: {offer.department or 'Non renseigné'}",
         f"Catégorie: {offer.category}",
         f"Type de contrat: {offer.contract_type}",
@@ -495,7 +494,6 @@ def _render_job_offer_text(offer: JobOfferCreate) -> str:
         f"Localisation: {offer.location or 'Non renseigné'}",
         f"Nombre de poste: {_format_optional_number(offer.headcount)}",
         f"Rémunération minimum: {_format_optional_number(offer.salary_min)}",
-        f"Rémunération maximum: {_format_optional_number(offer.salary_max)}",
         f"Période de salaire: {offer.salary_period or 'Non renseigné'}",
         f"TJM: {_format_optional_number(offer.tjm)}",
         f"Langue(s): {', '.join(languages) if languages else 'Français'}",
@@ -543,7 +541,7 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
 <body>
   <div class="card">
     <h1>{escape(offer.title)}</h1>
-    <p>{escape(offer.company)}{f" - {escape(offer.department)}" if offer.department else ""}</p>
+        <p>{escape(offer.department or 'Détail de l’offre')}</p>
     <div class="grid">
       <div class="item"><strong>Catégorie</strong><span>{escape(offer.category)}</span></div>
       <div class="item"><strong>Type de contrat</strong><span>{escape(offer.contract_type)}</span></div>
@@ -571,7 +569,6 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
 def _render_job_offer_focus_text(offer: JobOffer) -> str:
     sections = [
         f"Titre du poste: {offer.title}",
-        f"Entreprise: {offer.company}",
         f"Catégorie: {offer.category}",
         f"Département: {offer.department or 'Non renseigné'}",
         f"Type de contrat: {offer.contract_type}",
@@ -1253,7 +1250,7 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
         meta_keywords=normalized_meta_keywords,
         department=payload.department.strip() if payload.department else None,
         contract_type=payload.contract_type.strip(),
-        company=payload.company.strip(),
+        company=payload.company.strip() if payload.company else "Non renseigné",
         category=payload.category.strip(),
         job_type=payload.job_type.strip() if payload.job_type else None,
         salary_min=payload.salary_min,

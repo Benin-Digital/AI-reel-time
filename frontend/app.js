@@ -888,11 +888,9 @@ const buildJobOfferPreviewPayload = (form) => ({
   meta_keywords: splitOfferItems(form.jobOfferMetaKeywords?.value),
   department: form.jobOfferDepartment?.value.trim() || null,
   contract_type: form.jobOfferContractType?.value || "CDI",
-  company: form.jobOfferCompany?.value.trim() || "Société",
   category: form.jobOfferCategory?.value.trim() || "Catégorie",
   job_type: form.jobOfferType?.value || null,
   salary_min: parseOptionalInteger(form.jobOfferSalaryMin?.value),
-  salary_max: parseOptionalInteger(form.jobOfferSalaryMax?.value),
   salary_period: form.jobOfferSalaryPeriod?.value || null,
   tjm: parseOptionalInteger(form.jobOfferTjm?.value),
   languages: ["Français"],
@@ -943,7 +941,6 @@ const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
 
   const canonicalText = [
     `Titre: ${offer.title}`,
-    `Entreprise: ${offer.company}`,
     `Département: ${offer.department || "Non renseigné"}`,
     `Catégorie: ${offer.category}`,
     `Type de contrat: ${offer.contract_type}`,
@@ -959,7 +956,7 @@ const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
       <div class="detail-card__top">
         <div>
           <strong class="detail-card__title">${escapeHtml(offer.title)}</strong>
-          <div class="doc-card__meta">${escapeHtml(offer.company)}${offer.department ? ` • ${escapeHtml(offer.department)}` : ""}</div>
+          <div class="doc-card__meta">${offer.department ? escapeHtml(offer.department) : "Détail de l’offre"}</div>
         </div>
       </div>
 
@@ -1186,7 +1183,7 @@ const setOfferFeedback = (message, tone = "info") => {
 const createStructuredJobOffer = async (form) => {
   const payload = buildJobOfferPreviewPayload(form);
 
-  if (!payload.title || !payload.company || !payload.category || !payload.contract_type || !payload.description) {
+  if (!payload.title || !payload.category || !payload.contract_type || !payload.description) {
     throw new Error("Merci de remplir les champs obligatoires en français.");
   }
 
