@@ -2162,38 +2162,61 @@ const renderJobOfferDetails = (offer, target) => {
     target.innerHTML = '<div class="item"><p class="meta">Aucune offre sélectionnée.</p></div>';
     return;
   }
-
   const skills = Array.isArray(offer.skills) && offer.skills.length ? offer.skills.join(', ') : '—';
   const languages = Array.isArray(offer.languages) && offer.languages.length ? offer.languages.join(', ') : 'Français';
   const constraints = Array.isArray(offer.strong_constraints) && offer.strong_constraints.length ? offer.strong_constraints.join(', ') : 'Aucune';
+  const publishedPath = offer.published_document_path || offer.rendered_path || '';
 
   target.innerHTML = `
     <div class="card">
       <div class="section-header compact">
-        <h4>${offer.title}</h4>
-        <div class="meta">${offer.company || ''} • ${offer.category || ''} • ${offer.location || ''}</div>
+        <h4>${escapeHtml(offer.title)}</h4>
+        <div class="meta">${escapeHtml(offer.company || '')} • ${escapeHtml(offer.category || '')} • ${escapeHtml(offer.location || '')}</div>
       </div>
       <div class="card-body">
-        <p><strong>Description</strong></p>
-        <p class="muted">${offer.description || '—'}</p>
-        <p><strong>Compétences</strong></p>
-        <p class="muted">${skills}</p>
-        <p><strong>Langues</strong></p>
-        <p class="muted">${languages}</p>
-        <p><strong>Contraintes fortes</strong></p>
-        <p class="muted">${constraints}</p>
-        <p><strong>Publication</strong></p>
-        <p class="muted">${offer.publish_start ? new Date(offer.publish_start).toLocaleString('fr-FR') : '—'} → ${offer.publish_end ? new Date(offer.publish_end).toLocaleString('fr-FR') : '—'}</p>
+        <p><strong>Chemin</strong></p>
+        <p class="muted">${escapeHtml(publishedPath || '—')}</p>
+        <p><strong>ID</strong></p>
+        <p class="muted">${String(offer.id)}</p>
+        <p><strong>Mis à jour</strong></p>
+        <p class="muted">${offer.updated_at ? new Date(offer.updated_at).toLocaleString('fr-FR') : '—'}</p>
+        <p><strong>Méthode d’extraction</strong></p>
+        <p class="muted">${offer.extraction?.extraction_method || '—'}</p>
+        <p><strong>Hash du contenu</strong></p>
+        <p class="muted">${offer.rendered_text ? (offer.rendered_text.slice(0,1), '') : '—'}</p>
+        <p><strong>Mots-clés principaux</strong></p>
+        <p class="muted">${(offer.meta_keywords || []).slice(0,10).map(escapeHtml).join(', ') || '—'}</p>
+        <p><strong>Voir le PDF</strong></p>
+        <p><button class="ghost" id="jobOfferOpenPdf">Voir le PDF</button></p>
+        <hr/>
+        <h4>Aperçu de l’offre</h4>
+        <div class="muted">${escapeHtml(offer.rendered_text || offer.description || '—')}</div>
       </div>
       <div class="card-actions">
         <button class="ghost" data-job-offer-edit="${offer.id}">Modifier</button>
         <button class="ghost" data-job-offer-html="${offer.id}">Ouvrir HTML</button>
         <button class="ghost" data-job-offer-pdf="${offer.id}">Ouvrir PDF</button>
       </div>
+      <div class="card-body">
+        <h4>Meilleures correspondances</h4>
+        <div id="jobOfferMatches" class="stack"></div>
+      </div>
     </div>
   `;
 
-  // wire the inline buttons we added
+  // open PDF handler
+  const pdfOpenBtn = target.querySelector('#jobOfferOpenPdf');
+  if (pdfOpenBtn) {
+    pdfOpenBtn.addEventListener('click', async () => {
+      try {
+        await openAuthenticatedHtmlRoute(`/job-offers/${offer.id}/pdf`);
+      } catch (e) {
+        setApiStatus('Impossible d\'ouvrir le PDF');
+      }
+    });
+  }
+
+  // wire the inline action buttons
   const editBtn = target.querySelector('[data-job-offer-edit]');
   if (editBtn) {
     editBtn.addEventListener('click', async () => {
@@ -2210,6 +2233,34 @@ const renderJobOfferDetails = (offer, target) => {
   if (htmlBtn) htmlBtn.addEventListener('click', async () => openAuthenticatedHtmlRoute(`/job-offers/${offer.id}/html`));
   const pdfBtn = target.querySelector('[data-job-offer-pdf]');
   if (pdfBtn) pdfBtn.addEventListener('click', async () => openAuthenticatedHtmlRoute(`/job-offers/${offer.id}/pdf`));
+
+  // Load top matches for this offer
+  (async () => {
+    try {
+      const q = buildParams({ job_id: offer.id, page: 1, page_size: 5, sort_by: 'score_desc' });
+      const matches = await safeFetch(`/matches${q}`);
+      const matchesContainer = target.querySelector('#jobOfferMatches');
+      if (matchesContainer) {
+        if (!Array.isArray(matches) || matches.length === 0) {
+          matchesContainer.innerHTML = '<div class="muted">Aucune correspondance trouvée.</div>';
+        } else {
+          matchesContainer.innerHTML = matches.map(renderMatchCard).join('');
+          // attach explain handlers inside the matches block
+          matchesContainer.querySelectorAll('[data-explain]').forEach((btn) => {
+            btn.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const matchId = btn.getAttribute('data-explain');
+              if (matchId) {
+                loadMatchExplanation(matchId);
+              }
+            });
+          });
+        }
+      }
+    } catch (e) {
+      // ignore match load failure
+    }
+  })();
 };
 
 const loadJobOffers = async () => {

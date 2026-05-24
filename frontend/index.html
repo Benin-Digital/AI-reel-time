@@ -337,7 +337,9 @@
                 </form>
                 <div id="jobOfferFeedback" class="upload-status" hidden></div>
               </div>
-              <div class="filters document-filters">
+              <div class="document-workspace">
+                <div class="document-list-column">
+                  <div class="filters document-filters">
                 <input id="jobOffersQuery" type="text" placeholder="Rechercher par titre, entreprise, catégorie ou localisation" />
                 <select id="jobOffersStatus">
                   <option value="">Tous les statuts</option>
@@ -352,18 +354,20 @@
                 <button id="applyJobOffersFilters" class="ghost">Appliquer</button>
                 <button id="refreshJobOffers" class="ghost">Rafraîchir</button>
               </div>
-              <div class="pagination-controls document-pagination">
+                  <div class="pagination-controls document-pagination">
                 <button id="jobOffersPrev" class="ghost">Précédent</button>
                 <span>Page <strong id="jobOffersPage">1</strong></span>
                 <button id="jobOffersNext" class="ghost">Suivant</button>
               </div>
-              <div id="jobOfferList" class="stack job-offer-list"></div>
-              <aside class="document-detail-column">
+                  <div id="jobOfferList" class="stack job-offer-list"></div>
+                </div>
+                <aside class="document-detail-column">
                 <div class="document-detail-header">
                   <h3>Détail de l'offre RH</h3>
                 </div>
                 <div id="jobOfferDetails" class="document-detail-panel hidden"></div>
               </aside>
+              </div>
             </div>
           </section>
 
