@@ -2133,6 +2133,83 @@ const renderJobOffers = (offers) => {
       }
     });
   });
+  // Attach click handler to show details in the RH offers detail panel
+  jobOfferList.querySelectorAll(".job-offer-item").forEach((item) => {
+    item.addEventListener("click", async (ev) => {
+      // ignore clicks on action buttons inside the card
+      if (ev.target.closest("[data-job-offer-edit], [data-job-offer-html], [data-job-offer-pdf]")) {
+        return;
+      }
+      const offerId = item.getAttribute("data-job-offer-id");
+      if (!offerId) return;
+      try {
+        const offer = await safeFetch(`/job-offers/${offerId}`);
+        const detailsTarget = document.getElementById("jobOfferDetails");
+        renderJobOfferDetails(offer, detailsTarget);
+        // ensure the details panel is visible
+        if (detailsTarget) detailsTarget.classList.remove("hidden");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Erreur inconnue";
+        setApiStatus(message);
+      }
+    });
+  });
+};
+
+const renderJobOfferDetails = (offer, target) => {
+  if (!target) return;
+  if (!offer) {
+    target.innerHTML = '<div class="item"><p class="meta">Aucune offre sélectionnée.</p></div>';
+    return;
+  }
+
+  const skills = Array.isArray(offer.skills) && offer.skills.length ? offer.skills.join(', ') : '—';
+  const languages = Array.isArray(offer.languages) && offer.languages.length ? offer.languages.join(', ') : 'Français';
+  const constraints = Array.isArray(offer.strong_constraints) && offer.strong_constraints.length ? offer.strong_constraints.join(', ') : 'Aucune';
+
+  target.innerHTML = `
+    <div class="card">
+      <div class="section-header compact">
+        <h4>${offer.title}</h4>
+        <div class="meta">${offer.company || ''} • ${offer.category || ''} • ${offer.location || ''}</div>
+      </div>
+      <div class="card-body">
+        <p><strong>Description</strong></p>
+        <p class="muted">${offer.description || '—'}</p>
+        <p><strong>Compétences</strong></p>
+        <p class="muted">${skills}</p>
+        <p><strong>Langues</strong></p>
+        <p class="muted">${languages}</p>
+        <p><strong>Contraintes fortes</strong></p>
+        <p class="muted">${constraints}</p>
+        <p><strong>Publication</strong></p>
+        <p class="muted">${offer.publish_start ? new Date(offer.publish_start).toLocaleString('fr-FR') : '—'} → ${offer.publish_end ? new Date(offer.publish_end).toLocaleString('fr-FR') : '—'}</p>
+      </div>
+      <div class="card-actions">
+        <button class="ghost" data-job-offer-edit="${offer.id}">Modifier</button>
+        <button class="ghost" data-job-offer-html="${offer.id}">Ouvrir HTML</button>
+        <button class="ghost" data-job-offer-pdf="${offer.id}">Ouvrir PDF</button>
+      </div>
+    </div>
+  `;
+
+  // wire the inline buttons we added
+  const editBtn = target.querySelector('[data-job-offer-edit]');
+  if (editBtn) {
+    editBtn.addEventListener('click', async () => {
+      try {
+        fillJobOfferForm(offer);
+        setActivePanel('job');
+        if (jobOfferForm) jobOfferForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) {
+        setApiStatus(e instanceof Error ? e.message : 'Erreur');
+      }
+    });
+  }
+  const htmlBtn = target.querySelector('[data-job-offer-html]');
+  if (htmlBtn) htmlBtn.addEventListener('click', async () => openAuthenticatedHtmlRoute(`/job-offers/${offer.id}/html`));
+  const pdfBtn = target.querySelector('[data-job-offer-pdf]');
+  if (pdfBtn) pdfBtn.addEventListener('click', async () => openAuthenticatedHtmlRoute(`/job-offers/${offer.id}/pdf`));
 };
 
 const loadJobOffers = async () => {
