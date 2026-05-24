@@ -733,6 +733,7 @@ const clearLoginError = () => {
 const setSelectedDocument = (kind, id) => {
   const nextId = String(id);
   if (documentSelection[kind] !== nextId) {
+    clearDocumentPdfUrl(kind);
     documentPreviewState[kind].previewMode = "text";
   }
   documentSelection[kind] = nextId;
@@ -1543,9 +1544,8 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
   const pdfUrl = buildDocumentPdfUrl(kind, doc.id);
   const hasPdf = typeof doc.path === "string" && doc.path.toLowerCase().endsWith(".pdf");
 
-  clearDocumentPdfUrl(kind);
-
   target.classList.remove("hidden");
+  target.dataset.currentDocumentId = String(doc.id);
   target.innerHTML = `
     <article class="detail-card ${statusTone.className}" data-document-kind="${kind}">
       <div class="detail-card__top">
@@ -1684,6 +1684,15 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
 
 const loadDocumentDetails = async (kind, id) => {
   const detailsTarget = kind === "cv" ? cvDetails : jobDetails;
+  const nextId = String(id);
+
+  if (
+    detailsTarget?.dataset.currentDocumentId === nextId &&
+    documentPreviewState[kind]?.previewMode === "pdf"
+  ) {
+    return;
+  }
+
   try {
     const doc = await safeFetch(`/${kind}-documents/${id}/details`);
     renderDocumentDetails(doc, detailsTarget, kind);
