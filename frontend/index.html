@@ -106,6 +106,7 @@
         <div class="workspace-switcher" role="tablist" aria-label="Navigation des bibliothèques">
           <button id="tabCv" class="workspace-switcher__button is-active" type="button" data-panel="cv" role="tab" aria-selected="true">Bibliothèque CV</button>
           <button id="tabJob" class="workspace-switcher__button" type="button" data-panel="job" role="tab" aria-selected="false">Bibliothèque offres</button>
+          <button id="tabJobOffers" class="workspace-switcher__button" type="button" data-panel="jobOffers" role="tab" aria-selected="false">Offres RH</button>
           <button id="tabMatches" class="workspace-switcher__button" type="button" data-panel="matches" role="tab" aria-selected="false">Correspondances</button>
           <button id="tabAdmin" class="workspace-switcher__button" type="button" data-panel="admin" role="tab" aria-selected="false" hidden>Administration</button>
         </div>
@@ -168,6 +169,7 @@
                       <p>Le formulaire est prioritairement en français et alimente le matching avec des sections métier.</p>
                     </div>
                     <form id="jobOfferForm" class="job-offer-form">
+                      <input id="jobOfferId" name="jobOfferId" type="hidden" value="" />
                       <div class="job-offer-form__grid">
                         <label>
                           Titre *
@@ -280,7 +282,7 @@
                             <option value="published" selected>Publier maintenant</option>
                           </select>
                         </label>
-                        <button class="primary" type="submit">Enregistrer l’offre</button>
+                        <button id="jobOfferSubmitButton" class="primary" type="submit">Enregistrer l’offre</button>
                       </div>
                     </form>
                     <div id="jobOfferFeedback" class="upload-status" hidden></div>
@@ -325,6 +327,36 @@
                   <div id="jobDetails" class="document-detail-panel hidden"></div>
                 </aside>
               </div>
+            </div>
+          </section>
+
+          <section class="panel panel-view panel-view--job-offers" data-panel="jobOffers" role="tabpanel" aria-labelledby="tabJobOffers" hidden>
+            <div class="panel-body">
+              <div class="section-header compact">
+                <h3>Gestion des offres RH</h3>
+                <p>Consultez les brouillons et les offres publiées, puis ouvrez l’éditeur français pour les modifier.</p>
+              </div>
+              <div class="filters document-filters">
+                <input id="jobOffersQuery" type="text" placeholder="Rechercher par titre, entreprise, catégorie ou localisation" />
+                <select id="jobOffersStatus">
+                  <option value="">Tous les statuts</option>
+                  <option value="draft">Brouillon</option>
+                  <option value="published">Publié</option>
+                </select>
+                <select id="jobOffersPageSize">
+                  <option value="10">10 / page</option>
+                  <option value="25" selected>25 / page</option>
+                  <option value="50">50 / page</option>
+                </select>
+                <button id="applyJobOffersFilters" class="ghost">Appliquer</button>
+                <button id="refreshJobOffers" class="ghost">Rafraîchir</button>
+              </div>
+              <div class="pagination-controls document-pagination">
+                <button id="jobOffersPrev" class="ghost">Précédent</button>
+                <span>Page <strong id="jobOffersPage">1</strong></span>
+                <button id="jobOffersNext" class="ghost">Suivant</button>
+              </div>
+              <div id="jobOfferList" class="stack job-offer-list"></div>
             </div>
           </section>
 

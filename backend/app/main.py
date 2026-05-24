@@ -49,6 +49,7 @@ from .schemas import (
     JobDocumentDetailRead,
     JobOfferCreate,
     JobOfferRead,
+    JobOfferUpdate,
     MatchRead,
     SearchRequest,
     SearchHit,
@@ -599,6 +600,164 @@ def _render_job_offer_focus_text(offer: JobOffer) -> str:
     return "\n".join(sections).strip()
 
 
+def _build_job_offer_document_path(offer_id: int) -> Path:
+        job_root = Path(settings.watch_job_dir)
+        job_root.mkdir(parents=True, exist_ok=True)
+        return job_root / f"offre-structuree-{offer_id}.txt"
+
+
+def _job_offer_to_read(offer: JobOffer) -> JobOfferRead:
+        return JobOfferRead.model_validate(offer)
+
+
+def _job_offer_html_response(offer: JobOffer) -> str:
+        title = escape(offer.title)
+        company = escape(offer.company)
+        department = escape(offer.department or "")
+        category = escape(offer.category)
+        contract_type = escape(offer.contract_type)
+        job_type = escape(offer.job_type or "Non renseigné")
+        location = escape(offer.location or "Non renseigné")
+        languages = escape(", ".join(_normalize_lines(offer.languages)) or "Français")
+        keywords = "<ul>" + "".join(f"<li>{escape(item)}</li>" for item in _normalize_lines(offer.meta_keywords)) + "</ul>" if _normalize_lines(offer.meta_keywords) else "<p>Aucun</p>"
+        skills = "<ul>" + "".join(f"<li>{escape(item)}</li>" for item in _normalize_lines(offer.skills)) + "</ul>" if _normalize_lines(offer.skills) else "<p>Aucune</p>"
+        constraints = "<ul>" + "".join(f"<li>{escape(item)}</li>" for item in _normalize_lines(offer.strong_constraints)) + "</ul>" if _normalize_lines(offer.strong_constraints) else "<p>Aucune</p>"
+
+        return f"""<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <style>
+        body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 32px; color: #1b1f1d; background: #f5f7f6; }}
+        .card {{ max-width: 980px; margin: 0 auto; background: #fff; border-radius: 20px; padding: 28px; border: 1px solid #d8e2de; box-shadow: 0 20px 60px rgba(17, 24, 20, 0.08); }}
+        h1 {{ margin: 0 0 8px; font-size: 30px; }}
+        h2 {{ margin: 24px 0 10px; font-size: 18px; }}
+        .meta {{ color: #66706a; }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 18px; }}
+        .item strong {{ display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b746f; margin-bottom: 4px; }}
+        .item span {{ font-size: 15px; }}
+        ul {{ margin: 8px 0 0 18px; }}
+        pre {{ white-space: pre-wrap; background: #f0f4f2; border-radius: 14px; padding: 16px; border: 1px solid #d9e3df; overflow-wrap: anywhere; }}
+        .toolbar {{ display: flex; gap: 12px; margin-top: 22px; }}
+        button {{ border: 0; border-radius: 12px; padding: 12px 18px; font: inherit; cursor: pointer; }}
+        .primary {{ background: #1a4f3b; color: #fff; }}
+        .secondary {{ background: #e8eeea; color: #1b1f1d; }}
+        @media print {{
+            body {{ background: #fff; padding: 0; }}
+            .card {{ box-shadow: none; border: 0; border-radius: 0; }}
+            .toolbar {{ display: none; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>{title}</h1>
+        <p class="meta">{company}{f" - {department}" if department else ""}</p>
+        <div class="grid">
+            <div class="item"><strong>Catégorie</strong><span>{category}</span></div>
+            <div class="item"><strong>Type de contrat</strong><span>{contract_type}</span></div>
+            <div class="item"><strong>Type de poste</strong><span>{job_type}</span></div>
+            <div class="item"><strong>Localisation</strong><span>{location}</span></div>
+            <div class="item"><strong>Langue(s)</strong><span>{languages}</span></div>
+            <div class="item"><strong>Statut</strong><span>{escape(offer.status)}</span></div>
+        </div>
+        <h2>Méta mots-clés</h2>
+        {keywords}
+        <h2>Description du poste</h2>
+        <p>{escape(offer.description).replace('\n', '<br />')}</p>
+        <h2>VisuelCode</h2>
+        <pre>{escape(offer.visual_code or 'Aucun')}</pre>
+        <h2>Paragraphe</h2>
+        <pre>{escape(offer.paragraph or 'Aucun')}</pre>
+        <h2>Compétences</h2>
+        {skills}
+        <h2>Contrainte forte du projet</h2>
+        {constraints}
+        <div class="toolbar">
+            <button class="primary" onclick="window.print()">Imprimer / enregistrer en PDF</button>
+            <button class="secondary" onclick="window.close()">Fermer</button>
+        </div>
+    </div>
+</body>
+</html>"""
+
+
+def _apply_offer_update(base_offer: JobOffer, payload: JobOfferUpdate) -> JobOfferCreate:
+        return JobOfferCreate(
+                title=payload.title if payload.title is not None else base_offer.title,
+                meta_keywords=payload.meta_keywords if payload.meta_keywords is not None else list(base_offer.meta_keywords or []),
+                department=payload.department if payload.department is not None else base_offer.department,
+                contract_type=payload.contract_type if payload.contract_type is not None else base_offer.contract_type,
+                company=payload.company if payload.company is not None else base_offer.company,
+                category=payload.category if payload.category is not None else base_offer.category,
+                job_type=payload.job_type if payload.job_type is not None else base_offer.job_type,
+                salary_min=payload.salary_min if payload.salary_min is not None else base_offer.salary_min,
+                salary_max=payload.salary_max if payload.salary_max is not None else base_offer.salary_max,
+                salary_period=payload.salary_period if payload.salary_period is not None else base_offer.salary_period,
+                tjm=payload.tjm if payload.tjm is not None else base_offer.tjm,
+                languages=payload.languages if payload.languages is not None else list(base_offer.languages or []),
+                location=payload.location if payload.location is not None else base_offer.location,
+                headcount=payload.headcount if payload.headcount is not None else base_offer.headcount,
+                publish_start=payload.publish_start if payload.publish_start is not None else base_offer.publish_start,
+                publish_end=payload.publish_end if payload.publish_end is not None else base_offer.publish_end,
+                description=payload.description if payload.description is not None else base_offer.description,
+                visual_code=payload.visual_code if payload.visual_code is not None else base_offer.visual_code,
+                paragraph=payload.paragraph if payload.paragraph is not None else base_offer.paragraph,
+                skills=payload.skills if payload.skills is not None else list(base_offer.skills or []),
+                strong_constraints=payload.strong_constraints if payload.strong_constraints is not None else list(base_offer.strong_constraints or []),
+                status=payload.status if payload.status is not None else base_offer.status,
+        )
+
+
+def _persist_job_offer_snapshot(offer: JobOffer, rendered_text: str) -> Path:
+        snapshot_path = _build_job_offer_document_path(offer.id)
+        snapshot_path.write_text(rendered_text, encoding="utf-8")
+        return snapshot_path
+
+
+def _remove_job_offer_snapshot(snapshot_path: str | None) -> None:
+        if not snapshot_path:
+                return
+        path = Path(snapshot_path)
+        if path.exists():
+                path.unlink()
+        _cleanup_removed_file(path, "job")
+
+
+def _score_job_offer_structured(cv_text: str, offer: JobOffer) -> tuple[float, list[str]]:
+        focus_score = 0.0
+        focus_keywords: list[str] = []
+
+        skills_text = " ".join(
+                [offer.title, offer.category, offer.department or "", " ".join(_normalize_lines(offer.skills)), " ".join(_normalize_lines(offer.meta_keywords))]
+        )
+        languages_text = " ".join([" ".join(_normalize_lines(offer.languages)) or "Français"])
+        constraints_text = " ".join(
+                [offer.contract_type, offer.job_type or "", offer.location or "", " ".join(_normalize_lines(offer.strong_constraints))]
+        )
+
+        overall_score, overall_keywords = score_texts(cv_text, offer.rendered_text or "")
+        skills_score, skills_keywords = score_texts(cv_text, skills_text)
+        languages_score, languages_keywords = score_texts(cv_text, languages_text)
+        constraints_score, constraints_keywords = score_texts(cv_text, constraints_text)
+
+        if offer.rendered_text:
+                focus_score = overall_score
+                focus_keywords = overall_keywords
+
+        weighted_score = (
+                focus_score * 0.35
+                + skills_score * 0.35
+                + languages_score * 0.15
+                + constraints_score * 0.15
+        )
+
+        focus_keywords = sorted({*focus_keywords, *skills_keywords, *languages_keywords, *constraints_keywords})
+        return round(weighted_score, 2), focus_keywords
+
+
 def _vector_match_cv(
     cv_doc: CvDocumentRead,
     extraction: ExtractedTextRead,
@@ -642,6 +801,15 @@ def _vector_match_cv(
         common: list[str] = []
         if job_text:
             lexical_score, common = score_texts(text_value, job_text)
+            with SessionLocal() as offer_session:
+                structured_offer = offer_session.scalar(
+                    select(JobOffer).where(JobOffer.published_document_path == row.path)
+                )
+            if structured_offer is not None:
+                structured_score, structured_common = _score_job_offer_structured(text_value, structured_offer)
+                if structured_score > lexical_score:
+                    lexical_score = structured_score
+                    common = structured_common
         vector_score = _vector_score(float(row.distance))
         score = _hybrid_score(vector_score, lexical_score)
         _insert_score_result(Path(cv_doc.path), Path(row.path), score, common)
@@ -700,10 +868,7 @@ def _vector_match_job(
         if cv_text:
             lexical_score, common = score_texts(cv_text, text_value)
             if structured_offer is not None:
-                structured_score, structured_common = score_texts(
-                    cv_text,
-                    _render_job_offer_focus_text(structured_offer),
-                )
+                structured_score, structured_common = _score_job_offer_structured(cv_text, structured_offer)
                 if structured_score > lexical_score:
                     lexical_score = structured_score
                     common = structured_common
@@ -843,6 +1008,18 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             if not job_result.extraction_success:
                 continue
             score, common = score_texts(changed_text, job_result.extracted_text or "")
+            with SessionLocal() as offer_session:
+                structured_offer = offer_session.scalar(
+                    select(JobOffer).where(JobOffer.published_document_path == job_path)
+                )
+            if structured_offer is not None:
+                structured_score, structured_common = _score_job_offer_structured(
+                    changed_text,
+                    structured_offer,
+                )
+                if structured_score > score:
+                    score = structured_score
+                    common = structured_common
             _insert_score_result(changed_path, job_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common)
     else:
@@ -870,12 +1047,25 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
                 return
 
         changed_text = changed_result.extracted_text or ""
+        structured_offer = None
+        with SessionLocal() as session:
+            structured_offer = session.scalar(
+                select(JobOffer).where(JobOffer.published_document_path == str(changed_path))
+            )
         for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
             cv_result = _extract_and_persist(cv_path)
             cv_doc = _upsert_cv_document(cv_path, cv_result)
             if not cv_result.extraction_success:
                 continue
             score, common = score_texts(cv_result.extracted_text or "", changed_text)
+            if structured_offer is not None:
+                structured_score, structured_common = _score_job_offer_structured(
+                    cv_result.extracted_text or "",
+                    structured_offer,
+                )
+                if structured_score > score:
+                    score = structured_score
+                    common = structured_common
             _insert_score_result(cv_path, changed_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common)
 
@@ -1324,10 +1514,7 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
 
         snapshot_path = None
         if offer.status == "published":
-            job_root = Path(settings.watch_job_dir)
-            job_root.mkdir(parents=True, exist_ok=True)
-            snapshot_path = job_root / f"offre-structuree-{offer.id}.txt"
-            snapshot_path.write_text(rendered_text, encoding="utf-8")
+            snapshot_path = _persist_job_offer_snapshot(offer, rendered_text)
             offer.published_document_path = str(snapshot_path)
             session.add(offer)
             session.commit()
@@ -1336,7 +1523,144 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
     if snapshot_path is not None:
         _score_against_counterparts(snapshot_path, "job")
 
-    return JobOfferRead.model_validate(offer)
+    return _job_offer_to_read(offer)
+
+
+@app.get("/job-offers", response_model=list[JobOfferRead])
+def list_job_offers(
+    page: int = 1,
+    page_size: int = 25,
+    status: str | None = None,
+    query: str | None = None,
+) -> list[JobOfferRead]:
+    safe_size = max(1, min(page_size, 100))
+    safe_offset = max(0, (page - 1) * safe_size)
+    stmt = select(JobOffer)
+    if status:
+        stmt = stmt.where(JobOffer.status == status)
+    if query:
+        search_expr = f"%{query}%"
+        stmt = stmt.where(
+            or_(
+                JobOffer.title.ilike(search_expr),
+                JobOffer.company.ilike(search_expr),
+                JobOffer.category.ilike(search_expr),
+                JobOffer.description.ilike(search_expr),
+                JobOffer.location.ilike(search_expr),
+            )
+        )
+    stmt = stmt.order_by(JobOffer.id.desc()).offset(safe_offset).limit(safe_size)
+    with SessionLocal() as session:
+        rows = session.scalars(stmt).all()
+        return [_job_offer_to_read(row) for row in rows]
+
+
+@app.get("/job-offers/{offer_id}", response_model=JobOfferRead)
+def get_job_offer(offer_id: int) -> JobOfferRead:
+    with SessionLocal() as session:
+        offer = session.get(JobOffer, offer_id)
+        if offer is None:
+            raise HTTPException(status_code=404, detail="Job offer not found")
+        return _job_offer_to_read(offer)
+
+
+@app.patch("/job-offers/{offer_id}", response_model=JobOfferRead)
+def update_job_offer(offer_id: int, payload: JobOfferUpdate, request: Request) -> JobOfferRead:
+    _require_admin(request)
+    with SessionLocal() as session:
+        offer = session.get(JobOffer, offer_id)
+        if offer is None:
+            raise HTTPException(status_code=404, detail="Job offer not found")
+
+        previous_snapshot_path = offer.published_document_path
+        updated_payload = _apply_offer_update(offer, payload)
+        rendered_text = _render_job_offer_text(updated_payload)
+        rendered_html = _render_job_offer_html(updated_payload, rendered_text)
+
+        offer.title = updated_payload.title
+        offer.meta_keywords = updated_payload.meta_keywords
+        offer.department = updated_payload.department
+        offer.contract_type = updated_payload.contract_type
+        offer.company = updated_payload.company
+        offer.category = updated_payload.category
+        offer.job_type = updated_payload.job_type
+        offer.salary_min = updated_payload.salary_min
+        offer.salary_max = updated_payload.salary_max
+        offer.salary_period = updated_payload.salary_period
+        offer.tjm = updated_payload.tjm
+        offer.languages = updated_payload.languages
+        offer.location = updated_payload.location
+        offer.headcount = updated_payload.headcount
+        offer.publish_start = updated_payload.publish_start
+        offer.publish_end = updated_payload.publish_end
+        offer.description = updated_payload.description
+        offer.visual_code = updated_payload.visual_code
+        offer.paragraph = updated_payload.paragraph
+        offer.skills = updated_payload.skills
+        offer.strong_constraints = updated_payload.strong_constraints
+        offer.status = updated_payload.status
+        offer.rendered_text = rendered_text
+        offer.rendered_html = rendered_html
+
+        if offer.status == "published":
+            snapshot_path = _persist_job_offer_snapshot(offer, rendered_text)
+            offer.published_document_path = str(snapshot_path)
+            session.add(offer)
+            session.commit()
+            session.refresh(offer)
+        else:
+            offer.published_document_path = None
+            session.add(offer)
+            session.commit()
+            session.refresh(offer)
+
+    if previous_snapshot_path and previous_snapshot_path != offer.published_document_path:
+        _remove_job_offer_snapshot(previous_snapshot_path)
+    if offer.published_document_path:
+        _score_against_counterparts(Path(offer.published_document_path), "job")
+
+    return _job_offer_to_read(offer)
+
+
+@app.get("/job-offers/{offer_id}/html")
+def get_job_offer_html(offer_id: int) -> Response:
+    with SessionLocal() as session:
+        offer = session.get(JobOffer, offer_id)
+        if offer is None:
+            raise HTTPException(status_code=404, detail="Job offer not found")
+        html = offer.rendered_html or _job_offer_html_response(offer)
+        return Response(content=html, media_type="text/html; charset=utf-8")
+
+
+@app.get("/job-offers/{offer_id}/pdf")
+def get_job_offer_pdf_preview(offer_id: int) -> Response:
+    with SessionLocal() as session:
+        offer = session.get(JobOffer, offer_id)
+        if offer is None:
+            raise HTTPException(status_code=404, detail="Job offer not found")
+        html = offer.rendered_html or _job_offer_html_response(offer)
+
+    print_view = f"""<!doctype html>
+<html lang=\"fr\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>{escape(offer.title)} - PDF</title>
+  <style>
+    html, body {{ margin: 0; padding: 0; height: 100%; }}
+    iframe {{ width: 100%; height: 100vh; border: 0; }}
+  </style>
+</head>
+<body>
+  <iframe srcdoc="{escape(html)}"></iframe>
+  <script>
+    window.addEventListener('load', () => {{
+      setTimeout(() => window.print(), 300);
+    }});
+  </script>
+</body>
+</html>"""
+    return Response(content=print_view, media_type="text/html; charset=utf-8")
 
 
 @app.post("/ingest/delete")
