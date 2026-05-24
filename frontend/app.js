@@ -886,11 +886,9 @@ const formatOfferDate = (value) => {
 const buildJobOfferPreviewPayload = (form) => ({
   title: form.jobOfferTitle?.value.trim() || "Titre de l’offre",
   meta_keywords: splitOfferItems(form.jobOfferMetaKeywords?.value),
-  department: form.jobOfferDepartment?.value.trim() || null,
   contract_type: form.jobOfferContractType?.value || "CDI",
   category: form.jobOfferCategory?.value.trim() || "Catégorie",
   job_type: form.jobOfferType?.value || null,
-  salary_min: parseOptionalInteger(form.jobOfferSalaryMin?.value),
   languages: ["Français"],
   description: form.jobOfferDescription?.value.trim() || "Aucune description renseignée.",
   skills: splitOfferItems(form.jobOfferSkills?.value),
@@ -935,7 +933,6 @@ const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
 
   const canonicalText = [
     `Titre: ${offer.title}`,
-    `Département: ${offer.department || "Non renseigné"}`,
     `Catégorie: ${offer.category}`,
     `Type de contrat: ${offer.contract_type}`,
     `Langues: ${(offer.languages || []).join(", ") || "Français"}`,
@@ -949,7 +946,7 @@ const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
       <div class="detail-card__top">
         <div>
           <strong class="detail-card__title">${escapeHtml(offer.title)}</strong>
-          <div class="doc-card__meta">${offer.department ? escapeHtml(offer.department) : "Détail de l’offre"}</div>
+          <div class="doc-card__meta">Détail de l’offre</div>
         </div>
       </div>
 

@@ -487,11 +487,9 @@ def _render_job_offer_text(offer: JobOfferCreate) -> str:
     sections = [
         "OFFRE STRUCTURÉE",
         f"Titre: {offer.title}",
-        f"Département: {offer.department or 'Non renseigné'}",
         f"Catégorie: {offer.category}",
         f"Type de contrat: {offer.contract_type}",
         f"Type de poste: {offer.job_type or 'Non renseigné'}",
-        f"Rémunération minimum: {_format_optional_number(offer.salary_min)}",
         f"Langue(s): {', '.join(languages) if languages else 'Français'}",
         f"Méta mots-clés: {', '.join(meta_keywords) if meta_keywords else 'Aucun'}",
         "",
@@ -535,7 +533,6 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
 <body>
   <div class="card">
     <h1>{escape(offer.title)}</h1>
-        <p>{escape(offer.department or 'Détail de l’offre')}</p>
     <div class="grid">
       <div class="item"><strong>Catégorie</strong><span>{escape(offer.category)}</span></div>
       <div class="item"><strong>Type de contrat</strong><span>{escape(offer.contract_type)}</span></div>
@@ -560,7 +557,6 @@ def _render_job_offer_focus_text(offer: JobOffer) -> str:
     sections = [
         f"Titre du poste: {offer.title}",
         f"Catégorie: {offer.category}",
-        f"Département: {offer.department or 'Non renseigné'}",
         f"Type de contrat: {offer.contract_type}",
         f"Type de poste: {offer.job_type or 'Non renseigné'}",
         f"Méta mots-clés: {', '.join(_normalize_lines(offer.meta_keywords)) or 'Aucun'}",
@@ -1237,12 +1233,10 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
     offer_input = JobOfferCreate(
         title=payload.title.strip(),
         meta_keywords=normalized_meta_keywords,
-        department=payload.department.strip() if payload.department else None,
         contract_type=payload.contract_type.strip(),
         company=payload.company.strip() if payload.company else "Non renseigné",
         category=payload.category.strip(),
         job_type=payload.job_type.strip() if payload.job_type else None,
-        salary_min=payload.salary_min,
         salary_max=payload.salary_max,
         languages=normalized_languages,
         description=payload.description.strip(),
@@ -1260,12 +1254,10 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
         offer = JobOffer(
             title=offer_input.title,
             meta_keywords=offer_input.meta_keywords,
-            department=offer_input.department,
             contract_type=offer_input.contract_type,
             company=offer_input.company,
             category=offer_input.category,
             job_type=offer_input.job_type,
-            salary_min=offer_input.salary_min,
             salary_max=offer_input.salary_max,
             languages=offer_input.languages,
             description=offer_input.description,

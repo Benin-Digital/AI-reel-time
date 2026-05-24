@@ -106,12 +106,10 @@ class JobDocumentRead(BaseModel):
 class JobOfferCreate(BaseModel):
     title: str
     meta_keywords: list[str] = Field(default_factory=list)
-    department: str | None = None
     contract_type: str
     company: str | None = None
     category: str
     job_type: str | None = None
-    salary_min: int | None = None
     salary_max: int | None = None
     languages: list[str] = Field(default_factory=list)
     description: str
@@ -128,12 +126,10 @@ class JobOfferRead(BaseModel):
     id: int
     title: str
     meta_keywords: list[str]
-    department: str | None
     contract_type: str
     company: str
     category: str
     job_type: str | None
-    salary_min: int | None
     salary_max: int | None
     languages: list[str]
     description: str
