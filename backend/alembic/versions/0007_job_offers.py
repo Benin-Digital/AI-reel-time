@@ -29,8 +29,6 @@ def upgrade() -> None:
         sa.Column("job_type", sa.String(length=64), nullable=True),
         sa.Column("salary_min", sa.Integer(), nullable=True),
         sa.Column("salary_max", sa.Integer(), nullable=True),
-        sa.Column("salary_period", sa.String(length=32), nullable=True),
-        sa.Column("tjm", sa.Integer(), nullable=True),
         sa.Column("languages", sa.JSON(), nullable=False),
         sa.Column("location", sa.String(length=255), nullable=True),
         sa.Column("headcount", sa.Integer(), nullable=True),

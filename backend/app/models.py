@@ -164,8 +164,6 @@ class JobOffer(Base):
     job_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     salary_min: Mapped[int | None] = mapped_column(nullable=True)
     salary_max: Mapped[int | None] = mapped_column(nullable=True)
-    salary_period: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    tjm: Mapped[int | None] = mapped_column(nullable=True)
     languages: Mapped[list[str]] = mapped_column(JSON, default=list)
     location: Mapped[str | None] = mapped_column(String(255), nullable=True)
     headcount: Mapped[int | None] = mapped_column(nullable=True)

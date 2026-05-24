@@ -891,8 +891,6 @@ const buildJobOfferPreviewPayload = (form) => ({
   category: form.jobOfferCategory?.value.trim() || "Catégorie",
   job_type: form.jobOfferType?.value || null,
   salary_min: parseOptionalInteger(form.jobOfferSalaryMin?.value),
-  salary_period: form.jobOfferSalaryPeriod?.value || null,
-  tjm: parseOptionalInteger(form.jobOfferTjm?.value),
   languages: ["Français"],
   location: form.jobOfferLocation?.value.trim() || null,
   headcount: parseOptionalInteger(form.jobOfferHeadcount?.value),

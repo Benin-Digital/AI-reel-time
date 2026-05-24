@@ -113,8 +113,6 @@ class JobOfferCreate(BaseModel):
     job_type: str | None = None
     salary_min: int | None = None
     salary_max: int | None = None
-    salary_period: str | None = None
-    tjm: int | None = None
     languages: list[str] = Field(default_factory=list)
     location: str | None = None
     headcount: int | None = None
@@ -141,8 +139,6 @@ class JobOfferRead(BaseModel):
     job_type: str | None
     salary_min: int | None
     salary_max: int | None
-    salary_period: str | None
-    tjm: int | None
     languages: list[str]
     location: str | None
     headcount: int | None
