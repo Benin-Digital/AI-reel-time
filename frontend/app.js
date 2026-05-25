@@ -1718,6 +1718,7 @@ const renderDocuments = (docs, target, kind) => {
           </div>
           <div class="doc-row__actions">
             <button class="ghost doc-card__button" data-doc="${doc.id}" data-kind="${kind}" data-action="matches" title="Ouvre l'onglet Correspondances avec un filtre déjà appliqué">Voir les matches liés</button>
+            ${String(doc.path || "").toLowerCase().endsWith('.pdf') ? `<button class="ghost doc-card__button" data-pdf="${doc.id}" data-kind="${kind}" title="Ouvrir le PDF">Voir le PDF</button>` : ""}
             <button class="ghost danger doc-card__button doc-card__button--danger" data-delete-doc="${doc.path}" data-delete-id="${doc.id}" data-kind="${kind}" title="Supprime ce fichier du serveur">Supprimer</button>
           </div>
         </article>
@@ -1745,6 +1746,21 @@ const renderDocuments = (docs, target, kind) => {
       updatePageElement(matchesPage, 1);
       setActivePanel("matches");
       loadMatches();
+    });
+  });
+
+  target.querySelectorAll("button[data-pdf]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const id = btn.getAttribute("data-pdf");
+      const kind = btn.getAttribute("data-kind");
+      if (!id || !kind) return;
+      try {
+        await openAuthenticatedPdf(kind, id);
+      } catch (err) {
+        console.error(err);
+        alert(err.message || 'Erreur lors de l\'ouverture du PDF');
+      }
     });
   });
 
