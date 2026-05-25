@@ -62,6 +62,7 @@ const jobList = document.getElementById("jobList");
 const matchList = document.getElementById("matchList");
 const cvDetails = document.getElementById("cvDetails");
 const jobDetails = document.getElementById("jobDetails");
+const parserDebugToggle = document.getElementById("parserDebugToggle");
 
 const filterCv = document.getElementById("filterCv");
 const filterJob = document.getElementById("filterJob");
@@ -1793,6 +1794,12 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
 
       <div class="section-header"><h2>Meilleures correspondances</h2></div>
       ${matches.length ? "" : "<div class=\"meta\">Aucune correspondance pour ce document.</div>"}
+      ${doc.parser_debug && doc.parser_debug.detected_headings ? `
+        <div class="detail-card__section">
+          <div class="meta">Parser debug (headings détectés)</div>
+          <div class="detail-preview"><pre>${escapeHtml(JSON.stringify(doc.parser_debug.detected_headings, null, 2))}</pre></div>
+        </div>
+      ` : ""}
       <div class="detail-matches">
         ${matches
           .map((match) => {
@@ -1879,7 +1886,9 @@ const loadDocumentDetails = async (kind, id) => {
   }
 
   try {
-    const doc = await safeFetch(`/${kind}-documents/${id}/details`);
+    const debug = parserDebugToggle && parserDebugToggle.checked;
+    const q = debug ? "?debug=true" : "";
+    const doc = await safeFetch(`/${kind}-documents/${id}/details${q}`);
     renderDocumentDetails(doc, detailsTarget, kind);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erreur inconnue";
