@@ -1458,7 +1458,7 @@ def get_cv_document(doc_id: int) -> CvDocumentRead:
 
 
 @app.get("/cv-documents/{doc_id}/details", response_model=CvDocumentDetailRead)
-def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead:
+def get_cv_document_details(doc_id: int, limit: int = 6, debug: bool = False) -> CvDocumentDetailRead:
     safe_limit = max(1, min(limit, 50))
     with SessionLocal() as session:
         doc = session.get(CvDocument, doc_id)
@@ -1495,6 +1495,16 @@ def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead
             )[:12]
         ]
 
+        parser_debug = None
+        if debug and extraction and extraction.extracted_text:
+            try:
+                from .services.structured import build_document_profile
+
+                profile = build_document_profile(extraction.extracted_text, kind="cv")
+                parser_debug = profile.debug_info if hasattr(profile, "debug_info") else None
+            except Exception:
+                parser_debug = {"error": "failed to build debug profile"}
+
         return CvDocumentDetailRead(
             id=doc.id,
             path=doc.path,
@@ -1519,6 +1529,7 @@ def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead
                 )
                 for row in match_rows
             ],
+            parser_debug=parser_debug,
         )
 
 
@@ -1573,7 +1584,7 @@ def get_job_document(doc_id: int) -> JobDocumentRead:
 
 
 @app.get("/job-documents/{doc_id}/details", response_model=JobDocumentDetailRead)
-def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRead:
+def get_job_document_details(doc_id: int, limit: int = 6, debug: bool = False) -> JobDocumentDetailRead:
     safe_limit = max(1, min(limit, 50))
     with SessionLocal() as session:
         doc = session.get(JobDocument, doc_id)
@@ -1610,6 +1621,16 @@ def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRe
             )[:12]
         ]
 
+        parser_debug = None
+        if debug and extraction and extraction.extracted_text:
+            try:
+                from .services.structured import build_document_profile
+
+                profile = build_document_profile(extraction.extracted_text, kind="job")
+                parser_debug = profile.debug_info if hasattr(profile, "debug_info") else None
+            except Exception:
+                parser_debug = {"error": "failed to build debug profile"}
+
         return JobDocumentDetailRead(
             id=doc.id,
             path=doc.path,
@@ -1634,6 +1655,7 @@ def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRe
                 )
                 for row in match_rows
             ],
+            parser_debug=parser_debug,
         )
 
 

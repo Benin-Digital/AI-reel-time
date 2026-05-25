@@ -208,6 +208,7 @@ class DocumentDetailBase(BaseModel):
     top_keywords: list[str]
     extraction: ExtractedTextRead | None
     top_matches: list[MatchRead]
+    parser_debug: dict | None = None
 
 
 class CvDocumentDetailRead(DocumentDetailBase):
