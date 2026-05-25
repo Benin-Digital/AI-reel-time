@@ -1797,7 +1797,41 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
       ${doc.parser_debug && doc.parser_debug.detected_headings ? `
         <div class="detail-card__section">
           <div class="meta">Parser debug (headings détectés)</div>
-          <div class="detail-preview"><pre>${escapeHtml(JSON.stringify(doc.parser_debug.detected_headings, null, 2))}</pre></div>
+          <div class="detail-preview">
+            <table class="debug-table">
+              <thead><tr><th>Ligne</th><th>Détecté</th><th>Réassigner</th><th>Action</th></tr></thead>
+              <tbody>
+                ${doc.parser_debug.detected_headings.map((h, i) => {
+                  const line = escapeHtml(String(h[1]));
+                  const detected = escapeHtml(String(h[2] || ""));
+                  const selectId = `parser-correct-${kind}-${doc.id}-${i}`;
+                  return `
+                    <tr>
+                      <td style="max-width:320px"><pre>${line}</pre></td>
+                      <td>${detected}</td>
+                      <td>
+                        <select id="${selectId}" class="parser-correct-select">
+                          <option value="summary">summary</option>
+                          <option value="skills">skills</option>
+                          <option value="experience">experience</option>
+                          <option value="education">education</option>
+                          <option value="certifications">certifications</option>
+                          <option value="languages">languages</option>
+                          <option value="job_required">job_required</option>
+                          <option value="job_nice">job_nice</option>
+                          <option value="contract">contract</option>
+                          <option value="location">location</option>
+                          <option value="other">other</option>
+                        </select>
+                      </td>
+                      <td><button class="ghost parser-correct-save" data-idx="${i}">Enregistrer</button></td>
+                    </tr>
+                  `
+                }).join("")}
+              </tbody>
+            </table>
+            <div style="margin-top:8px"><button id="parser-save-all" class="primary">Enregistrer toutes les corrections</button></div>
+          </div>
         </div>
       ` : ""}
       <div class="detail-matches">
@@ -1858,6 +1892,56 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
     if (iframe) {
       loadDocumentPdfPreview(kind, doc.id, iframe, loadingNode);
     }
+  }
+
+  // wire parser correction buttons if present
+  const saveButtons = target.querySelectorAll('.parser-correct-save');
+  if (saveButtons && saveButtons.length) {
+    saveButtons.forEach((btn) => {
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const idx = btn.getAttribute('data-idx');
+        const select = target.querySelector(`#parser-correct-${kind}-${doc.id}-${idx}`);
+        if (!select) return;
+        const assigned = select.value;
+        const line = (doc.parser_debug.detected_headings && doc.parser_debug.detected_headings[idx] && doc.parser_debug.detected_headings[idx][1]) || '';
+        try {
+          await safeFetch(`/documents/${kind}/${doc.id}/parser-feedback`, {
+            method: 'POST',
+            body: JSON.stringify({ corrections: [{ original: line, assigned_section: assigned }] }),
+            json: true,
+          });
+          btn.textContent = 'OK';
+          setTimeout(() => { btn.textContent = 'Enregistrer'; }, 1200);
+        } catch (err) {
+          btn.textContent = 'Erreur';
+        }
+      });
+    });
+  }
+
+  const saveAll = target.querySelector('#parser-save-all');
+  if (saveAll) {
+    saveAll.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const rows = Array.from(target.querySelectorAll('select.parser-correct-select'));
+      const corrections = rows.map((sel, i) => {
+        const idx = i;
+        const line = (doc.parser_debug.detected_headings && doc.parser_debug.detected_headings[idx] && doc.parser_debug.detected_headings[idx][1]) || '';
+        return { original: line, assigned_section: sel.value };
+      });
+      try {
+        await safeFetch(`/documents/${kind}/${doc.id}/parser-feedback`, {
+          method: 'POST',
+          body: JSON.stringify({ corrections }),
+          json: true,
+        });
+        saveAll.textContent = 'Enregistré';
+        setTimeout(() => { saveAll.textContent = 'Enregistrer toutes les corrections'; }, 1500);
+      } catch (err) {
+        saveAll.textContent = 'Erreur';
+      }
+    });
   }
 
   // Persist this document detail in the dashboard cache

@@ -53,6 +53,8 @@ from .schemas import (
     MatchRead,
     MatchFeedbackCreate,
     MatchFeedbackRead,
+    ParserFeedbackCreate,
+    ParserFeedbackRead,
     SearchRequest,
     SearchHit,
     AuthLoginRequest,
@@ -1865,6 +1867,42 @@ def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: 
         session.commit()
         session.refresh(feedback)
         return MatchFeedbackRead.model_validate(feedback)
+
+
+    @app.post("/documents/{kind}/{doc_id}/parser-feedback", response_model=ParserFeedbackRead)
+    def submit_parser_feedback(kind: str, doc_id: int, payload: ParserFeedbackCreate, request: Request) -> ParserFeedbackRead:
+        if kind not in ("cv", "job"):
+            raise HTTPException(status_code=400, detail="Invalid kind")
+
+        try:
+            storage_dir = Path(settings.watch_cv_dir).parent.joinpath("storage")
+        except Exception:
+            storage_dir = Path("storage")
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        out_path = storage_dir.joinpath("parser_feedback.ndjson")
+
+        entry = {
+            "kind": kind,
+            "doc_id": int(doc_id),
+            "corrections": [c.model_dump() for c in payload.corrections],
+            "user_id": None,
+            "created_at": time(),
+        }
+
+        try:
+            with out_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Failed to store feedback: {exc}")
+
+        return ParserFeedbackRead(
+            id=0,
+            kind=kind,
+            doc_id=doc_id,
+            corrections=payload.corrections,
+            user_id=None,
+            created_at=datetime.fromtimestamp(entry["created_at"]),
+        )
 
 
 @app.post("/search", response_model=list[SearchHit])

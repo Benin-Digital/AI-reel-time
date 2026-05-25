@@ -219,6 +219,25 @@ class JobDocumentDetailRead(DocumentDetailBase):
     pass
 
 
+class ParserCorrection(BaseModel):
+    original: str
+    assigned_section: str
+    comment: str | None = None
+
+
+class ParserFeedbackCreate(BaseModel):
+    corrections: list[ParserCorrection]
+
+
+class ParserFeedbackRead(BaseModel):
+    id: int
+    kind: str
+    doc_id: int
+    corrections: list[ParserCorrection]
+    user_id: int | None = None
+    created_at: datetime
+
+
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
