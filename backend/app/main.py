@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 import tempfile
 from time import perf_counter, time
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form
@@ -1181,7 +1182,8 @@ def list_parser_feedback(
                     "created_at": r.created_at.isoformat() if r.created_at is not None else None,
                 }
                 lines.append(json.dumps(item, ensure_ascii=False))
-            return Response("\n".join(lines), media_type="application/x-ndjson")
+            filename = f"parser_feedback_{datetime.utcnow().strftime('%Y%m%d')}.ndjson"
+            return Response("\n".join(lines), media_type="application/x-ndjson", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
         if export == "csv":
             import csv
@@ -1199,7 +1201,8 @@ def list_parser_feedback(
                     r.user_id,
                     r.created_at.isoformat() if r.created_at is not None else None,
                 ])
-            return Response(buf.getvalue(), media_type="text/csv")
+            filename = f"parser_feedback_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+            return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
         return [ParserFeedbackRead.model_validate(r) for r in rows]
 
