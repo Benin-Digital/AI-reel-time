@@ -15,6 +15,9 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
         (
             "profil",
             "profile",
+            "about",
+            "about me",
+            "who am i",
             "resume",
             "résumé",
             "summary",
@@ -32,6 +35,11 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "stack",
             "technologies",
             "outils",
+            "expertise",
+            "hard skills",
+            "soft skills",
+            "capabilities",
+            "aptitudes",
             "technical skills",
         ),
     ),
@@ -43,8 +51,10 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "experiences",
             "expériences",
             "work experience",
+            "professional experience",
             "parcours",
             "missions",
+            "employment history",
         ),
     ),
     (
@@ -82,6 +92,17 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "contrainte forte",
             "contraintes fortes",
             "contrainte forte du projet",
+            "responsabilites",
+            "responsabilités",
+            "taches",
+            "tâches",
+            "activites",
+            "activités",
+            "qualifications",
+            "profile wanted",
+            "profil attendu",
+            "profil ideal",
+            "profil idéal",
             "requirements",
             "must have",
             "prérequis",
@@ -408,7 +429,7 @@ def _match_heading(folded_line: str) -> str | None:
         return None
     for section, aliases in _SECTION_ALIASES:
         for alias in aliases:
-            if alias in candidate:
+            if fold_text(alias) in candidate:
                 return section
     return None
 
@@ -532,9 +553,32 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
 
 def detect_document_kind(text: str) -> str | None:
     folded = fold_text(text)
-    if "offre structuree" in folded or "compétences requises" in folded or "competences requises" in folded:
+    job_markers = (
+        "offre structuree",
+        "competences requises",
+        "responsabilites",
+        "taches",
+        "qualifications",
+        "profil recherche",
+        "poste",
+        "missions",
+        "what you will do",
+        "your mission",
+    )
+    cv_markers = (
+        "curriculum vitae",
+        "curriculum-vitae",
+        "cv",
+        "resume",
+        "experience professionnelle",
+        "formations",
+        "formation",
+        "competences",
+        "skills",
+    )
+    if any(fold_text(marker) in folded for marker in job_markers):
         return "job"
-    if "cv" in folded or "curriculum vitae" in folded or "profil" in folded:
+    if any(fold_text(marker) in folded for marker in cv_markers):
         return "cv"
     return None
 
