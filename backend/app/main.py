@@ -1392,6 +1392,35 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
             except Exception as exc:  # pragma: no cover - optional PDF dependency
                 logger.info("PDF generation skipped or failed: %s", exc)
                 offer.published_document_path = str(snapshot_path)
+
+            # ensure a JobDocument row exists for the published file so it appears in the job library
+            try:
+                doc_path = Path(offer.published_document_path)
+                if doc_path.exists():
+                    with SessionLocal() as session2:
+                        existing = session2.scalar(select(JobDocument).where(JobDocument.path == str(doc_path)))
+                        if not existing:
+                            content_hash = None
+                            try:
+                                content_hash = file_sha256(doc_path)
+                            except Exception:
+                                content_hash = None
+                            job_doc = JobDocument(
+                                path=str(doc_path),
+                                content_hash=content_hash,
+                                status="ready",
+                            )
+                            session2.add(job_doc)
+                            session2.commit()
+                            session2.refresh(job_doc)
+
+                    # trigger watcher processing for scoring and matches
+                    try:
+                        _on_watch_event(WatchEvent(path=doc_path, event_type="created", observed_at=time()))
+                    except Exception as exc:
+                        logger.warning("Failed to enqueue created watch event for published offer: %s", exc)
+            except Exception as exc:  # pragma: no cover
+                logger.exception("Failed to register JobDocument for published offer: %s", exc)
             session.add(offer)
             session.commit()
             session.refresh(offer)
