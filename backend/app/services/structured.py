@@ -423,6 +423,62 @@ def _split_heading_payload(line: str) -> tuple[str | None, str]:
     return None, line
 
 
+def _is_heading(line: str, next_line: str | None = None) -> bool:
+    """Heuristique simple pour détecter si une ligne est un heading.
+
+    Utilise longueur, ponctuation, ratio de majuscules, numérotation et
+    observation de la ligne suivante (liste/bullet) pour décider.
+    """
+    if not line or not line.strip():
+        return False
+
+    folded = fold_text(line)
+
+    # numbered headings (1. , I) ou "1)"
+    if re.match(r"^\s*(?:\d+|[ivx]+)[\.)]\s+", line.lower()):
+        return True
+
+    # présence de ':' fortement indicative
+    if ":" in line and len(line) < 200:
+        return True
+
+    words = folded.split()
+    word_count = len(words)
+    if word_count == 0:
+        return False
+
+    # trop long pour être un heading
+    if len(folded) > 120 or word_count > 12:
+        return False
+
+    # ratio de majuscules (sur la ligne originale) — les headings sont souvent en MAJ
+    letters = [c for c in line if c.isalpha()]
+    if letters:
+        upper_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
+        if upper_ratio > 0.5 and word_count <= 8:
+            return True
+
+    # si la ligne suivante ressemble à une liste, la ligne courante est probablement un heading
+    if next_line:
+        if re.match(r"^[\-\*\u2022\u25e6\d]\s+", next_line.strip()):
+            return True
+        if next_line.strip().startswith("-") or next_line.strip().startswith("•"):
+            return True
+
+    # si la ligne contient un alias de section connu -> heading
+    for section, aliases in _SECTION_ALIASES:
+        for alias in aliases:
+            if fold_text(alias) in folded:
+                return True
+
+    # règle conservatrice finale: courte et peu de mots
+    avg_len = sum(len(w) for w in words) / max(1, word_count)
+    if word_count <= 6 and avg_len <= 14:
+        return True
+
+    return False
+
+
 def _match_heading(folded_line: str) -> str | None:
     candidate = re.sub(r"\s+", " ", folded_line.strip())
     if not candidate or len(candidate.split()) > 8:
