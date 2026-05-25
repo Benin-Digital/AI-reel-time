@@ -230,6 +230,29 @@ class MatchFeedback(Base):
     )
 
 
+class ParserFeedback(Base):
+    __tablename__ = "parser_feedback"
+    __table_args__ = (
+        Index("ix_parser_feedback_kind_doc", "kind", "doc_id"),
+        Index("ix_parser_feedback_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    doc_id: Mapped[int] = mapped_column(nullable=False)
+    corrections: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class CvEmbedding(Base):
     __tablename__ = "cv_embeddings"
     __table_args__ = (
