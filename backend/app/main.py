@@ -1145,6 +1145,65 @@ def create_event(payload: EventCreate) -> EventRead:
     return _insert_event(payload)
 
 
+@app.get("/admin/parser-feedback", response_model=list[ParserFeedbackRead])
+def list_parser_feedback(
+    request: Request,
+    kind: str | None = None,
+    doc_id: int | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    export: str | None = None,
+) -> Response | list[ParserFeedbackRead]:
+    current_user = _require_admin(request)
+
+    safe_page = max(1, page)
+    safe_size = max(1, min(page_size, 200))
+    offset = (safe_page - 1) * safe_size
+
+    with SessionLocal() as session:
+        q = select(ParserFeedback).order_by(ParserFeedback.created_at.desc())
+        if kind:
+            q = q.where(ParserFeedback.kind == kind)
+        if doc_id:
+            q = q.where(ParserFeedback.doc_id == doc_id)
+        q = q.offset(offset).limit(safe_size)
+        rows = session.scalars(q).all()
+
+        if export == "ndjson":
+            lines = []
+            for r in rows:
+                item = {
+                    "id": r.id,
+                    "kind": r.kind,
+                    "doc_id": r.doc_id,
+                    "corrections": r.corrections,
+                    "user_id": r.user_id,
+                    "created_at": r.created_at.isoformat() if r.created_at is not None else None,
+                }
+                lines.append(json.dumps(item, ensure_ascii=False))
+            return Response("\n".join(lines), media_type="application/x-ndjson")
+
+        if export == "csv":
+            import csv
+            from io import StringIO
+
+            buf = StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(["id", "kind", "doc_id", "corrections", "user_id", "created_at"])
+            for r in rows:
+                writer.writerow([
+                    r.id,
+                    r.kind,
+                    r.doc_id,
+                    json.dumps(r.corrections, ensure_ascii=False),
+                    r.user_id,
+                    r.created_at.isoformat() if r.created_at is not None else None,
+                ])
+            return Response(buf.getvalue(), media_type="text/csv")
+
+        return [ParserFeedbackRead.model_validate(r) for r in rows]
+
+
 @app.get("/events", response_model=list[EventRead])
 def list_events(limit: int = 50) -> list[EventRead]:
     safe_limit = max(1, min(limit, 200))
