@@ -207,6 +207,29 @@ class MatchResult(Base):
     )
 
 
+class MatchFeedback(Base):
+    __tablename__ = "match_feedback"
+    __table_args__ = (
+        Index("ix_match_feedback_match_id", "match_id"),
+        Index("ix_match_feedback_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("match_results.id"))
+    decision: Mapped[str] = mapped_column(String(32))
+    rating: Mapped[int | None] = mapped_column(nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class CvEmbedding(Base):
     __tablename__ = "cv_embeddings"
     __table_args__ = (

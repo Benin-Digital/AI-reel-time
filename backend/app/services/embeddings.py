@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import threading
+from math import sqrt
 from typing import Iterable
 
 from sentence_transformers import SentenceTransformer
 
 from ..settings import get_settings
+from .structured import build_document_profile
 
 settings = get_settings()
 _embedder: SentenceTransformer | None = None
@@ -39,6 +41,31 @@ def embed_texts(texts: Iterable[str]) -> list[list[float]]:
     return [list(vector) for vector in embeddings]
 
 
+def _average_vectors(vectors: list[list[float]]) -> list[float]:
+    if not vectors:
+        return []
+    length = len(vectors[0])
+    if length == 0:
+        return []
+    totals = [0.0] * length
+    for vector in vectors:
+        if len(vector) != length:
+            continue
+        for index, value in enumerate(vector):
+            totals[index] += value
+    averaged = [value / max(len(vectors), 1) for value in totals]
+    norm = sqrt(sum(value * value for value in averaged))
+    if norm > 0:
+        averaged = [value / norm for value in averaged]
+    return averaged
+
+
 def embed_text(text: str) -> list[float]:
-    vectors = embed_texts([text])
-    return vectors[0] if vectors else []
+    profile = build_document_profile(text)
+    chunks = profile.embedding_chunks or ([profile.cleaned_text] if profile.cleaned_text else [])
+    if not chunks:
+        return []
+    vectors = embed_texts(chunks)
+    if len(vectors) == 1:
+        return vectors[0]
+    return _average_vectors(vectors)

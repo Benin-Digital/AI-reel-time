@@ -31,6 +31,7 @@ from .models import (
     CvEmbedding,
     JobEmbedding,
     JobOffer,
+    MatchFeedback,
     User,
 )
 from .schemas import (
@@ -50,6 +51,8 @@ from .schemas import (
     JobOfferCreate,
     JobOfferRead,
     MatchRead,
+    MatchFeedbackCreate,
+    MatchFeedbackRead,
     SearchRequest,
     SearchHit,
     AuthLoginRequest,
@@ -493,14 +496,14 @@ def _render_job_offer_text(offer: JobOfferCreate) -> str:
         f"Langue(s): {', '.join(languages) if languages else 'Français'}",
         f"Méta mots-clés: {', '.join(meta_keywords) if meta_keywords else 'Aucun'}",
         "",
-        "Description du poste",
-        offer.description.strip(),
-        "",
-        "Compétences",
+        "Compétences requises",
         "\n".join(f"- {item}" for item in skills) if skills else "Aucune",
         "",
-        "Contrainte forte du projet",
-        "\n".join(f"- {item}" for item in strong_constraints) if strong_constraints else "Aucune",
+        "Prérequis essentiels",
+        "\n".join(f"- {item}" for item in strong_constraints) if strong_constraints else "Aucun",
+        "",
+        "Description du poste",
+        offer.description.strip(),
     ]
 
     return "\n".join(sections).strip() + "\n"
@@ -540,12 +543,12 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
     </div>
     <h2>Méta mots-clés</h2>
     {_list_html(_normalize_lines(offer.meta_keywords))}
-    <h2>Description du poste</h2>
-    <p>{escape(offer.description).replace('\n', '<br />')}</p>
     <h2>Compétences</h2>
     {_list_html(_normalize_lines(offer.skills))}
-    <h2>Contrainte forte du projet</h2>
+        <h2>Prérequis essentiels</h2>
     {_list_html(_normalize_lines(offer.strong_constraints))}
+        <h2>Description du poste</h2>
+        <p>{escape(offer.description).replace('\n', '<br />')}</p>
     <h2>Texte canonique de matching</h2>
     <pre>{escape(rendered_text)}</pre>
   </div>
@@ -1813,6 +1816,33 @@ def explain_match(match_id: int) -> MatchExplainRead:
             evidence=list(details["evidence"]),
             keyword_hits=list(details["keyword_hits"]),
         )
+
+
+@app.post("/matches/{match_id}/feedback", response_model=MatchFeedbackRead)
+def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: Request) -> MatchFeedbackRead:
+    _require_admin(request)
+
+    rating = payload.rating
+    if rating is not None:
+        rating = max(1, min(5, rating))
+
+    comment = payload.comment.strip() if payload.comment and payload.comment.strip() else None
+
+    with SessionLocal() as session:
+        match = session.get(MatchResult, match_id)
+        if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        feedback = MatchFeedback(
+            match_id=match.id,
+            decision=payload.decision,
+            rating=rating,
+            comment=comment,
+        )
+        session.add(feedback)
+        session.commit()
+        session.refresh(feedback)
+        return MatchFeedbackRead.model_validate(feedback)
 
 
 @app.post("/search", response_model=list[SearchHit])

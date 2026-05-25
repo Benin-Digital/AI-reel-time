@@ -157,6 +157,24 @@ class MatchRead(BaseModel):
     updated_at: datetime
 
 
+class MatchFeedbackCreate(BaseModel):
+    decision: Literal["accept", "reject", "review"]
+    rating: int | None = None
+    comment: str | None = None
+
+
+class MatchFeedbackRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    match_id: int
+    decision: Literal["accept", "reject", "review"]
+    rating: int | None
+    comment: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class SearchRequest(BaseModel):
     kind: Literal["cv", "job"] = "cv"
     query: str

@@ -7,6 +7,7 @@ from pypdf import PdfReader
 import pytesseract
 
 from ..settings import get_settings
+from .structured import clean_document_text
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -25,7 +26,7 @@ def extract_text_from_pdf(path: Path) -> str:
             except Exception as exc:
                 logger.warning(f"Failed to extract text from PDF page {page_num}: {exc}")
 
-        extracted_text = "\n".join(text_content)
+            extracted_text = clean_document_text("\n".join(text_content))
         if len(extracted_text.strip()) >= settings.ocr_min_text_length:
             return extracted_text
 
@@ -34,7 +35,7 @@ def extract_text_from_pdf(path: Path) -> str:
             path.name,
             settings.ocr_min_text_length,
         )
-        ocr_text = _ocr_pdf(path)
+        ocr_text = clean_document_text(_ocr_pdf(path))
         if len(ocr_text.strip()) > len(extracted_text.strip()):
             return ocr_text
         return extracted_text
@@ -57,7 +58,7 @@ def _ocr_pdf(path: Path) -> str:
             )
             if ocr_text.strip():
                 text_content.append(ocr_text)
-        return "\n".join(text_content)
+        return clean_document_text("\n".join(text_content))
     except Exception as exc:
         logger.exception(f"OCR fallback failed for {path.name}: {exc}")
         return ""
@@ -77,7 +78,7 @@ def extract_text_from_docx(path: Path) -> str:
                     cell_text = cell.text.strip()
                     if cell_text:
                         text_content.append(cell_text)
-        return "\n".join(text_content)
+        return clean_document_text("\n".join(text_content))
     except Exception as exc:
         logger.exception(f"DOCX extraction failed for {path.name}: {exc}")
         return ""
@@ -86,10 +87,10 @@ def extract_text_from_docx(path: Path) -> str:
 def extract_text_from_txt(path: Path) -> str:
     """Extract text from plain text file."""
     try:
-        return path.read_text(encoding="utf-8")
+        return clean_document_text(path.read_text(encoding="utf-8"))
     except UnicodeDecodeError:
         try:
-            return path.read_text(encoding="latin-1")
+            return clean_document_text(path.read_text(encoding="latin-1"))
         except Exception as exc:
             logger.exception(f"TXT extraction failed for {path.name}: {exc}")
             return ""
