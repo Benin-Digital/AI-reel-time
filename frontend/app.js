@@ -13,6 +13,15 @@ const openRegisterModalButton = document.getElementById("openRegisterModal");
 const adminTab = document.getElementById("tabAdmin");
 const adminPanel = document.getElementById("adminPanel");
 const adminUsersList = document.getElementById("adminUsersList");
+const pfKind = document.getElementById("pfKind");
+const pfDocId = document.getElementById("pfDocId");
+const pfRefresh = document.getElementById("pfRefresh");
+const pfExportNdjson = document.getElementById("pfExportNdjson");
+const pfExportCsv = document.getElementById("pfExportCsv");
+const pfList = document.getElementById("pfList");
+const pfPrev = document.getElementById("pfPrev");
+const pfNext = document.getElementById("pfNext");
+const pfPage = document.getElementById("pfPage");
 const adminCreateUserForm = document.getElementById("adminCreateUserForm");
 const adminUserEmail = document.getElementById("adminUserEmail");
 const adminUserFirst = document.getElementById("adminUserFirst");
@@ -102,6 +111,63 @@ const documentPreviewState = {
   job: { objectUrl: null, previewMode: "text" },
 };
 
+const renderParserFeedbackList = (rows) => {
+  if (!pfList) return;
+  if (!rows || rows.length === 0) {
+    pfList.innerHTML = '<div class="item"><p class="meta">Aucun retour trouvé.</p></div>';
+    return;
+  }
+  pfList.innerHTML = rows.map((r) => {
+    const corrections = (r.corrections || []).map((c) => `&lt;${escapeHtml(c.original)}&gt; → <strong>${escapeHtml(c.assigned_section)}</strong>`).join("<br>");
+    return `<div class="item"><p class="meta">ID: ${r.id} — kind: ${r.kind} — doc: ${r.doc_id} — user: ${r.user_id || '—'} — ${new Date(r.created_at).toLocaleString()}</p><div class="content">${corrections}</div></div>`;
+  }).join("");
+};
+
+const escapeHtml = (s) => {
+  if (!s) return "";
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+};
+
+const loadParserFeedback = async (opts = {}) => {
+  const page = opts.page || pfState.page || 1;
+  const page_size = opts.page_size || pfState.page_size || 25;
+  const kind = (opts.kind ?? (pfKind ? pfKind.value : undefined)) || undefined;
+  const doc_id = opts.doc_id ?? (pfDocId && pfDocId.value ? Number(pfDocId.value) : undefined);
+  const query = new URLSearchParams();
+  query.set('page', String(page));
+  query.set('page_size', String(page_size));
+  if (kind) query.set('kind', kind);
+  if (doc_id) query.set('doc_id', String(doc_id));
+
+  try {
+    const rows = await safeFetch(`/admin/parser-feedback?${query.toString()}`);
+    pfState.page = page;
+    if (pfPage) pfPage.textContent = String(page);
+    renderParserFeedbackList(rows);
+  } catch (error) {
+    if (pfList) pfList.innerHTML = `<div class="item"><p class="meta muted">Erreur: ${error.message}</p></div>`;
+  }
+};
+
+const triggerExport = (format) => {
+  const kind = pfKind ? pfKind.value : '';
+  const doc_id = pfDocId ? pfDocId.value : '';
+  const params = new URLSearchParams();
+  if (kind) params.set('kind', kind);
+  if (doc_id) params.set('doc_id', doc_id);
+  params.set('page', String(pfState.page || 1));
+  params.set('page_size', String(pfState.page_size || 25));
+  params.set('export', format);
+  const url = `${apiBase}/admin/parser-feedback?${params.toString()}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+};
+
 let apiBase = localStorage.getItem("apiBase") || "";
 apiBaseInput.value = apiBase;
 const AUTO_REFRESH_MS = 3000;
@@ -120,6 +186,7 @@ let autoRefreshInFlight = false;
 let activePanel = "cv";
 let adminUsersCache = [];
 let isHydratingDashboard = false;
+let pfState = { page: 1, page_size: 25 };
 let pendingDeleteKind = null;
 let pendingDeleteFilenames = [];
 let pendingDeleteResolve = null;
@@ -2266,6 +2333,7 @@ tabs.forEach((tab) => {
       }
       if (panelName === "admin") {
         loadAdminUsers();
+        loadParserFeedback({ page: 1 });
       }
     }
   });
@@ -2288,6 +2356,12 @@ if (openRegisterModalButton) {
     openAuthModal("register");
   });
 }
+
+if (pfRefresh) pfRefresh.addEventListener('click', () => loadParserFeedback({ page: 1 }));
+if (pfPrev) pfPrev.addEventListener('click', () => { if (pfState.page > 1) loadParserFeedback({ page: pfState.page - 1 }); });
+if (pfNext) pfNext.addEventListener('click', () => { loadParserFeedback({ page: pfState.page + 1 }); });
+if (pfExportNdjson) pfExportNdjson.addEventListener('click', () => triggerExport('ndjson'));
+if (pfExportCsv) pfExportCsv.addEventListener('click', () => triggerExport('csv'));
 
 if (logoutButton) {
   logoutButton.addEventListener("click", () => {
