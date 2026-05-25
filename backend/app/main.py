@@ -151,6 +151,15 @@ def _parse_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _sanitize_filename(name: str) -> str:
+    # keep letters, numbers, space, dash and underscore
+    safe = "".join(c for c in name if c.isalnum() or c in " _-.")
+    safe = safe.strip().replace(" ", " ")
+    if not safe:
+        safe = "document"
+    return safe
+
+
 def _configure_cors(app: FastAPI) -> None:
     origins = _parse_csv(settings.cors_allow_origins)
     if not origins:
@@ -1346,9 +1355,43 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
         if offer.status == "published":
             job_root = Path(settings.watch_job_dir)
             job_root.mkdir(parents=True, exist_ok=True)
+            # write a plain text snapshot
             snapshot_path = job_root / f"offre-structuree-{offer.id}.txt"
             snapshot_path.write_text(rendered_text, encoding="utf-8")
-            offer.published_document_path = str(snapshot_path)
+
+            # try to render a simple PDF representation of the offer
+            title_safe = _sanitize_filename(offer.title or f"offre-{offer.id}")
+            pdf_path = job_root / f"{title_safe}.pdf"
+            # avoid overwriting existing file for same title
+            if pdf_path.exists():
+                pdf_path = job_root / f"{title_safe}-{offer.id}.pdf"
+
+            try:
+                # import lazily to avoid hard dependency unless available
+                from reportlab.lib.pagesizes import A4
+                from reportlab.pdfgen import canvas
+
+                c = canvas.Canvas(str(pdf_path), pagesize=A4)
+                width, height = A4
+                margin = 40
+                y = height - margin
+                c.setFont("Helvetica-Bold", 16)
+                c.drawString(margin, y, offer.title or "Offre")
+                y -= 24
+                c.setFont("Helvetica", 10)
+                lines = rendered_text.splitlines()
+                for line in lines:
+                    if y < margin + 20:
+                        c.showPage()
+                        y = height - margin
+                        c.setFont("Helvetica", 10)
+                    c.drawString(margin, y, line[:200])
+                    y -= 14
+                c.save()
+                offer.published_document_path = str(pdf_path)
+            except Exception as exc:  # pragma: no cover - optional PDF dependency
+                logger.info("PDF generation skipped or failed: %s", exc)
+                offer.published_document_path = str(snapshot_path)
             session.add(offer)
             session.commit()
             session.refresh(offer)
