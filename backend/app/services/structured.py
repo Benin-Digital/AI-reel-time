@@ -253,6 +253,7 @@ class StructuredDocument:
     contract_type: str | None = None
     experience_years: int = 0
     embedding_chunks: list[str] = field(default_factory=list)
+    debug_info: dict = field(default_factory=dict)
 
     @property
     def canonical_text(self) -> str:
@@ -507,13 +508,31 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
     sections: dict[str, list[str]] = defaultdict(list)
     current_section = "other"
 
-    for line in lines:
+    detected_headings: list[tuple[int, str, str, str]] = []  # (index, line, assigned_section, method)
+
+    for idx, line in enumerate(lines):
         heading, payload = _split_heading_payload(line)
         if heading:
             current_section = heading
+            detected_headings.append((idx, line, current_section, "split"))
             if payload:
                 sections[current_section].append(payload)
             continue
+
+        # check if the line looks like a heading (using classifier)
+        next_line = lines[idx + 1] if idx + 1 < len(lines) else None
+        if _is_heading(line, next_line=next_line):
+            matched = _match_heading(fold_text(line))
+            if matched:
+                current_section = matched
+                detected_headings.append((idx, line, current_section, "classifier_matched"))
+                continue
+            guessed = _guess_section_from_heading(line)
+            if guessed:
+                current_section = guessed
+                detected_headings.append((idx, line, current_section, "classifier_guessed"))
+                continue
+
         sections[current_section].append(line)
 
     section_texts = {name: "\n".join(values).strip() for name, values in sections.items() if values}
@@ -581,6 +600,8 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
     if not embedding_chunks and cleaned_text:
         embedding_chunks = [cleaned_text]
 
+    debug = {"detected_headings": detected_headings} if detected_headings else {}
+
     return StructuredDocument(
         kind=kind or "unknown",
         raw_text=text or "",
@@ -604,7 +625,28 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
         contract_type=contract_type,
         experience_years=experience_years,
         embedding_chunks=embedding_chunks,
+        debug_info=debug,
     )
+
+
+def _guess_section_from_heading(line: str) -> str | None:
+    """Heuristique pour mapper un heading libre vers une section standard."""
+    folded = fold_text(line)
+    mapping = [
+        ("skills", ("skill", "competence", "stack", "technologie", "technic")),
+        ("experience", ("experience", "mission", "poste", "ancien", "parcours")),
+        ("education", ("formation", "diplom", "etude", "education")),
+        ("languages", ("langue", "language", "francais", "anglais", "spanish")),
+        ("job_required", ("require", "exigenc", "must", "prerequis", "profil")),
+        ("job_nice", ("atout", "souhait", "bonus", "appréci")),
+        ("contract", ("contrat", "cdi", "cdd", "freelance", "stage")),
+        ("location", ("localis", "teletravail", "remote", "hybrid", "hybride")),
+    ]
+    for section, needles in mapping:
+        for n in needles:
+            if n in folded:
+                return section
+    return None
 
 
 def detect_document_kind(text: str) -> str | None:
