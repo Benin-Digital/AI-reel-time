@@ -26,8 +26,10 @@ class EventRead(BaseModel):
 
 class WatcherSimulateRequest(BaseModel):
     folder: Literal["cv", "job"] = "cv"
-    filename: str
+    filename: str | None = None
     content: str = "sample content"
+    path: str | None = None
+    event_type: str = "created"
 
 
 class IngestDeleteRequest(BaseModel):

@@ -1280,12 +1280,31 @@ def list_events(limit: int = 50) -> list[EventRead]:
 
 @app.post("/watcher/simulate")
 def simulate_watcher_event(payload: WatcherSimulateRequest) -> dict[str, str]:
+    if payload.path:
+        event_path = Path(payload.path)
+        event_type = (payload.event_type or "created").strip() or "created"
+        _on_watch_event(
+            WatchEvent(
+                path=event_path,
+                event_type=event_type,
+                observed_at=time(),
+            )
+        )
+        return {
+            "status": "queued",
+            "path": str(event_path),
+            "event_type": event_type,
+            "timestamp": str(time()),
+        }
+
     folder = Path(settings.watch_cv_dir)
     if payload.folder == "job":
         folder = Path(settings.watch_job_dir)
 
     folder.mkdir(parents=True, exist_ok=True)
-    safe_name = Path(payload.filename).name
+    safe_name = Path(payload.filename or "").name
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="filename is required when path is not provided")
     target = folder / safe_name
     target.write_text(payload.content, encoding="utf-8")
 
