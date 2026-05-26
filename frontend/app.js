@@ -1341,14 +1341,6 @@ const EXPLAIN_VARIANTS = [
 
 const pickExplainVariant = () => EXPLAIN_VARIANTS[Math.floor(Math.random() * EXPLAIN_VARIANTS.length)];
 
-const escapeHtml = (value) =>
-  String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-
 const renderExplainLoading = () => `
   <div class="explain-loading">
     <div class="explain-loading__spinner" aria-hidden="true"></div>
