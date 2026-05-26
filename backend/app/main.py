@@ -530,6 +530,8 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
             return "<p>Aucune</p>"
         return "<ul>" + "".join(f"<li>{escape(value)}</li>" for value in values) + "</ul>"
 
+    description_html = escape(offer.description).replace("\n", "<br />")
+
     return f"""<!doctype html>
 <html lang="fr">
 <head>
@@ -563,7 +565,7 @@ def _render_job_offer_html(offer: JobOfferCreate, rendered_text: str) -> str:
         <h2>Prérequis essentiels</h2>
     {_list_html(_normalize_lines(offer.strong_constraints))}
         <h2>Description du poste</h2>
-        <p>{escape(offer.description).replace('\n', '<br />')}</p>
+        <p>{description_html}</p>
     <h2>Texte canonique de matching</h2>
     <pre>{escape(rendered_text)}</pre>
   </div>
