@@ -1786,8 +1786,6 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
   const statusTone = documentStatusTone(doc.status);
   const previewText = extraction.extracted_text || "Aucun texte extrait";
   const previewLabel = kind === "job" ? "Aperçu de l’offre" : "Aperçu du texte";
-  const pdfUrl = buildDocumentPdfUrl(kind, doc.id);
-  const hasPdf = typeof doc.path === "string" && doc.path.toLowerCase().endsWith(".pdf");
 
   target.classList.remove("hidden");
   target.dataset.currentDocumentId = String(doc.id);
@@ -1825,29 +1823,11 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
       ${doc.top_keywords && doc.top_keywords.length ? `<div class="detail-card__section"><div class="meta">Mots-clés principaux</div>${keywordChips}</div>` : ""}
 
       <div class="detail-card__section detail-card__section--preview">
-        ${hasPdf ? `
-          <div class="detail-preview-toolbar">
-            <button type="button" class="detail-preview-toggle" data-document-preview-toggle>
-              Voir le PDF
-            </button>
-          </div>
-        ` : ""}
-
         <div class="detail-preview-stack" data-document-preview-stack>
           <div class="detail-preview-panel" data-document-preview-panel="text">
             <div class="meta">${previewLabel}</div>
             <div class="detail-preview">${previewText}</div>
           </div>
-
-          ${hasPdf && pdfUrl ? `
-            <div class="detail-preview-panel" data-document-preview-panel="pdf" hidden>
-              <div class="meta">Aperçu PDF</div>
-              <div class="pdf-frame">
-                <div class="pdf-frame__loading">Chargement du PDF…</div>
-                <iframe title="Aperçu PDF du document ${doc.id}" loading="lazy" hidden></iframe>
-              </div>
-            </div>
-          ` : ""}
         </div>
       </div>
 
@@ -1926,32 +1906,7 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
     });
   });
 
-  const previewToggle = target.querySelector("[data-document-preview-toggle]");
-  if (previewToggle) {
-    const previewMode = documentPreviewState[kind]?.previewMode || "text";
-    setDocumentPreviewMode(target, previewMode);
-    previewToggle.addEventListener("click", async () => {
-      const currentMode = target.dataset.previewMode === "pdf" ? "pdf" : "text";
-      const nextMode = currentMode === "text" ? "pdf" : "text";
-      setDocumentPreviewMode(target, nextMode);
 
-      if (nextMode === "pdf") {
-        const iframe = target.querySelector("[data-document-preview-panel=\"pdf\"] iframe");
-        const loadingNode = target.querySelector("[data-document-preview-panel=\"pdf\"] .pdf-frame__loading");
-        if (iframe && !iframe.src && iframe.dataset.pdfLoading !== "true") {
-          await loadDocumentPdfPreview(kind, doc.id, iframe, loadingNode);
-        }
-      }
-    });
-  }
-
-  if (hasPdf) {
-    const iframe = target.querySelector("[data-document-preview-panel=\"pdf\"] iframe");
-    const loadingNode = target.querySelector("[data-document-preview-panel=\"pdf\"] .pdf-frame__loading");
-    if (iframe) {
-      loadDocumentPdfPreview(kind, doc.id, iframe, loadingNode);
-    }
-  }
 
   // wire parser correction buttons if present
   const saveButtons = target.querySelectorAll('.parser-correct-save');
