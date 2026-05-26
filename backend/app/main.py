@@ -371,6 +371,19 @@ def _upsert_match_result(cv_id: int, job_id: int, score: float, common: list[str
         )
 
 
+def _match_count_for_document(doc_id: int, role: str) -> int:
+    with SessionLocal() as session:
+        if role == "cv":
+            count = session.scalar(
+                select(func.count()).select_from(MatchResult).where(MatchResult.cv_id == doc_id)
+            )
+        else:
+            count = session.scalar(
+                select(func.count()).select_from(MatchResult).where(MatchResult.job_id == doc_id)
+            )
+    return int(count or 0)
+
+
 def _upsert_cv_embedding(
     cv_id: int,
     content_hash: str | None,
@@ -817,10 +830,12 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
         if not changed_result.extraction_success:
             return
 
+        existing_match_count = _match_count_for_document(cv_doc.id, "cv")
         if (
             previous_hash
             and changed_result.content_hash == previous_hash
             and previous_status == "ready"
+            and existing_match_count > 0
         ):
             return
 
@@ -896,6 +911,7 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             previous_hash
             and changed_result.content_hash == previous_hash
             and previous_status == "ready"
+            and _match_count_for_document(job_doc.id, "job") > 0
         ):
             return
 
