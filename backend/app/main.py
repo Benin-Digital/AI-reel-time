@@ -1469,9 +1469,6 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
             session.commit()
             session.refresh(offer)
 
-    if snapshot_path is not None:
-        _score_against_counterparts(snapshot_path, "job")
-
     return JobOfferRead.model_validate(offer)
 
 
