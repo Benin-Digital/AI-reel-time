@@ -18,7 +18,12 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
-    return _pwd_context.hash(password)
+    # bcrypt ignores bytes after 72; truncate explicitly to avoid runtime errors
+    secret = password
+    if len(secret.encode("utf-8")) > 72:
+        logger.warning("password longer than 72 bytes; truncating for bcrypt")
+        secret = secret.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return _pwd_context.hash(secret)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
