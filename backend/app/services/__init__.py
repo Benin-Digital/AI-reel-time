@@ -1,10 +1,11 @@
-from .embeddings import embed_text, embed_texts
 from .extraction import extract_text
-from .event_queue import QueuedEvent, ack_event, dequeue_event, enqueue_event, get_queue_status
+from .event_queue import dequeue_event, enqueue_event
 from .fingerprint import file_sha256
+from .embeddings import embed_text, embed_texts
 from .scoring import score_texts, serialize_keywords, deserialize_keywords
 from .watcher import LocalFolderWatcher, WatchEvent
 from .worker import EventWorker
+from .event_queue import get_queue_status
 
 __all__ = [
     "extract_text",
@@ -12,9 +13,6 @@ __all__ = [
     "embed_texts",
     "dequeue_event",
     "enqueue_event",
-    "get_queue_status",
-    "ack_event",
-    "QueuedEvent",
     "file_sha256",
     "LocalFolderWatcher",
     "WatchEvent",
@@ -22,4 +20,5 @@ __all__ = [
     "score_texts",
     "serialize_keywords",
     "deserialize_keywords",
+    "get_queue_status",
 ]

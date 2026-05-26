@@ -4,21 +4,31 @@ import threading
 from math import sqrt
 from typing import Iterable
 
-from sentence_transformers import SentenceTransformer
-
 from ..settings import get_settings
 from .structured import build_document_profile
 
 settings = get_settings()
-_embedder: SentenceTransformer | None = None
+_embedder = None
 _lock = threading.Lock()
 
 
-def get_embedder() -> SentenceTransformer:
+def _load_sentence_transformer():
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        return SentenceTransformer
+    except Exception as exc:  # pragma: no cover - optional dependency
+        return exc
+
+
+def get_embedder():
     global _embedder
     if _embedder is None:
         with _lock:
             if _embedder is None:
+                SentenceTransformer = _load_sentence_transformer()
+                if not callable(SentenceTransformer):
+                    raise RuntimeError(f"sentence-transformers unavailable: {SentenceTransformer}")
                 _embedder = SentenceTransformer(
                     settings.embedding_model_name,
                     device=settings.embedding_device,
@@ -30,7 +40,10 @@ def embed_texts(texts: Iterable[str]) -> list[list[float]]:
     items = list(texts)
     if not items:
         return []
-    model = get_embedder()
+    try:
+        model = get_embedder()
+    except Exception:
+        return []
     embeddings = model.encode(
         items,
         batch_size=settings.embedding_batch_size,
