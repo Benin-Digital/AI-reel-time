@@ -590,19 +590,19 @@ def _render_job_offer_focus_text(offer: JobOffer) -> str:
 def _vector_match_cv(
     cv_doc: CvDocumentRead,
     extraction: ExtractedTextRead,
-) -> bool:
+) -> set[int]:
     text_value = (extraction.extracted_text or "").strip()
     if not text_value:
-        return False
+        return set()
 
     try:
         vector = embed_text(text_value)
     except Exception as exc:
         logger.warning("embedding failed for cv %s: %s", cv_doc.id, exc)
-        return False
+        return set()
 
     if not vector:
-        return False
+        return set()
 
     _upsert_cv_embedding(cv_doc.id, extraction.content_hash, vector)
 
@@ -622,8 +622,9 @@ def _vector_match_cv(
         ).all()
 
     if not rows:
-        return False
+        return set()
 
+    matched_job_ids: set[int] = set()
     for row in rows:
         job_text = (row.extracted_text or "").strip()
         lexical_score = 0.0
@@ -634,26 +635,27 @@ def _vector_match_cv(
         score = _hybrid_score(vector_score, lexical_score)
         _insert_score_result(Path(cv_doc.path), Path(row.path), score, common)
         _upsert_match_result(cv_doc.id, row.job_id, score, common)
+        matched_job_ids.add(int(row.job_id))
 
-    return True
+    return matched_job_ids
 
 
 def _vector_match_job(
     job_doc: JobDocumentRead,
     extraction: ExtractedTextRead,
-) -> bool:
+) -> set[int]:
     text_value = (extraction.extracted_text or "").strip()
     if not text_value:
-        return False
+        return set()
 
     try:
         vector = embed_text(text_value)
     except Exception as exc:
         logger.warning("embedding failed for job %s: %s", job_doc.id, exc)
-        return False
+        return set()
 
     if not vector:
-        return False
+        return set()
 
     _upsert_job_embedding(job_doc.id, extraction.content_hash, vector)
 
@@ -679,8 +681,9 @@ def _vector_match_job(
         ).all()
 
     if not rows:
-        return False
+        return set()
 
+    matched_cv_ids: set[int] = set()
     for row in rows:
         cv_text = (row.extracted_text or "").strip()
         lexical_score = 0.0
@@ -699,8 +702,9 @@ def _vector_match_job(
         score = _hybrid_score(vector_score, lexical_score)
         _insert_score_result(Path(row.path), Path(job_doc.path), score, common)
         _upsert_match_result(row.cv_id, job_doc.id, score, common)
+        matched_cv_ids.add(int(row.cv_id))
 
-    return True
+    return matched_cv_ids
 
 
 def _is_supported_file(path: Path) -> bool:
@@ -820,14 +824,16 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
         ):
             return
 
+        matched_job_ids: set[int] = set()
         if settings.embedding_enabled:
-            if _vector_match_cv(cv_doc, changed_result):
-                return
+            matched_job_ids = _vector_match_cv(cv_doc, changed_result)
 
         changed_text = changed_result.extracted_text or ""
         for job_path in _list_candidate_files(Path(settings.watch_job_dir)):
             job_result = _extract_and_persist(job_path)
             job_doc = _upsert_job_document(job_path, job_result)
+            if job_doc.id in matched_job_ids:
+                continue
             if not job_result.extraction_success:
                 continue
             score, common = score_texts(changed_text, job_result.extracted_text or "")
@@ -893,14 +899,16 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
         ):
             return
 
+        matched_cv_ids: set[int] = set()
         if settings.embedding_enabled:
-            if _vector_match_job(job_doc, changed_result):
-                return
+            matched_cv_ids = _vector_match_job(job_doc, changed_result)
 
         changed_text = changed_result.extracted_text or ""
         for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
             cv_result = _extract_and_persist(cv_path)
             cv_doc = _upsert_cv_document(cv_path, cv_result)
+            if cv_doc.id in matched_cv_ids:
+                continue
             if not cv_result.extraction_success:
                 continue
             score, common = score_texts(cv_result.extracted_text or "", changed_text)
