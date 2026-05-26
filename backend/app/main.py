@@ -2048,23 +2048,25 @@ def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: 
         return MatchFeedbackRead.model_validate(feedback)
 
 
-    @app.post("/documents/{kind}/{doc_id}/parser-feedback", response_model=ParserFeedbackRead)
-    def submit_parser_feedback(kind: str, doc_id: int, payload: ParserFeedbackCreate, request: Request) -> ParserFeedbackRead:
-        if kind not in ("cv", "job"):
-            raise HTTPException(status_code=400, detail="Invalid kind")
+@app.post("/documents/{kind}/{doc_id}/parser-feedback", response_model=ParserFeedbackRead)
+def submit_parser_feedback(kind: str, doc_id: int, payload: ParserFeedbackCreate, request: Request) -> ParserFeedbackRead:
+    if kind not in ("cv", "job"):
+        raise HTTPException(status_code=400, detail="Invalid kind")
 
-        # persist feedback in DB
-        with SessionLocal() as session:
-            fb = ParserFeedback(
-                kind=kind,
-                doc_id=doc_id,
-                corrections=[c.model_dump() for c in payload.corrections],
-                user_id=None,
-            )
-            session.add(fb)
-            session.commit()
-            session.refresh(fb)
-            return ParserFeedbackRead.model_validate(fb)
+    current_user = getattr(request.state, "user", None)
+    user_id = current_user.id if current_user is not None else None
+
+    with SessionLocal() as session:
+        fb = ParserFeedback(
+            kind=kind,
+            doc_id=doc_id,
+            corrections=[c.model_dump() for c in payload.corrections],
+            user_id=user_id,
+        )
+        session.add(fb)
+        session.commit()
+        session.refresh(fb)
+        return ParserFeedbackRead.model_validate(fb)
 
 
 @app.post("/search", response_model=list[SearchHit])
