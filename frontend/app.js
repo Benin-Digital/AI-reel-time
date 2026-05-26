@@ -1874,24 +1874,7 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
         </div>
       ` : ""}
       <div class="detail-matches">
-        ${matches
-          .map((match) => {
-            const score = Math.round(match.score || 0);
-            return `
-              <article class="detail-match ${scoreTone(score).className}">
-                <div class="item-title">
-                  <strong>Match #${match.id}</strong>
-                  ${renderScoreChip(score)}
-                </div>
-                <div class="meta">CV ${match.cv_id} • Job ${match.job_id}</div>
-                <div class="score-bar"><span class="score-bar__fill ${scoreTone(score).className}" style="width:${score}%"></span></div>
-                <div class="match-card__actions">
-                  <button class="match-card__button" data-explain="${match.id}">Voir l'explication</button>
-                </div>
-              </article>
-            `;
-          })
-          .join("")}
+        ${matches.map((match) => renderMatchCard(match)).join("")}
       </div>
     </article>
   `;
@@ -1905,8 +1888,6 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
       }
     });
   });
-
-
 
   // wire parser correction buttons if present
   const saveButtons = target.querySelectorAll('.parser-correct-save');
@@ -1976,10 +1957,7 @@ const loadDocumentDetails = async (kind, id) => {
   const detailsTarget = kind === "cv" ? cvDetails : jobDetails;
   const nextId = String(id);
 
-  if (
-    detailsTarget?.dataset.currentDocumentId === nextId &&
-    documentPreviewState[kind]?.previewMode === "pdf"
-  ) {
+  if (detailsTarget?.dataset.currentDocumentId === nextId) {
     return;
   }
 
