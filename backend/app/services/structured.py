@@ -688,3 +688,51 @@ def canonical_document_text(text: str, kind: str | None = None) -> str:
 def is_noise_term(value: str) -> bool:
     folded = fold_text(value)
     return folded in _NOISE_TERMS
+
+
+def normalize_job_offer_from_parsed(doc: StructuredDocument, source_path: str | None = None) -> dict:
+    """Map a StructuredDocument (kind='job') to a dict compatible with JobOfferCreate.
+
+    This is a heuristic mapping: picks sensible defaults and normalizes lists.
+    """
+    from pathlib import Path
+
+    title = doc.summary_text.splitlines()[0].strip() if doc.summary_text else (Path(source_path).stem if source_path else "Offre")
+    # category: try to extract from first line of summary or fallback
+    category = "Non renseigné"
+    if doc.sections.get("summary"):
+        first = doc.sections["summary"].splitlines()[0]
+        if len(first.split()) <= 6:
+            category = first.strip()
+
+    contract_type = doc.contract_type or "Non renseigné"
+    languages = doc.language_terms or ["Français"]
+
+    # skills: required + nice
+    skills = list(dict.fromkeys([s for s in (doc.required_skill_terms or []) + (doc.nice_skill_terms or [])]))
+
+    # strong constraints: take top lines from job_required_text
+    strong_constraints = [line.strip() for line in (doc.job_required_text or "").splitlines() if line.strip()][:6]
+
+    description = "\n".join(
+        part for part in (doc.job_required_text, doc.job_nice_text, doc.summary_text) if part
+    )
+
+    meta_keywords = list(dict.fromkeys(canonical_tokens(" ".join(skills))))[:10]
+
+    return {
+        "title": title or "Offre",
+        "meta_keywords": meta_keywords,
+        "contract_type": contract_type,
+        "company": "Non renseigné",
+        "category": category or "Non renseigné",
+        "job_type": None,
+        "salary_max": None,
+        "languages": languages,
+        "description": description or (doc.cleaned_text[:1000] if doc.cleaned_text else ""),
+        "visual_code": None,
+        "paragraph": None,
+        "skills": skills,
+        "strong_constraints": strong_constraints,
+        "status": "draft",
+    }
