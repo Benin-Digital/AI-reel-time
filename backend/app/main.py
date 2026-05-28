@@ -2137,6 +2137,23 @@ def get_cv_document_parsed_pdf(doc_id: int, background_tasks: BackgroundTasks) -
     return FileResponse(pdf_path, media_type="application/pdf", filename=f"cv-parsed-{doc_id}.pdf")
 
 
+@app.get("/cv-documents/{doc_id}/parsed-json")
+def get_cv_document_parsed_json(doc_id: int) -> JSONResponse:
+    with SessionLocal() as session:
+        doc = session.get(CvDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="CV document not found")
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == doc.path)
+        )
+
+    if not extraction or not extraction.extracted_text:
+        raise HTTPException(status_code=404, detail="Extraction not found")
+
+    profile = _get_or_build_profile(session, extraction, "cv")
+    return JSONResponse(content=asdict(profile))
+
+
 @app.get("/job-documents", response_model=list[JobDocumentRead])
 def list_job_documents(
     page: int = 1,
@@ -2297,6 +2314,23 @@ def get_job_document_parsed_pdf(doc_id: int, background_tasks: BackgroundTasks) 
     pdf_path = _render_text_pdf_to_temp(f"Offre parsee #{doc_id}", rendered)
     background_tasks.add_task(_cleanup_temp_file, pdf_path)
     return FileResponse(pdf_path, media_type="application/pdf", filename=f"job-parsed-{doc_id}.pdf")
+
+
+@app.get("/job-documents/{doc_id}/parsed-json")
+def get_job_document_parsed_json(doc_id: int) -> JSONResponse:
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == doc.path)
+        )
+
+    if not extraction or not extraction.extracted_text:
+        raise HTTPException(status_code=404, detail="Extraction not found")
+
+    profile = _get_or_build_profile(session, extraction, "job")
+    return JSONResponse(content=asdict(profile))
 
 
 @app.get("/extractions/path", response_model=ExtractedTextRead)
