@@ -83,8 +83,9 @@ from .services import (
     deserialize_keywords,
     get_queue_status,
 )
-from .services.structured import build_document_profile, normalize_job_offer_from_parsed
+from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
 from .services.explain import build_match_explanation
+from dataclasses import asdict
 from .security import enforce_security, validate_security_settings
 from .settings import get_settings
 from .observability import (
@@ -228,6 +229,12 @@ def _upsert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead
         )
 
         if existing:
+            # if content changed, invalidate cached parsed profile
+            if existing.content_hash != payload.content_hash:
+                existing.parsed_profile = None
+                existing.parsed_profile_hash = None
+                existing.parsed_profile_updated_at = None
+
             existing.content_hash = payload.content_hash
             existing.extracted_text = payload.extracted_text
             existing.extraction_method = payload.extraction_method
@@ -244,11 +251,14 @@ def _upsert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead
             extraction_method=payload.extraction_method,
             extraction_success=payload.extraction_success,
             error_message=payload.error_message,
+            parsed_profile=None,
+            parsed_profile_hash=None,
+            parsed_profile_updated_at=None,
         )
         session.add(extraction)
         session.commit()
         session.refresh(extraction)
-        return ExtractedTextRead.model_validate(extraction)
+        profile = _get_or_build_profile(session, extraction, "cv")
 
 
 def _insert_score_result(cv_path: Path, job_path: Path, score: float, common: list[str]) -> ScoreRead:
@@ -1000,6 +1010,31 @@ def _cleanup_removed_file(path: Path, role: str) -> None:
         session.commit()
 
 
+def _get_or_build_profile(session: Session, extraction: ExtractedText, kind: str) -> StructuredDocument:
+    """Return a StructuredDocument either from cached JSON on `extraction` or by building it and persisting the cache."""
+    # if cached and matches content_hash, reuse
+    try:
+        if extraction.parsed_profile and extraction.parsed_profile_hash and extraction.parsed_profile_hash == extraction.content_hash:
+            data = extraction.parsed_profile
+            # reconstruct dataclass
+            return StructuredDocument(**data)
+    except Exception:
+        # fallthrough to rebuild
+        pass
+
+    # build and persist
+    profile = build_document_profile(extraction.extracted_text or "", kind=kind)
+    try:
+        extraction.parsed_profile = asdict(profile)
+        extraction.parsed_profile_hash = extraction.content_hash
+        extraction.parsed_profile_updated_at = datetime.utcnow()
+        session.add(extraction)
+        session.commit()
+    except Exception:
+        session.rollback()
+    return profile
+
+
 def _score_against_counterparts(changed_path: Path, role: str) -> None:
     changed_result = _extract_and_persist(changed_path)
     if role == "cv":
@@ -1059,7 +1094,13 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
                     select(JobOffer).where(JobOffer.published_document_path == str(changed_path))
                 )
                 if not existing_offer:
-                    parsed = build_document_profile(changed_result.extracted_text or "", kind="job")
+                    extraction_row = session2.scalar(
+                        select(ExtractedText).where(ExtractedText.file_path == str(changed_path))
+                    )
+                    if extraction_row:
+                        parsed = _get_or_build_profile(session2, extraction_row, "job")
+                    else:
+                        parsed = build_document_profile(changed_result.extracted_text or "", kind="job")
                     offer_payload = normalize_job_offer_from_parsed(parsed, str(changed_path))
                     # render text/html using helpers
                     from .schemas import JobOfferCreate
@@ -2014,9 +2055,7 @@ def get_cv_document_details(doc_id: int, limit: int = 6, debug: bool = False) ->
         parser_debug = None
         if debug and extraction and extraction.extracted_text:
             try:
-                from .services.structured import build_document_profile
-
-                profile = build_document_profile(extraction.extracted_text, kind="cv")
+                profile = _get_or_build_profile(session, extraction, "cv")
                 parser_debug = profile.debug_info if hasattr(profile, "debug_info") else None
             except Exception:
                 parser_debug = {"error": "failed to build debug profile"}
@@ -2073,7 +2112,7 @@ def get_cv_document_parsed_text(doc_id: int) -> Response:
     if not extraction or not extraction.extracted_text:
         raise HTTPException(status_code=404, detail="Extraction not found")
 
-    profile = build_document_profile(extraction.extracted_text, kind="cv")
+    profile = _get_or_build_profile(session, extraction, "cv")
     rendered = _render_parsed_document_text(profile, "cv")
     return Response(content=rendered, media_type="text/plain")
 
@@ -2091,7 +2130,7 @@ def get_cv_document_parsed_pdf(doc_id: int, background_tasks: BackgroundTasks) -
     if not extraction or not extraction.extracted_text:
         raise HTTPException(status_code=404, detail="Extraction not found")
 
-    profile = build_document_profile(extraction.extracted_text, kind="cv")
+    profile = _get_or_build_profile(session, extraction, "cv")
     rendered = _render_parsed_document_text(profile, "cv")
     pdf_path = _render_text_pdf_to_temp(f"CV parse #{doc_id}", rendered)
     background_tasks.add_task(_cleanup_temp_file, pdf_path)
@@ -2178,9 +2217,7 @@ def get_job_document_details(doc_id: int, limit: int = 6, debug: bool = False) -
         parser_debug = None
         if debug and extraction and extraction.extracted_text:
             try:
-                from .services.structured import build_document_profile
-
-                profile = build_document_profile(extraction.extracted_text, kind="job")
+                profile = _get_or_build_profile(session, extraction, "job")
                 parser_debug = profile.debug_info if hasattr(profile, "debug_info") else None
             except Exception:
                 parser_debug = {"error": "failed to build debug profile"}
@@ -2237,7 +2274,7 @@ def get_job_document_parsed_text(doc_id: int) -> Response:
     if not extraction or not extraction.extracted_text:
         raise HTTPException(status_code=404, detail="Extraction not found")
 
-    profile = build_document_profile(extraction.extracted_text, kind="job")
+    profile = _get_or_build_profile(session, extraction, "job")
     rendered = _render_parsed_document_text(profile, "job")
     return Response(content=rendered, media_type="text/plain")
 
@@ -2255,7 +2292,7 @@ def get_job_document_parsed_pdf(doc_id: int, background_tasks: BackgroundTasks) 
     if not extraction or not extraction.extracted_text:
         raise HTTPException(status_code=404, detail="Extraction not found")
 
-    profile = build_document_profile(extraction.extracted_text, kind="job")
+    profile = _get_or_build_profile(session, extraction, "job")
     rendered = _render_parsed_document_text(profile, "job")
     pdf_path = _render_text_pdf_to_temp(f"Offre parsee #{doc_id}", rendered)
     background_tasks.add_task(_cleanup_temp_file, pdf_path)
