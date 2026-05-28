@@ -2,12 +2,23 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
+import logging
 import re
 import unicodedata
 
 from ..settings import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+try:
+    import spacy
+
+    _SPACY_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    spacy = None
+    _SPACY_AVAILABLE = False
 
 _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
     (
@@ -347,6 +358,10 @@ class StructuredDocument:
     language_terms: list[str] = field(default_factory=list)
     contract_type: str | None = None
     experience_years: int = 0
+    person_name: str | None = None
+    organization_terms: list[str] = field(default_factory=list)
+    location_terms: list[str] = field(default_factory=list)
+    date_terms: list[str] = field(default_factory=list)
     embedding_chunks: list[str] = field(default_factory=list)
     debug_info: dict = field(default_factory=dict)
 
@@ -505,6 +520,83 @@ def _extract_years(text: str) -> int:
     matches = re.findall(r"(\d{1,2})\s*(?:\+|\-|plus)?\s*(?:years|year|ans|annees?|ann[eé]e?s?)", folded)
     values = [int(value) for value in matches if value.isdigit()]
     return max(values) if values else 0
+
+
+def _unique_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value not in seen:
+            seen.add(value)
+            ordered.append(value)
+    return ordered
+
+
+@lru_cache
+def _load_ner_model():
+    if not settings.ner_enabled or not _SPACY_AVAILABLE:
+        return None
+    model_name = settings.ner_model_name.strip()
+    if not model_name:
+        return None
+    try:
+        return spacy.load(model_name)
+    except Exception as exc:  # pragma: no cover - depends on local model install
+        logger.warning("NER model '%s' not available: %s", model_name, exc)
+        return None
+
+
+def _extract_ner_entities(text: str) -> dict[str, object]:
+    if not text:
+        return {
+            "person_name": None,
+            "organization_terms": [],
+            "location_terms": [],
+            "date_terms": [],
+        }
+
+    nlp = _load_ner_model()
+    if nlp is None:
+        return {
+            "person_name": None,
+            "organization_terms": [],
+            "location_terms": [],
+            "date_terms": [],
+        }
+
+    trimmed = text[: settings.ner_max_chars]
+    doc = nlp(trimmed)
+
+    persons: list[str] = []
+    orgs: list[str] = []
+    locs: list[str] = []
+    dates: list[str] = []
+
+    for ent in doc.ents:
+        label = ent.label_.upper()
+        value = ent.text.strip()
+        if not value:
+            continue
+        if label in {"PER", "PERSON"}:
+            persons.append(value)
+        elif label in {"ORG", "ORGANIZATION"}:
+            orgs.append(value)
+        elif label in {"LOC", "GPE", "LOCATION"}:
+            locs.append(value)
+        elif label in {"DATE", "TIME"}:
+            dates.append(value)
+
+    persons = _unique_preserve_order(persons)
+    orgs = _unique_preserve_order(orgs)
+    locs = _unique_preserve_order(locs)
+    dates = _unique_preserve_order(dates)
+
+    return {
+        "person_name": persons[0] if persons else None,
+        "organization_terms": orgs[: settings.ner_max_entities],
+        "location_terms": locs[: settings.ner_max_entities],
+        "date_terms": dates[: settings.ner_max_entities],
+    }
 
 
 def _split_heading_payload(line: str) -> tuple[str | None, str]:
@@ -668,6 +760,12 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
     contract_type = _detect_contract_type("\n".join(part for part in (contract_text, cleaned_text) if part))
     experience_years = _extract_years("\n".join(part for part in (experience_text, cleaned_text) if part))
 
+    ner_payload = _extract_ner_entities(cleaned_text)
+    person_name = ner_payload["person_name"]
+    organization_terms = list(ner_payload["organization_terms"])
+    location_terms = list(ner_payload["location_terms"])
+    date_terms = list(ner_payload["date_terms"])
+
     if kind == "cv" and not skill_terms:
         fallback_sources = [skills_text, experience_text, education_text, certifications_text, summary_text]
         skill_terms = _extract_skill_terms("\n".join(part for part in fallback_sources if part))
@@ -701,7 +799,14 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
     if not embedding_chunks and cleaned_text:
         embedding_chunks = [cleaned_text]
 
-    debug = {"detected_headings": detected_headings} if detected_headings else {}
+    debug: dict = {"detected_headings": detected_headings} if detected_headings else {}
+    if person_name or organization_terms or location_terms or date_terms:
+        debug["ner"] = {
+            "person_name": person_name,
+            "organizations": organization_terms,
+            "locations": location_terms,
+            "dates": date_terms,
+        }
 
     return StructuredDocument(
         kind=kind or "unknown",
@@ -725,6 +830,10 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
         language_terms=language_terms,
         contract_type=contract_type,
         experience_years=experience_years,
+        person_name=person_name,
+        organization_terms=organization_terms,
+        location_terms=location_terms,
+        date_terms=date_terms,
         embedding_chunks=embedding_chunks,
         debug_info=debug,
     )

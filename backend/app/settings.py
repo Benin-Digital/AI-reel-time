@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     structured_education_weight: float = 0.05
     structured_missing_required_penalty: float = 0.20
     structured_missing_experience_penalty: float = 0.10
+    ner_enabled: bool = True
+    ner_model_name: str = "fr_core_news_sm"
+    ner_max_chars: int = 20000
+    ner_max_entities: int = 12
     ocr_min_text_length: int = 20
     ocr_dpi: int = 200
     ocr_languages: str = "fra+eng"
