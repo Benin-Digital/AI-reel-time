@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     ner_model_name: str = "fr_core_news_sm"
     ner_max_chars: int = 20000
     ner_max_entities: int = 12
+    # Controls whether the system auto-creates a JobOffer from a parsed job document
+    # Set to False in production to avoid unexpected side-effects during ingestion.
+    auto_create_job_offer: bool = False
     ocr_min_text_length: int = 20
     ocr_dpi: int = 200
     ocr_languages: str = "fra+eng"
