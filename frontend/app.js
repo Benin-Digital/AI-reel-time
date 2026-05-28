@@ -110,9 +110,10 @@ const panelViews = Array.from(document.querySelectorAll(".panel-view"));
 const documentSelection = { cv: null, job: null };
 const matchDetailsState = Object.create(null);
 const documentPreviewState = {
-  cv: { objectUrl: null, previewMode: "text" },
-  job: { objectUrl: null, previewMode: "text" },
+  cv: { objectUrl: null, previewMode: "text", textMode: "extracted" },
+  job: { objectUrl: null, previewMode: "text", textMode: "extracted" },
 };
+const structuredTextCache = Object.create(null);
 
 const renderParserFeedbackList = (rows) => {
   if (!pfList) return;
@@ -471,6 +472,15 @@ const buildDocumentPdfUrl = (kind, id) => {
   return `${apiBase}/${kind}-documents/${id}/pdf`;
 };
 
+const buildStructuredPdfUrl = (kind, id) => {
+  if (!apiBase) {
+    return "";
+  }
+  return `${apiBase}/${kind}-documents/${id}/parsed-pdf`;
+};
+
+const fetchStructuredText = async (kind, id) => safeFetch(`/${kind}-documents/${id}/parsed-text`);
+
 const openAuthenticatedPdf = async (kind, id) => {
   const pdfUrl = buildDocumentPdfUrl(kind, id);
   if (!pdfUrl) {
@@ -489,6 +499,39 @@ const openAuthenticatedPdf = async (kind, id) => {
   }
   if (!response.ok) {
     throw new Error(`Impossible de charger le PDF (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const popup = window.open(objectUrl, "_blank");
+  if (!popup) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error("Impossible d'ouvrir la fenêtre PDF");
+  }
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 60000);
+};
+
+const openStructuredPdf = async (kind, id) => {
+  const pdfUrl = buildStructuredPdfUrl(kind, id);
+  if (!pdfUrl) {
+    throw new Error("Base API manquante");
+  }
+
+  const headers = new Headers();
+  if (authToken) {
+    headers.set("Authorization", `Bearer ${authToken}`);
+  }
+
+  const response = await fetchWithTimeout(pdfUrl, { method: "GET", headers });
+  if (response.status === 401) {
+    openModal(loginModal);
+    throw new Error("Authentification requise pour afficher le PDF structure");
+  }
+  if (!response.ok) {
+    throw new Error(`Impossible de charger le PDF structure (${response.status})`);
   }
 
   const blob = await response.blob();
@@ -842,6 +885,7 @@ const setSelectedDocument = (kind, id) => {
   if (documentSelection[kind] !== nextId) {
     clearDocumentPdfUrl(kind);
     documentPreviewState[kind].previewMode = "text";
+    documentPreviewState[kind].textMode = "extracted";
   }
   documentSelection[kind] = nextId;
 };
@@ -1930,8 +1974,16 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
   const matches = doc.top_matches || [];
   const keywordChips = renderKeywordChips(doc.top_keywords || []);
   const statusTone = documentStatusTone(doc.status);
-  const previewText = extraction.extracted_text || "Aucun texte extrait";
-  const previewLabel = kind === "job" ? "Aperçu de l’offre" : "Aperçu du texte";
+  const parsedTextKey = `${kind}:${doc.id}`;
+  const extractedText = extraction.extracted_text || "Aucun texte extrait";
+  const textMode = documentPreviewState[kind]?.textMode || "extracted";
+  const structuredText = structuredTextCache[parsedTextKey];
+  const previewLabel = textMode === "structured"
+    ? "Texte structuré"
+    : (kind === "job" ? "Texte extrait de l’offre" : "Texte extrait");
+  const previewText = textMode === "structured" && structuredText
+    ? structuredText
+    : extractedText;
   const pdfUrl = buildDocumentPdfUrl(kind, doc.id);
   const hasPdf = typeof doc.path === "string" && doc.path.toLowerCase().endsWith(".pdf");
 
@@ -1971,17 +2023,23 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
       ${doc.top_keywords && doc.top_keywords.length ? `<div class="detail-card__section"><div class="meta">Mots-clés principaux</div>${keywordChips}</div>` : ""}
 
       <div class="detail-card__section detail-card__section--preview">
-        ${hasPdf ? `
-          <div class="detail-preview-toolbar">
+        <div class="detail-preview-toolbar">
+          ${hasPdf ? `
             <button type="button" class="detail-preview-toggle" data-document-preview-toggle>
               Voir le PDF
             </button>
-          </div>
-        ` : ""}
+          ` : ""}
+          <button type="button" class="detail-preview-toggle" data-document-structured-toggle>
+            Voir texte structuré
+          </button>
+          <button type="button" class="detail-preview-toggle" data-document-structured-pdf>
+            Voir PDF structuré
+          </button>
+        </div>
         <div class="detail-preview-stack" data-document-preview-stack>
           <div class="detail-preview-panel" data-document-preview-panel="text">
-            <div class="meta">${previewLabel}</div>
-            <div class="detail-preview">${previewText}</div>
+            <div class="meta" data-document-preview-label>${previewLabel}</div>
+            <div class="detail-preview" data-document-preview-text>${previewText}</div>
           </div>
 
           ${hasPdf && pdfUrl ? `
@@ -2069,6 +2127,59 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
         if (iframe && !iframe.src && iframe.dataset.pdfLoading !== "true") {
           await loadDocumentPdfPreview(kind, doc.id, iframe, loadingNode);
         }
+      }
+    });
+  }
+
+  const previewLabelNode = target.querySelector("[data-document-preview-label]");
+  const previewTextNode = target.querySelector("[data-document-preview-text]");
+  const structuredToggle = target.querySelector("[data-document-structured-toggle]");
+  const structuredPdfButton = target.querySelector("[data-document-structured-pdf]");
+  const parsedTextKey = `${kind}:${doc.id}`;
+
+  const setStructuredButtonLabel = (mode) => {
+    if (!structuredToggle) {
+      return;
+    }
+    structuredToggle.textContent = mode === "structured" ? "Voir texte extrait" : "Voir texte structuré";
+  };
+
+  if (structuredToggle && previewLabelNode && previewTextNode) {
+    setStructuredButtonLabel(documentPreviewState[kind]?.textMode || "extracted");
+    structuredToggle.addEventListener("click", async () => {
+      const currentMode = documentPreviewState[kind]?.textMode || "extracted";
+      const nextMode = currentMode === "structured" ? "extracted" : "structured";
+      documentPreviewState[kind].textMode = nextMode;
+      setStructuredButtonLabel(nextMode);
+      if (nextMode === "structured") {
+        setDocumentPreviewMode(target, "text");
+        try {
+          let parsedText = structuredTextCache[parsedTextKey];
+          if (!parsedText) {
+            parsedText = await fetchStructuredText(kind, doc.id);
+            structuredTextCache[parsedTextKey] = parsedText;
+          }
+          previewLabelNode.textContent = "Texte structuré";
+          previewTextNode.textContent = parsedText || "Aucun texte structuré";
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Erreur inconnue";
+          previewLabelNode.textContent = "Texte structuré";
+          previewTextNode.textContent = message;
+        }
+      } else {
+        previewLabelNode.textContent = kind === "job" ? "Texte extrait de l’offre" : "Texte extrait";
+        previewTextNode.textContent = extraction.extracted_text || "Aucun texte extrait";
+      }
+    });
+  }
+
+  if (structuredPdfButton) {
+    structuredPdfButton.addEventListener("click", async () => {
+      try {
+        await openStructuredPdf(kind, doc.id);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Erreur inconnue";
+        setApiStatus(message);
       }
     });
   }

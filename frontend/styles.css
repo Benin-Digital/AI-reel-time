@@ -1542,6 +1542,8 @@ body {
 .detail-preview-toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .detail-preview-toggle {
