@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     structured_missing_experience_penalty: float = 0.10
     ner_enabled: bool = True
     ner_model_name: str = "fr_core_news_sm"
+    # Mapping from language code to spaCy model name, e.g. "fr:fr_core_news_sm,en:en_core_web_sm"
+    ner_model_map: str = "fr:fr_core_news_sm,en:en_core_web_sm"
     ner_max_chars: int = 20000
     ner_max_entities: int = 12
     # Controls whether the system auto-creates a JobOffer from a parsed job document

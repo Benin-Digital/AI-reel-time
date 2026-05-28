@@ -20,6 +20,12 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     spacy = None
     _SPACY_AVAILABLE = False
+try:
+    import langdetect
+    _LANGDETECT_AVAILABLE = True
+except Exception:
+    langdetect = None
+    _LANGDETECT_AVAILABLE = False
 
 _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
     (
@@ -591,9 +597,23 @@ def _unique_preserve_order(values: list[str]) -> list[str]:
 
 @lru_cache
 def _load_ner_model():
+    # Deprecated single-model loader retained for compatibility
     if not settings.ner_enabled or not _SPACY_AVAILABLE:
         return None
     model_name = settings.ner_model_name.strip()
+    if not model_name:
+        return None
+    try:
+        return spacy.load(model_name)
+    except Exception as exc:  # pragma: no cover - depends on local model install
+        logger.warning("NER model '%s' not available: %s", model_name, exc)
+        return None
+
+
+@lru_cache
+def _load_ner_model_for(model_name: str):
+    if not settings.ner_enabled or not _SPACY_AVAILABLE:
+        return None
     if not model_name:
         return None
     try:
@@ -612,7 +632,32 @@ def _extract_ner_entities(text: str) -> dict[str, object]:
             "date_terms": [],
         }
 
-    nlp = _load_ner_model()
+    # choose model: try per-document language detection and map to model
+    model_name = None
+    try:
+        # parse mapping like "fr:fr_core_news_sm,en:en_core_web_sm"
+        mapping = {}
+        for chunk in (settings.ner_model_map or "").split(","):
+            if ":" in chunk:
+                lang, m = chunk.split(":", 1)
+                mapping[lang.strip().lower()] = m.strip()
+        # detect language if possible
+        detected_lang = None
+        if _LANGDETECT_AVAILABLE and text:
+            try:
+                detected_lang = langdetect.detect(text[:10000])
+            except Exception:
+                detected_lang = None
+
+        if detected_lang and detected_lang in mapping:
+            model_name = mapping[detected_lang]
+        else:
+            # fallback to single model name
+            model_name = settings.ner_model_name
+    except Exception:
+        model_name = settings.ner_model_name
+
+    nlp = _load_ner_model_for(model_name)
     if nlp is None:
         return {
             "person_name": None,
