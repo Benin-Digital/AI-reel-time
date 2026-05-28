@@ -55,6 +55,9 @@ const uploadJobZone = document.getElementById("uploadJobZone");
 const uploadJobInput = document.getElementById("uploadJobInput");
 const uploadJobButton = document.getElementById("uploadJobButton");
 const uploadJobStatus = document.getElementById("uploadJobStatus");
+const cvPublishDetails = document.getElementById("cvPublishDetails");
+const cvPublishForm = document.getElementById("cvPublishForm");
+const cvPublishFeedback = document.getElementById("cvPublishFeedback");
 const jobOfferDetails = document.getElementById("jobOfferDetails");
 const jobOfferForm = document.getElementById("jobOfferForm");
 const jobOfferFeedback = document.getElementById("jobOfferFeedback");
@@ -183,7 +186,7 @@ let authMode = "login";
 let autoRefreshTimer = null;
 let autoRefreshDelayMs = AUTO_REFRESH_MS;
 let autoRefreshInFlight = false;
-let activePanel = "cv";
+let activePanel = "publish-cv";
 let adminUsersCache = [];
 let isHydratingDashboard = false;
 let pfState = { page: 1, page_size: 25 };
@@ -845,7 +848,7 @@ const setSelectedDocument = (kind, id) => {
 
 const setActivePanel = (panelName) => {
   if (panelName === "admin" && !canManageUsers()) {
-    panelName = "cv";
+    panelName = "publish-cv";
   }
   activePanel = panelName;
   document.body.setAttribute("data-active-panel", panelName);
@@ -963,6 +966,149 @@ const buildJobOfferPreviewPayload = (form) => ({
   strong_constraints: splitOfferItems(form.jobOfferStrongConstraints?.value),
   status: form.jobOfferStatus?.value || "published",
 });
+
+const buildCvProfilePreviewPayload = (form) => ({
+  full_name: form.cvPublishFullName?.value.trim() || "Nom complet",
+  headline: form.cvPublishHeadline?.value.trim() || "Titre professionnel",
+  summary: form.cvPublishSummary?.value.trim() || "Aucun résumé renseigné.",
+  experience: splitOfferItems(form.cvPublishExperience?.value),
+  education: splitOfferItems(form.cvPublishEducation?.value),
+  certifications: splitOfferItems(form.cvPublishCertifications?.value),
+  skills: splitOfferItems(form.cvPublishSkills?.value),
+  languages: splitOfferItems(form.cvPublishLanguages?.value),
+  contract_type: form.cvPublishContractType?.value || null,
+  location: form.cvPublishLocation?.value.trim() || null,
+  status: form.cvPublishStatus?.value || "published",
+});
+
+const renderCvProfileDetails = (profile, target = cvPublishDetails) => {
+  if (!target) {
+    return;
+  }
+
+  if (!profile) {
+    target.innerHTML = `
+      <article class="detail-card">
+        <div class="meta">Aperçu du CV</div>
+        <h4>Remplissez le formulaire</h4>
+        <p class="muted">Le détail du CV apparaîtra ici en direct pendant la saisie.</p>
+      </article>
+    `;
+    return;
+  }
+
+  const skillsHtml = (profile.skills || []).length
+    ? `<ul class="explain-list">${profile.skills.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : '<p class="meta muted">Aucune compétence saisie.</p>';
+
+  const experienceHtml = (profile.experience || []).length
+    ? `<ul class="explain-list">${profile.experience.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : '<p class="meta muted">Aucune expérience saisie.</p>';
+
+  const educationHtml = (profile.education || []).length
+    ? `<ul class="explain-list">${profile.education.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : '<p class="meta muted">Aucune formation saisie.</p>';
+
+  const certificationsHtml = (profile.certifications || []).length
+    ? `<ul class="explain-list">${profile.certifications.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : '<p class="meta muted">Aucune certification saisie.</p>';
+
+  const languagesHtml = (profile.languages || []).length
+    ? `<div class="chip-row">${profile.languages.map((language) => `<span class="chip">${escapeHtml(language)}</span>`).join("")}</div>`
+    : '<p class="meta muted">Aucune langue saisie.</p>';
+
+  const renderStat = (label, value) => `
+    <div class="detail-stat">
+      <span class="detail-stat__label">${label}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
+
+  const canonicalText = [
+    `Nom complet: ${profile.full_name}`,
+    `Titre professionnel: ${profile.headline}`,
+    `Résumé: ${profile.summary}`,
+    `Compétences: ${(profile.skills || []).join(", ") || "Aucune"}`,
+    `Expérience: ${(profile.experience || []).join(", ") || "Aucune"}`,
+    `Formation: ${(profile.education || []).join(", ") || "Aucune"}`,
+    `Certifications: ${(profile.certifications || []).join(", ") || "Aucune"}`,
+    `Langues: ${(profile.languages || []).join(", ") || "Français"}`,
+    `Contrat recherché: ${profile.contract_type || "Non renseigné"}`,
+    `Localisation: ${profile.location || "Non renseignée"}`,
+  ].join("\n");
+
+  target.innerHTML = `
+    <article class="detail-card">
+      <div class="detail-card__top">
+        <div>
+          <strong class="detail-card__title">${escapeHtml(profile.full_name)}</strong>
+          <div class="doc-card__meta">Détail du CV</div>
+        </div>
+      </div>
+
+      <div class="detail-card__stats">
+        ${renderStat("Contrat", profile.contract_type || "Non renseigné")}
+        ${renderStat("Statut", profile.status === "published" ? "Publié" : "Brouillon")}
+      </div>
+
+      <div class="detail-card__meta-row">
+        <div class="doc-card__meta">Titre : ${escapeHtml(profile.headline)}</div>
+        <div class="doc-card__meta">Localisation : ${escapeHtml(profile.location || "Non renseignée")}</div>
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Résumé</div>
+        <div class="detail-preview">${escapeHtml(profile.summary).replace(/\n/g, "<br />")}</div>
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Compétences</div>
+        ${skillsHtml}
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Expérience</div>
+        ${experienceHtml}
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Formation</div>
+        ${educationHtml}
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Certifications</div>
+        ${certificationsHtml}
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Langues</div>
+        ${languagesHtml}
+      </div>
+
+      <div class="detail-card__section">
+        <div class="meta">Texte canonique de matching</div>
+        <div class="detail-preview">${escapeHtml(canonicalText).replace(/\n/g, "<br />")}</div>
+      </div>
+    </article>
+  `;
+};
+
+const createStructuredCvProfile = async (form) => {
+  const payload = buildCvProfilePreviewPayload(form);
+
+  if (!payload.full_name || !payload.headline || !payload.summary) {
+    throw new Error("Merci de remplir les champs obligatoires en français.");
+  }
+
+  const response = await safeFetch("/cv-profiles", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    json: true,
+  });
+
+  return response;
+};
 
 const renderJobOfferDetails = (offer, target = jobOfferDetails) => {
   if (!target) {
@@ -2448,6 +2594,47 @@ if (jobOfferForm) {
   });
 
   refreshJobOfferPreview();
+}
+
+if (cvPublishForm) {
+  const refreshCvPublishPreview = () => {
+    renderCvProfileDetails(buildCvProfilePreviewPayload(cvPublishForm), cvPublishDetails);
+  };
+
+  cvPublishForm.addEventListener("input", refreshCvPublishPreview);
+  cvPublishForm.addEventListener("change", refreshCvPublishPreview);
+
+  cvPublishForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      if (cvPublishFeedback) {
+        cvPublishFeedback.hidden = true;
+        cvPublishFeedback.textContent = "";
+      }
+      const createdProfile = await createStructuredCvProfile(cvPublishForm);
+      const publishedLabel = createdProfile.status === "published" ? "publié et indexé" : "enregistré en brouillon";
+      if (cvPublishFeedback) {
+        cvPublishFeedback.hidden = false;
+        cvPublishFeedback.textContent = `CV ${publishedLabel}.`;
+        cvPublishFeedback.dataset.tone = "success";
+      }
+      renderCvProfileDetails(createdProfile, cvPublishDetails);
+      if (createdProfile.status === "published") {
+        cvPublishForm.reset();
+        await loadAll();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erreur inconnue";
+      if (cvPublishFeedback) {
+        cvPublishFeedback.hidden = false;
+        cvPublishFeedback.textContent = message;
+        cvPublishFeedback.dataset.tone = "error";
+      }
+      setApiStatus(message);
+    }
+  });
+
+  refreshCvPublishPreview();
 }
 
 const startAutoRefresh = () => {

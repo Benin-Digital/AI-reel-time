@@ -476,6 +476,24 @@ body {
   background: linear-gradient(135deg, #26764b, #49a561);
 }
 
+.panel-view--publish-cv .document-detail-header {
+  border-color: #b9d3e7;
+  background: linear-gradient(135deg, #eef6ff 0%, #deefff 100%);
+}
+
+.panel-view--publish-cv .document-detail-header h3 {
+  color: #24507d;
+}
+
+.panel-view--publish-cv .job-offer-form__actions .primary {
+  background: linear-gradient(135deg, #25618b, #4d86b0);
+  box-shadow: 0 18px 32px rgba(37, 97, 139, 0.24);
+}
+
+.panel-view--publish-cv .job-offer-form__actions .primary:hover {
+  background: linear-gradient(135deg, #1f5074, #3b729a);
+}
+
 .ghost {
   background: #edf1ef;
   border: 1px solid var(--stroke);

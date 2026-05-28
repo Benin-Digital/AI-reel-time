@@ -109,7 +109,8 @@
         </div>
 
         <div class="workspace-switcher" role="tablist" aria-label="Navigation des bibliothèques">
-          <button id="tabCv" class="workspace-switcher__button is-active" type="button" data-panel="cv" role="tab" aria-selected="true">Bibliothèque CV</button>
+          <button id="tabPublishCv" class="workspace-switcher__button is-active" type="button" data-panel="publish-cv" role="tab" aria-selected="true">Publier un CV</button>
+          <button id="tabCv" class="workspace-switcher__button" type="button" data-panel="cv" role="tab" aria-selected="false">Bibliothèque CV</button>
           <button id="tabOffer" class="workspace-switcher__button" type="button" data-panel="offer" role="tab" aria-selected="false">Publier une offre</button>
           <button id="tabJob" class="workspace-switcher__button" type="button" data-panel="job" role="tab" aria-selected="false">Bibliothèque offres</button>
           <button id="tabMatches" class="workspace-switcher__button" type="button" data-panel="matches" role="tab" aria-selected="false">Correspondances</button>
@@ -117,7 +118,94 @@
         </div>
 
         <div class="board">
-          <section class="panel panel-view panel-view--cv is-active" data-panel="cv" role="tabpanel" aria-labelledby="tabCv">
+          <section class="panel panel-view panel-view--publish-cv is-active" data-panel="publish-cv" role="tabpanel" aria-labelledby="tabPublishCv">
+            <div class="panel-body">
+              <div class="document-workspace">
+                <div class="document-list-column">
+                  <div class="card job-offer-card">
+                    <div class="section-header compact">
+                      <h4>Publier un CV structuré</h4>
+                      <p>Le formulaire alimente directement la bibliothèque CV et le matching avec une structure canonique.</p>
+                    </div>
+                    <form id="cvPublishForm" class="job-offer-form">
+                      <div class="job-offer-form__grid">
+                        <label>
+                          Nom complet *
+                          <input id="cvPublishFullName" name="cvPublishFullName" type="text" placeholder="Ex. Khalid Jaouani" required />
+                        </label>
+                        <label>
+                          Titre professionnel *
+                          <input id="cvPublishHeadline" name="cvPublishHeadline" type="text" placeholder="Ex. DSI / IT Manager" required />
+                        </label>
+                        <label>
+                          Contrat recherché
+                          <select id="cvPublishContractType" name="cvPublishContractType">
+                            <option value="">Non renseigné</option>
+                            <option value="CDI" selected>CDI</option>
+                            <option value="CDD">CDD</option>
+                            <option value="Freelance">Freelance</option>
+                            <option value="Stage">Stage</option>
+                            <option value="Alternance">Alternance</option>
+                          </select>
+                        </label>
+                        <label>
+                          Localisation
+                          <input id="cvPublishLocation" name="cvPublishLocation" type="text" placeholder="Ex. Casablanca, Maroc" />
+                        </label>
+                      </div>
+                      <label>
+                        Résumé *
+                        <textarea id="cvPublishSummary" name="cvPublishSummary" rows="5" placeholder="Décrivez votre positionnement, vos priorités et votre valeur ajoutée." required></textarea>
+                      </label>
+                      <div class="job-offer-form__grid job-offer-form__grid--stacked">
+                        <label>
+                          Compétences
+                          <textarea id="cvPublishSkills" name="cvPublishSkills" rows="4" placeholder="Gestion de projet, ERP, Python, SQL"></textarea>
+                        </label>
+                        <label>
+                          Expérience
+                          <textarea id="cvPublishExperience" name="cvPublishExperience" rows="4" placeholder="DSI chez X, Chef de projet chez Y"></textarea>
+                        </label>
+                      </div>
+                      <div class="job-offer-form__grid job-offer-form__grid--stacked">
+                        <label>
+                          Formation
+                          <textarea id="cvPublishEducation" name="cvPublishEducation" rows="3" placeholder="Master, école, certifications académiques"></textarea>
+                        </label>
+                        <label>
+                          Certifications
+                          <textarea id="cvPublishCertifications" name="cvPublishCertifications" rows="3" placeholder="PMP, ITIL, Azure, AWS"></textarea>
+                        </label>
+                      </div>
+                      <label>
+                        Langues
+                        <textarea id="cvPublishLanguages" name="cvPublishLanguages" rows="3" placeholder="Français, anglais, arabe"></textarea>
+                      </label>
+                      <div class="job-offer-form__actions">
+                        <label>
+                          Statut
+                          <select id="cvPublishStatus" name="cvPublishStatus">
+                            <option value="draft">Brouillon</option>
+                            <option value="published" selected>Publier maintenant</option>
+                          </select>
+                        </label>
+                        <button class="primary" type="submit">Enregistrer le CV</button>
+                      </div>
+                    </form>
+                    <div id="cvPublishFeedback" class="upload-status" hidden></div>
+                  </div>
+                </div>
+                <aside class="document-detail-column">
+                  <div class="document-detail-header">
+                    <h3>Détail du CV publié</h3>
+                  </div>
+                  <div id="cvPublishDetails" class="document-detail-panel job-offer-detail-panel"></div>
+                </aside>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel panel-view panel-view--cv" data-panel="cv" role="tabpanel" aria-labelledby="tabCv" hidden>
             <div class="panel-body">
               <div class="document-workspace">
                 <div class="document-list-column">
