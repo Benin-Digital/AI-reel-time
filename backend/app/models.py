@@ -68,6 +68,10 @@ class ExtractedText(Base):
     extraction_method: Mapped[str] = mapped_column(String(32), default="unknown")
     extraction_success: Mapped[bool] = mapped_column(default=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # cached parsed profile (structure produced by build_document_profile)
+    parsed_profile: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    parsed_profile_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parsed_profile_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
