@@ -208,6 +208,21 @@ def _summary_text(profile_kind: str, summary: str, fallback: str) -> str:
     return fallback if profile_kind == "job" else fallback
 
 
+def _relevant_text(profile) -> str:
+    parts = [
+        profile.summary_text,
+        profile.skills_text,
+        profile.job_required_text,
+        profile.job_nice_text,
+        profile.experience_text,
+        profile.education_text,
+        profile.certifications_text,
+        profile.languages_text,
+        profile.contract_text,
+    ]
+    return "\n".join(part for part in parts if part).strip()
+
+
 def analyze_match(cv_text: str, job_text: str) -> dict[str, object]:
     stopwords = _stopwords()
     skill_keywords = canonical_token_set(settings.scoring_skill_keywords)
@@ -215,8 +230,11 @@ def analyze_match(cv_text: str, job_text: str) -> dict[str, object]:
     cv_profile = build_document_profile(cv_text or "", kind="cv")
     job_profile = build_document_profile(job_text or "", kind="job")
 
-    cv_general = _token_set(cv_profile.cleaned_text, stopwords)
-    job_general = _token_set(job_profile.cleaned_text, stopwords)
+    cv_focus_text = _relevant_text(cv_profile) or cv_profile.cleaned_text
+    job_focus_text = _relevant_text(job_profile) or job_profile.cleaned_text
+
+    cv_general = _token_set(cv_focus_text, stopwords)
+    job_general = _token_set(job_focus_text, stopwords)
     lexical_common = cv_general.intersection(job_general)
     lexical_union = cv_general.union(job_general)
     lexical_weights = {token: settings.scoring_skill_weight for token in skill_keywords}
@@ -233,8 +251,8 @@ def analyze_match(cv_text: str, job_text: str) -> dict[str, object]:
     missing_required = sorted(required_terms.difference(cv_skill_terms))
     missing_required_ratio = (len(missing_required) / len(required_terms)) if required_terms else 0.0
 
-    cv_summary_tokens = set(_tokenize(_summary_text("cv", cv_profile.summary_text, cv_profile.cleaned_text), stopwords))
-    job_summary_tokens = set(_tokenize(_summary_text("job", job_profile.summary_text, job_profile.cleaned_text), stopwords))
+    cv_summary_tokens = set(_tokenize(_summary_text("cv", cv_profile.summary_text, cv_focus_text), stopwords))
+    job_summary_tokens = set(_tokenize(_summary_text("job", job_profile.summary_text, job_focus_text), stopwords))
     summary_overlap = _jaccard(cv_summary_tokens, job_summary_tokens)
 
     cv_languages = set(cv_profile.language_terms)
@@ -259,8 +277,8 @@ def analyze_match(cv_text: str, job_text: str) -> dict[str, object]:
     phrase_keywords = _parse_csv(settings.scoring_skill_keywords)
     skill_phrases = [phrase for phrase in phrase_keywords if " " in phrase]
     phrase_hits = min(
-        _phrase_bonus(cv_profile.cleaned_text, skill_phrases),
-        _phrase_bonus(job_profile.cleaned_text, skill_phrases),
+        _phrase_bonus(cv_focus_text, skill_phrases),
+        _phrase_bonus(job_focus_text, skill_phrases),
     )
     phrase_bonus = min(settings.scoring_max_bonus, phrase_hits * settings.scoring_phrase_bonus)
 
