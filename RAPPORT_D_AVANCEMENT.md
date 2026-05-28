@@ -126,50 +126,39 @@ curl -H "Authorization: Bearer $TOKEN" \
 1) Schéma — User (Candidat) :
 
 ```mermaid
-sequenceDiagram
-  participant Candidate
-  participant Frontend
-  participant Backend
-  participant Extractor
-  participant Parser
-  participant DB
-  Candidate->>Frontend: Upload CV (file)
-  Frontend->>Backend: POST /ingest (file + metadata)
-  Backend->>Extractor: extract_text(file)
-  Extractor->>Parser: parse_structured(text)
-  Parser->>DB: save_profile(profile)
-  Backend->>Backend: index_embeddings(profile)
-  Backend-->>Frontend: 201 Created + profile_id
+flowchart LR
+  CAND["Candidate"] --> FE["Frontend"]
+  FE -->|"POST /ingest (file + metadata)"| BE["Backend"]
+  BE -->|"extract_text(file)"| EXT["Extractor"]
+  EXT -->|"parse_structured(text)"| PAR["Parser"]
+  PAR -->|"save_profile(profile)"| DB1["DB"]
+  BE -->|"index_embeddings(profile)"| BE
+  BE -->|"201 Created + profile_id"| FE
 ```
 
 2) Schéma — Admin (Recruteur) :
 
 ```mermaid
-sequenceDiagram
-  participant Recruiter
-  participant Frontend
-  participant Backend
-  participant Scoring
-  participant DB
-  Recruiter->>Frontend: Publish job (form or upload)
-  Frontend->>Backend: POST /job-offers
-  Backend->>DB: save_job_offer(job)
-  Backend->>Scoring: compute_matches(job_id)
-  Scoring->>DB: persist_matches(job_id, results)
-  Backend-->>Frontend: 200 OK + top_matches
+flowchart LR
+  REC["Recruiter"] --> FE2["Frontend"]
+  FE2 -->|"POST /job-offers"| BE2["Backend"]
+  BE2 -->|"save_job_offer(job)"| DB2["DB"]
+  BE2 -->|"compute_matches(job_id)"| SCO["Scoring"]
+  SCO -->|"persist_matches(job_id, results)"| DB2
+  BE2 -->|"200 OK + top_matches"| FE2
 ```
 
 3) Schéma — Super‑admin (Opérations) :
 
 ```mermaid
 flowchart LR
-  SA[Super-admin] --> UI(Admin UI)
-  UI --> Backend
-  Backend --> DB
-  Backend --> Watcher
-  Watcher --> Backend
-  Backend --> Logs[parser_debug / extraction logs]
-  Backend --> Jobs[replay / bulk operations]
+  SA["Super-admin"] --> UI["Admin UI"]
+  UI --> BE3["Backend"]
+  BE3 --> DB3["DB"]
+  BE3 --> WAT["Watcher"]
+  WAT --> BE3
+  BE3 --> LOGS["parser_debug / extraction logs"]
+  BE3 --> JOBS["replay / bulk operations"]
 ```
 
 
@@ -178,17 +167,17 @@ flowchart LR
 Voici le schéma du pipeline de traitement (lecture gauche → droite) :
 
 ```mermaid
-graph LR
-  ING[Ingestion (upload / watcher)] --> EXTR[Extraction (PDF text layer / OCR)]
-  EXTR --> PARS[Parsing structuré (sections, NER, heuristiques)]
-  PARS --> CAN[Canonicalisation / Normalisation]
-  CAN --> EMB[Embeddings (texte total, fields ciblés)]
-  EMB --> VIDX[Index vectoriel (pgvector)]
-  CAN --> LIDX[Index lexical (tokens canoniques, champs)]
-  VIDX --> SCORE[Scoring hybride]
+flowchart LR
+  ING["Ingestion (upload / watcher)"] --> EXTR["Extraction (PDF text layer / OCR)"]
+  EXTR --> PARS["Parsing structuré (sections, NER, heuristiques)"]
+  PARS --> CAN["Canonicalisation / Normalisation"]
+  CAN --> EMB["Embeddings (texte total, fields ciblés)"]
+  EMB --> VIDX["Index vectoriel (pgvector)"]
+  CAN --> LIDX["Index lexical (tokens canoniques, champs)"]
+  VIDX --> SCORE["Scoring hybride"]
   LIDX --> SCORE
-  SCORE --> PERS[Persistance des matches (MatchResult / ScoreResult)]
-  PERS --> UI[UI / API (affichage, filtres, replay)]
+  SCORE --> PERS["Persistance des matches (MatchResult / ScoreResult)"]
+  PERS --> UI["UI / API (affichage, filtres, replay)"]
 ```
 
 Schéma linéaire textuel :
