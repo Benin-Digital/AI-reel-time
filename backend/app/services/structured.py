@@ -6,6 +6,7 @@ from functools import lru_cache
 import logging
 import re
 import unicodedata
+import difflib
 
 from ..settings import get_settings
 
@@ -471,10 +472,17 @@ def canonical_token_set(text: str) -> set[str]:
 def _extract_skill_terms(text: str) -> list[str]:
     if not text:
         return []
+    # Build a whitelist of known skills from settings to reduce noise and enable fuzzy matching
+    def _skill_whitelist() -> list[str]:
+        raw = (settings.scoring_skill_keywords or "")
+        parts = [p.strip() for p in re.split(r"[,;]+", raw) if p.strip()]
+        return [_apply_synonyms(p) for p in parts]
 
+    whitelist = _skill_whitelist()
+
+    # split into candidate chunks
     chunks = re.split(r"[\n,;/|•]+|\band\b|\bet\b|\bou\b", text, flags=re.IGNORECASE)
-    terms: list[str] = []
-    seen: set[str] = set()
+    candidates: set[str] = set()
     for chunk in chunks:
         normalized = _apply_synonyms(chunk)
         normalized = re.sub(r"[^a-z0-9+.# ]+", " ", normalized)
@@ -483,15 +491,64 @@ def _extract_skill_terms(text: str) -> list[str]:
             continue
         if not normalized or len(normalized) < 2:
             continue
-        token_set = set(re.findall(r"[a-z0-9]+", normalized))
-        if token_set and token_set.issubset(_NOISE_TERMS):
+
+        tokens = re.findall(r"[a-z0-9]+", normalized)
+        if not tokens:
             continue
-        if any(token.isdigit() for token in token_set):
+        # skip pure-noise chunks
+        if set(tokens).issubset(_NOISE_TERMS):
             continue
-        if normalized not in seen:
-            seen.add(normalized)
-            terms.append(normalized)
-    return terms
+        # generate n-grams up to trigrams to capture multi-word skills
+        for n in range(1, min(4, len(tokens) + 1)):
+            for i in range(0, len(tokens) - n + 1):
+                gram = " ".join(tokens[i : i + n])
+                if len(gram) >= 2 and not any(tok.isdigit() for tok in gram.split()):
+                    candidates.add(gram)
+
+    # match candidates to whitelist via exact or fuzzy match
+    matched: list[str] = []
+    seen: set[str] = set()
+    whitelist_set = set(whitelist)
+    for cand in sorted(candidates, key=lambda s: (-len(s), s)):
+        if cand in seen:
+            continue
+        # exact whitelist match
+        if cand in whitelist_set:
+            seen.add(cand)
+            matched.append(cand)
+            continue
+
+        # token intersection heuristic: if any token in cand matches whitelist tokens, accept
+        cand_tokens = set(re.findall(r"[a-z0-9]+", cand))
+        intersect = False
+        for w in whitelist:
+            w_tokens = set(re.findall(r"[a-z0-9]+", w))
+            if cand_tokens & w_tokens:
+                # prefer canonical whitelist term
+                if w not in seen:
+                    seen.add(w)
+                    matched.append(w)
+                intersect = True
+                break
+        if intersect:
+            continue
+
+        # fuzzy match against whitelist
+        if whitelist:
+            close = difflib.get_close_matches(cand, whitelist, n=1, cutoff=0.78)
+            if close:
+                w = close[0]
+                if w not in seen:
+                    seen.add(w)
+                    matched.append(w)
+                continue
+
+        # fallback: include candidate if reasonably long and not noise
+        if len(cand) >= 3 and not cand.isdigit():
+            seen.add(cand)
+            matched.append(cand)
+
+    return matched
 
 
 def _detect_contract_type(text: str) -> str | None:
