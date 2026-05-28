@@ -73,8 +73,8 @@ class Settings(BaseSettings):
     structured_education_weight: float = 0.05
     structured_missing_required_penalty: float = 0.20
     structured_missing_experience_penalty: float = 0.10
-    # NER is optional: disable by default to avoid requiring spaCy models in minimal installs
-    ner_enabled: bool = False
+    # NER is optional: enable by default as requested
+    ner_enabled: bool = True
     ner_model_name: str = "fr_core_news_sm"
     # Mapping from language code to spaCy model name, e.g. "fr:fr_core_news_sm,en:en_core_web_sm"
     ner_model_map: str = "fr:fr_core_news_sm,en:en_core_web_sm"
