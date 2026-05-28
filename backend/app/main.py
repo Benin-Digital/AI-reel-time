@@ -52,6 +52,8 @@ from .schemas import (
     JobDocumentDetailRead,
     JobOfferCreate,
     JobOfferRead,
+    CvProfileCreate,
+    CvProfileRead,
     MatchRead,
     MatchFeedbackCreate,
     MatchFeedbackRead,
@@ -598,6 +600,93 @@ def _render_job_offer_focus_text(offer: JobOffer) -> str:
         f"Description du poste: {offer.description}",
     ]
     return "\n".join(sections).strip()
+
+
+def _render_cv_profile_text(profile: CvProfileCreate) -> str:
+        experience = _normalize_lines(profile.experience)
+        education = _normalize_lines(profile.education)
+        certifications = _normalize_lines(profile.certifications)
+        skills = _normalize_lines(profile.skills)
+        languages = _normalize_lines(profile.languages) or ["Français"]
+
+        sections = [
+                "CV STRUCTURÉ",
+                f"Nom complet: {profile.full_name}",
+                f"Titre professionnel: {profile.headline}",
+                f"Statut: {profile.status}",
+                "Profil",
+                profile.summary.strip(),
+                "Compétences",
+                "\n".join(f"- {item}" for item in skills) if skills else "Aucune",
+                "",
+                "Expérience",
+                "\n".join(f"- {item}" for item in experience) if experience else "Aucune",
+                "",
+                "Formation",
+                "\n".join(f"- {item}" for item in education) if education else "Aucune",
+                "",
+                "Certifications",
+                "\n".join(f"- {item}" for item in certifications) if certifications else "Aucune",
+                "",
+                f"Langues: {', '.join(languages) if languages else 'Français'}",
+                f"Contrat recherché: {profile.contract_type or 'Non renseigné'}",
+                f"Localisation: {profile.location or 'Non renseignée'}",
+        ]
+
+        return "\n".join(part for part in sections if part is not None).strip() + "\n"
+
+
+def _render_cv_profile_html(profile: CvProfileCreate, rendered_text: str) -> str:
+        def _list_html(values: list[str]) -> str:
+                if not values:
+                        return "<p>Aucune</p>"
+                return "<ul>" + "".join(f"<li>{escape(value)}</li>" for value in values) + "</ul>"
+
+        summary_html = escape(profile.summary).replace("\n", "<br />")
+
+        return f"""<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{escape(profile.full_name)}</title>
+    <style>
+        body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 32px; color: #1b1f1d; background: #f4f7fb; }}
+        .card {{ max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #d9e3df; border-radius: 20px; padding: 28px; box-shadow: 0 24px 70px rgba(22, 34, 28, 0.08); }}
+        h1 {{ margin-top: 0; font-size: 30px; }}
+        h2 {{ margin-top: 24px; font-size: 18px; }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 18px; }}
+        .item strong {{ display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b746f; margin-bottom: 4px; }}
+        .item span {{ font-size: 15px; }}
+        ul {{ margin: 8px 0 0 18px; }}
+        pre {{ white-space: pre-wrap; background: #f0f4f2; border-radius: 14px; padding: 16px; border: 1px solid #d9e3df; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>{escape(profile.full_name)}</h1>
+        <div class="grid">
+            <div class="item"><strong>Titre</strong><span>{escape(profile.headline)}</span></div>
+            <div class="item"><strong>Contrat recherché</strong><span>{escape(profile.contract_type or 'Non renseigné')}</span></div>
+            <div class="item"><strong>Localisation</strong><span>{escape(profile.location or 'Non renseignée')}</span></div>
+        </div>
+        <h2>Résumé</h2>
+        <p>{summary_html}</p>
+        <h2>Compétences</h2>
+        {_list_html(_normalize_lines(profile.skills))}
+        <h2>Expérience</h2>
+        {_list_html(_normalize_lines(profile.experience))}
+        <h2>Formation</h2>
+        {_list_html(_normalize_lines(profile.education))}
+        <h2>Certifications</h2>
+        {_list_html(_normalize_lines(profile.certifications))}
+        <h2>Langues</h2>
+        {_list_html(_normalize_lines(profile.languages) or ["Français"])}
+        <h2>Texte canonique de matching</h2>
+        <pre>{escape(rendered_text)}</pre>
+    </div>
+</body>
+</html>"""
 
 
 def _vector_match_cv(
@@ -1513,6 +1602,116 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
             session.refresh(offer)
 
     return JobOfferRead.model_validate(offer)
+
+
+@app.post("/cv-profiles", response_model=CvProfileRead)
+def create_cv_profile(payload: CvProfileCreate, request: Request) -> CvProfileRead:
+    _require_admin(request)
+
+    normalized_status = payload.status if payload.status in {"draft", "published"} else "published"
+    normalized_experience = _normalize_lines(payload.experience)
+    normalized_education = _normalize_lines(payload.education)
+    normalized_certifications = _normalize_lines(payload.certifications)
+    normalized_skills = _normalize_lines(payload.skills)
+    normalized_languages = _normalize_lines(payload.languages) or ["Français"]
+
+    cv_input = CvProfileCreate(
+        full_name=payload.full_name.strip(),
+        headline=payload.headline.strip(),
+        summary=payload.summary.strip(),
+        experience=normalized_experience,
+        education=normalized_education,
+        certifications=normalized_certifications,
+        skills=normalized_skills,
+        languages=normalized_languages,
+        contract_type=payload.contract_type.strip() if payload.contract_type else None,
+        location=payload.location.strip() if payload.location else None,
+        status=normalized_status,
+    )
+
+    rendered_text = _render_cv_profile_text(cv_input)
+    rendered_html = _render_cv_profile_html(cv_input, rendered_text)
+
+    published_document_path = None
+    if cv_input.status == "published":
+        cv_root = Path(settings.watch_cv_dir)
+        cv_root.mkdir(parents=True, exist_ok=True)
+        title_safe = _sanitize_filename(cv_input.full_name or cv_input.headline or "cv")
+        snapshot_path = cv_root / f"cv-structure-{title_safe}.txt"
+        snapshot_path.write_text(rendered_text, encoding="utf-8")
+
+        pdf_path = cv_root / f"cv-{title_safe}.pdf"
+        if pdf_path.exists():
+            pdf_path = cv_root / f"cv-{title_safe}-{int(time())}.pdf"
+
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas
+
+            c = canvas.Canvas(str(pdf_path), pagesize=A4)
+            width, height = A4
+            margin = 40
+            y = height - margin
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(margin, y, cv_input.full_name or "CV")
+            y -= 24
+            c.setFont("Helvetica", 10)
+            for line in rendered_text.splitlines():
+                if y < margin + 20:
+                    c.showPage()
+                    y = height - margin
+                    c.setFont("Helvetica", 10)
+                c.drawString(margin, y, line[:200])
+                y -= 14
+            c.save()
+            published_document_path = str(pdf_path)
+        except Exception as exc:  # pragma: no cover - optional PDF dependency
+            logger.info("CV PDF generation skipped or failed: %s", exc)
+            published_document_path = str(snapshot_path)
+
+        try:
+            doc_path = Path(published_document_path)
+            if doc_path.exists():
+                with SessionLocal() as session:
+                    existing = session.scalar(select(CvDocument).where(CvDocument.path == str(doc_path)))
+                    if not existing:
+                        content_hash = None
+                        try:
+                            content_hash = file_sha256(doc_path)
+                        except Exception:
+                            content_hash = None
+                        cv_doc = CvDocument(
+                            path=str(doc_path),
+                            content_hash=content_hash,
+                            status="ready",
+                        )
+                        session.add(cv_doc)
+                        session.commit()
+                        session.refresh(cv_doc)
+
+                try:
+                    _on_watch_event(WatchEvent(path=doc_path, event_type="created", observed_at=time()))
+                except Exception as exc:
+                    logger.warning("Failed to enqueue created watch event for published CV: %s", exc)
+        except Exception as exc:  # pragma: no cover
+            logger.exception("Failed to register CvDocument for published CV: %s", exc)
+
+    return CvProfileRead(
+        full_name=cv_input.full_name,
+        headline=cv_input.headline,
+        summary=cv_input.summary,
+        experience=cv_input.experience,
+        education=cv_input.education,
+        certifications=cv_input.certifications,
+        skills=cv_input.skills,
+        languages=cv_input.languages,
+        contract_type=cv_input.contract_type,
+        location=cv_input.location,
+        status=cv_input.status,
+        rendered_text=rendered_text,
+        rendered_html=rendered_html,
+        published_document_path=published_document_path,
+    )
 
 
 @app.post("/ingest/delete")

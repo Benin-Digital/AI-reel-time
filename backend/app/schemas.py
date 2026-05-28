@@ -147,6 +147,37 @@ class JobOfferRead(BaseModel):
     updated_at: datetime
 
 
+class CvProfileCreate(BaseModel):
+    full_name: str
+    headline: str
+    summary: str
+    experience: list[str] = Field(default_factory=list)
+    education: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    contract_type: str | None = None
+    location: str | None = None
+    status: Literal["draft", "published"] = "published"
+
+
+class CvProfileRead(BaseModel):
+    full_name: str
+    headline: str
+    summary: str
+    experience: list[str]
+    education: list[str]
+    certifications: list[str]
+    skills: list[str]
+    languages: list[str]
+    contract_type: str | None
+    location: str | None
+    status: str
+    rendered_text: str
+    rendered_html: str | None
+    published_document_path: str | None
+
+
 class MatchRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
