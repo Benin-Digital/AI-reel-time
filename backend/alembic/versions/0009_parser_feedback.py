@@ -33,4 +33,3 @@ def downgrade():
     op.drop_index('ix_parser_feedback_created_at', table_name='parser_feedback')
     op.drop_index('ix_parser_feedback_kind_doc', table_name='parser_feedback')
     op.drop_table('parser_feedback')
-*** End Patch
