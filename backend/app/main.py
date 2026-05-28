@@ -8,7 +8,7 @@ from time import perf_counter, time
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import redis
@@ -600,6 +600,102 @@ def _render_job_offer_focus_text(offer: JobOffer) -> str:
         f"Description du poste: {offer.description}",
     ]
     return "\n".join(sections).strip()
+
+
+def _render_list_section(title: str, items: list[str]) -> list[str]:
+    if not items:
+        return []
+    lines = [title]
+    lines.extend(f"- {item}" for item in items)
+    return lines
+
+
+def _render_parsed_document_text(profile, kind: str) -> str:
+    header = ["DOCUMENT PARSE", f"Type: {kind.upper()}"]
+
+    meta_lines: list[str] = []
+    if profile.person_name:
+        meta_lines.append(f"Nom: {profile.person_name}")
+    if profile.contract_type:
+        meta_lines.append(f"Contrat: {profile.contract_type}")
+    if profile.experience_years:
+        meta_lines.append(f"Experience: {profile.experience_years} ans")
+    if profile.language_terms:
+        meta_lines.append(f"Langues detectees: {', '.join(profile.language_terms)}")
+    if profile.organization_terms:
+        meta_lines.append(f"Organisations: {', '.join(profile.organization_terms)}")
+    if profile.location_terms:
+        meta_lines.append(f"Lieux: {', '.join(profile.location_terms)}")
+    if profile.date_terms:
+        meta_lines.append(f"Dates: {', '.join(profile.date_terms)}")
+
+    sections: list[str] = []
+    if meta_lines:
+        sections.extend(meta_lines)
+        sections.append("")
+
+    if profile.summary_text:
+        sections.extend(["Resume", profile.summary_text, ""])
+    if profile.skills_text:
+        sections.extend(["Competences", profile.skills_text, ""])
+    if profile.experience_text:
+        sections.extend(["Experience", profile.experience_text, ""])
+    if profile.education_text:
+        sections.extend(["Formation", profile.education_text, ""])
+    if profile.certifications_text:
+        sections.extend(["Certifications", profile.certifications_text, ""])
+    if profile.languages_text:
+        sections.extend(["Langues (texte)", profile.languages_text, ""])
+
+    if kind == "job":
+        if profile.job_required_text:
+            sections.extend(["Competences requises", profile.job_required_text, ""])
+        if profile.job_nice_text:
+            sections.extend(["Competences souhaitees", profile.job_nice_text, ""])
+
+    sections.extend(_render_list_section("Skills detectees", profile.skill_terms))
+    if kind == "job":
+        sections.extend(_render_list_section("Skills requis", profile.required_skill_terms))
+        sections.extend(_render_list_section("Skills bonus", profile.nice_skill_terms))
+
+    parts = [line for line in (header + [""] + sections) if line is not None]
+    return "\n".join(str(part) for part in parts).strip() + "\n"
+
+
+def _cleanup_temp_file(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    except Exception:
+        logger.exception("Failed to cleanup temp file: %s", path)
+
+
+def _render_text_pdf_to_temp(title: str, text_value: str) -> Path:
+    temp_file = tempfile.NamedTemporaryFile(prefix="parsed-", suffix=".pdf", delete=False)
+    temp_file_path = Path(temp_file.name)
+    temp_file.close()
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(temp_file_path), pagesize=A4)
+    width, height = A4
+    margin = 40
+    y = height - margin
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(margin, y, title)
+    y -= 24
+    c.setFont("Helvetica", 10)
+    for line in text_value.splitlines():
+        if y < margin + 20:
+            c.showPage()
+            y = height - margin
+            c.setFont("Helvetica", 10)
+        c.drawString(margin, y, line[:200])
+        y -= 14
+    c.save()
+    return temp_file_path
 
 
 def _render_cv_profile_text(profile: CvProfileCreate) -> str:
@@ -1964,6 +2060,44 @@ def get_cv_document_pdf(doc_id: int) -> FileResponse:
     return FileResponse(pdf_path, media_type="application/pdf", filename=pdf_path.name)
 
 
+@app.get("/cv-documents/{doc_id}/parsed-text")
+def get_cv_document_parsed_text(doc_id: int) -> Response:
+    with SessionLocal() as session:
+        doc = session.get(CvDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="CV document not found")
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == doc.path)
+        )
+
+    if not extraction or not extraction.extracted_text:
+        raise HTTPException(status_code=404, detail="Extraction not found")
+
+    profile = build_document_profile(extraction.extracted_text, kind="cv")
+    rendered = _render_parsed_document_text(profile, "cv")
+    return Response(content=rendered, media_type="text/plain")
+
+
+@app.get("/cv-documents/{doc_id}/parsed-pdf")
+def get_cv_document_parsed_pdf(doc_id: int, background_tasks: BackgroundTasks) -> FileResponse:
+    with SessionLocal() as session:
+        doc = session.get(CvDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="CV document not found")
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == doc.path)
+        )
+
+    if not extraction or not extraction.extracted_text:
+        raise HTTPException(status_code=404, detail="Extraction not found")
+
+    profile = build_document_profile(extraction.extracted_text, kind="cv")
+    rendered = _render_parsed_document_text(profile, "cv")
+    pdf_path = _render_text_pdf_to_temp(f"CV parse #{doc_id}", rendered)
+    background_tasks.add_task(_cleanup_temp_file, pdf_path)
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"cv-parsed-{doc_id}.pdf")
+
+
 @app.get("/job-documents", response_model=list[JobDocumentRead])
 def list_job_documents(
     page: int = 1,
@@ -2088,6 +2222,44 @@ def get_job_document_pdf(doc_id: int) -> FileResponse:
 
     pdf_path = _resolve_document_pdf_path(doc.path, "job")
     return FileResponse(pdf_path, media_type="application/pdf", filename=pdf_path.name)
+
+
+@app.get("/job-documents/{doc_id}/parsed-text")
+def get_job_document_parsed_text(doc_id: int) -> Response:
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == doc.path)
+        )
+
+    if not extraction or not extraction.extracted_text:
+        raise HTTPException(status_code=404, detail="Extraction not found")
+
+    profile = build_document_profile(extraction.extracted_text, kind="job")
+    rendered = _render_parsed_document_text(profile, "job")
+    return Response(content=rendered, media_type="text/plain")
+
+
+@app.get("/job-documents/{doc_id}/parsed-pdf")
+def get_job_document_parsed_pdf(doc_id: int, background_tasks: BackgroundTasks) -> FileResponse:
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+        extraction = session.scalar(
+            select(ExtractedText).where(ExtractedText.file_path == doc.path)
+        )
+
+    if not extraction or not extraction.extracted_text:
+        raise HTTPException(status_code=404, detail="Extraction not found")
+
+    profile = build_document_profile(extraction.extracted_text, kind="job")
+    rendered = _render_parsed_document_text(profile, "job")
+    pdf_path = _render_text_pdf_to_temp(f"Offre parsee #{doc_id}", rendered)
+    background_tasks.add_task(_cleanup_temp_file, pdf_path)
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"job-parsed-{doc_id}.pdf")
 
 
 @app.get("/extractions/path", response_model=ExtractedTextRead)
