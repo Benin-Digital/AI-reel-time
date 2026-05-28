@@ -17,12 +17,17 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "profile",
             "about",
             "about me",
+            "a propos",
+            "à propos",
+            "bio",
+            "biographie",
             "who am i",
             "resume",
             "résumé",
             "summary",
             "presentation",
             "présentation",
+            "profil professionnel",
             "objectif",
         ),
     ),
@@ -33,14 +38,20 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "compétences",
             "skills",
             "stack",
+            "stack technique",
+            "tech stack",
             "technologies",
             "outils",
+            "outillage",
+            "frameworks",
+            "langages",
             "expertise",
             "hard skills",
             "soft skills",
             "capabilities",
             "aptitudes",
             "technical skills",
+            "competences techniques",
         ),
     ),
     (
@@ -54,7 +65,19 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "professional experience",
             "parcours",
             "missions",
+            "mission",
             "employment history",
+            "career",
+            "carriere",
+            "carrière",
+            "projects",
+            "project",
+            "projets",
+            "projet",
+            "realisations",
+            "réalisations",
+            "achievements",
+            "portfolio",
         ),
     ),
     (
@@ -66,6 +89,15 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "etudes",
             "diplome",
             "diplôme",
+            "diplomes",
+            "diplômes",
+            "academique",
+            "académique",
+            "scolarite",
+            "scolarité",
+            "universite",
+            "université",
+            "school",
         ),
     ),
     (
@@ -74,6 +106,8 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "certification",
             "certifications",
             "certificat",
+            "certificats",
+            "certifications professionnelles",
         ),
     ),
     (
@@ -82,6 +116,11 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "langues",
             "languages",
             "language",
+            "langues parlées",
+            "langues parlees",
+            "language skills",
+            "bilingue",
+            "bilingual",
         ),
     ),
     (
@@ -94,6 +133,8 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "contrainte forte du projet",
             "responsabilites",
             "responsabilités",
+            "responsabilites principales",
+            "responsabilités principales",
             "taches",
             "tâches",
             "activites",
@@ -110,6 +151,9 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "profil recherché",
             "profil recherche",
             "exigences",
+            "description du poste",
+            "description du job",
+            "role",
         ),
     ),
     (
@@ -121,9 +165,11 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
             "bonus",
             "souhaité",
             "souhaite",
+            "souhaitable",
             "apprécié",
             "apprecie",
             "appréciée",
+            "plus",
         ),
     ),
     (
@@ -131,6 +177,11 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
         (
             "contrat",
             "type de contrat",
+            "statut",
+            "disponibilite",
+            "disponibilité",
+            "duree",
+            "durée",
         ),
     ),
     (
@@ -138,10 +189,43 @@ _SECTION_ALIASES: list[tuple[str, tuple[str, ...]]] = [
         (
             "localisation",
             "location",
+            "ville",
+            "adresse",
             "teletravail",
             "télétravail",
             "remote",
             "hybride",
+            "mobilite",
+            "mobilité",
+        ),
+    ),
+    (
+        "contact",
+        (
+            "contact",
+            "coordonnees",
+            "coordonnées",
+            "email",
+            "e-mail",
+            "telephone",
+            "téléphone",
+            "tel",
+            "mobile",
+            "linkedin",
+            "github",
+        ),
+    ),
+    (
+        "hobbies",
+        (
+            "interets",
+            "intérêts",
+            "centres d'interet",
+            "centres d'intérêt",
+            "loisirs",
+            "hobbies",
+            "passions",
+            "sports",
         ),
     ),
 ]
@@ -172,6 +256,14 @@ _NOISE_TERMS = {
     "month",
     "months",
     "ans",
+    "interet",
+    "interets",
+    "interest",
+    "interests",
+    "loisir",
+    "loisirs",
+    "hobby",
+    "hobbies",
 }
 
 _CONTRACT_ALIASES: list[tuple[str, str]] = [
@@ -226,6 +318,9 @@ _BUILTIN_SKILL_SYNONYMS: dict[str, str] = {
     "kubernetes": "kubernetes",
     "aws": "aws",
     "azure": "azure",
+    "ml": "machinelearning",
+    "machine learning": "machinelearning",
+    "data science": "datascience",
 }
 
 
@@ -369,6 +464,8 @@ def _extract_skill_terms(text: str) -> list[str]:
         normalized = _apply_synonyms(chunk)
         normalized = re.sub(r"[^a-z0-9+.# ]+", " ", normalized)
         normalized = re.sub(r"\s+", " ", normalized).strip()
+        if "@" in normalized or "http" in normalized or "www" in normalized:
+            continue
         if not normalized or len(normalized) < 2:
             continue
         token_set = set(re.findall(r"[a-z0-9]+", normalized))
@@ -561,7 +658,10 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
     if kind == "job" and not job_nice_text:
         job_nice_text = section_texts.get("strength", "")
 
-    skill_terms = _extract_skill_terms("\n".join(part for part in (skills_text, job_required_text, job_nice_text) if part))
+    skill_sources = [skills_text, job_required_text, job_nice_text]
+    if kind == "cv":
+        skill_sources.extend([experience_text, certifications_text])
+    skill_terms = _extract_skill_terms("\n".join(part for part in skill_sources if part))
     required_skill_terms = _extract_skill_terms(job_required_text)
     nice_skill_terms = _extract_skill_terms(job_nice_text)
     language_terms = _detect_languages("\n".join(part for part in (languages_text, cleaned_text) if part))
@@ -569,7 +669,8 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
     experience_years = _extract_years("\n".join(part for part in (experience_text, cleaned_text) if part))
 
     if kind == "cv" and not skill_terms:
-        skill_terms = _extract_skill_terms(cleaned_text)
+        fallback_sources = [skills_text, experience_text, education_text, certifications_text, summary_text]
+        skill_terms = _extract_skill_terms("\n".join(part for part in fallback_sources if part))
 
     if kind == "job" and not required_skill_terms:
         required_skill_terms = skill_terms
@@ -641,6 +742,8 @@ def _guess_section_from_heading(line: str) -> str | None:
         ("job_nice", ("atout", "souhait", "bonus", "appréci")),
         ("contract", ("contrat", "cdi", "cdd", "freelance", "stage")),
         ("location", ("localis", "teletravail", "remote", "hybrid", "hybride")),
+        ("contact", ("contact", "coordonne", "email", "telephone", "mobile")),
+        ("hobbies", ("interet", "loisir", "hobby", "passion", "sport")),
     ]
     for section, needles in mapping:
         for n in needles:
