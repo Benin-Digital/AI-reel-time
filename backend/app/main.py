@@ -1087,51 +1087,52 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
         if not changed_result.extraction_success:
             return
 
-        # create a JobOffer draft from parsed file if none exists
-        try:
-            with SessionLocal() as session2:
-                existing_offer = session2.scalar(
-                    select(JobOffer).where(JobOffer.published_document_path == str(changed_path))
-                )
-                if not existing_offer:
-                    extraction_row = session2.scalar(
-                        select(ExtractedText).where(ExtractedText.file_path == str(changed_path))
+        # optional: create a JobOffer draft from parsed file if none exists
+        if settings.auto_create_job_offer:
+            try:
+                with SessionLocal() as session2:
+                    existing_offer = session2.scalar(
+                        select(JobOffer).where(JobOffer.published_document_path == str(changed_path))
                     )
-                    if extraction_row:
-                        parsed = _get_or_build_profile(session2, extraction_row, "job")
-                    else:
-                        parsed = build_document_profile(changed_result.extracted_text or "", kind="job")
-                    offer_payload = normalize_job_offer_from_parsed(parsed, str(changed_path))
-                    # render text/html using helpers
-                    from .schemas import JobOfferCreate
+                    if not existing_offer:
+                        extraction_row = session2.scalar(
+                            select(ExtractedText).where(ExtractedText.file_path == str(changed_path))
+                        )
+                        if extraction_row:
+                            parsed = _get_or_build_profile(session2, extraction_row, "job")
+                        else:
+                            parsed = build_document_profile(changed_result.extracted_text or "", kind="job")
+                        offer_payload = normalize_job_offer_from_parsed(parsed, str(changed_path))
+                        # render text/html using helpers
+                        from .schemas import JobOfferCreate
 
-                    offer_input = JobOfferCreate(**offer_payload)
-                    rendered_text = _render_job_offer_text(offer_input)
-                    rendered_html = _render_job_offer_html(offer_input, rendered_text)
+                        offer_input = JobOfferCreate(**offer_payload)
+                        rendered_text = _render_job_offer_text(offer_input)
+                        rendered_html = _render_job_offer_html(offer_input, rendered_text)
 
-                    new_offer = JobOffer(
-                        title=offer_input.title,
-                        meta_keywords=offer_input.meta_keywords,
-                        contract_type=offer_input.contract_type,
-                        company=offer_input.company,
-                        category=offer_input.category,
-                        job_type=offer_input.job_type,
-                        salary_max=offer_input.salary_max,
-                        languages=offer_input.languages,
-                        description=offer_input.description,
-                        visual_code=offer_input.visual_code,
-                        paragraph=offer_input.paragraph,
-                        skills=offer_input.skills,
-                        strong_constraints=offer_input.strong_constraints,
-                        status=offer_input.status,
-                        rendered_text=rendered_text,
-                        rendered_html=rendered_html,
-                        published_document_path=str(changed_path),
-                    )
-                    session2.add(new_offer)
-                    session2.commit()
-        except Exception as exc:  # pragma: no cover
-            logger.exception("Failed to auto-create JobOffer from file: %s", exc)
+                        new_offer = JobOffer(
+                            title=offer_input.title,
+                            meta_keywords=offer_input.meta_keywords,
+                            contract_type=offer_input.contract_type,
+                            company=offer_input.company,
+                            category=offer_input.category,
+                            job_type=offer_input.job_type,
+                            salary_max=offer_input.salary_max,
+                            languages=offer_input.languages,
+                            description=offer_input.description,
+                            visual_code=offer_input.visual_code,
+                            paragraph=offer_input.paragraph,
+                            skills=offer_input.skills,
+                            strong_constraints=offer_input.strong_constraints,
+                            status=offer_input.status,
+                            rendered_text=rendered_text,
+                            rendered_html=rendered_html,
+                            published_document_path=str(changed_path),
+                        )
+                        session2.add(new_offer)
+                        session2.commit()
+            except Exception as exc:  # pragma: no cover
+                logger.exception("Failed to auto-create JobOffer from file: %s", exc)
 
         if (
             previous_hash
