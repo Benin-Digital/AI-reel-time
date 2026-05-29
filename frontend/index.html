@@ -31,11 +31,7 @@
           <button id="loginButton" class="ghost">Se connecter</button>
           <button id="logoutButton" class="ghost" hidden>Se deconnecter</button>
         </div>
-        <div class="debug-toggle" style="margin-left:12px; display:flex; align-items:center; gap:8px;">
-          <label style="font-size:14px; color:var(--muted);">
-            <input id="parserDebugToggle" type="checkbox" /> Afficher parser debug
-          </label>
-        </div>
+        
       </div>
     </header>
 
@@ -449,27 +445,7 @@
                   </div>
                   <div id="adminUsersList" class="stack"></div>
                 </div>
-                <div class="card admin-card">
-                  <div class="section-header compact">
-                    <h4>Parser Feedback</h4>
-                    <p>Visualiser et exporter les corrections manuelles du parser.</p>
-                  </div>
-                  <div class="admin-parser-feedback">
-                    <div class="filters" style="gap:8px; display:flex; align-items:center;">
-                      <input id="pfKind" placeholder="kind (cv|job)" style="width:120px" />
-                      <input id="pfDocId" placeholder="doc_id" type="number" style="width:90px" />
-                      <button id="pfRefresh" class="ghost">Rafraîchir</button>
-                      <button id="pfExportNdjson" class="ghost">Export NDJSON</button>
-                      <button id="pfExportCsv" class="ghost">Export CSV</button>
-                    </div>
-                    <div id="pfList" class="stack" style="margin-top:12px; max-height:360px; overflow:auto"></div>
-                    <div class="pagination-controls" style="margin-top:8px;">
-                      <button id="pfPrev" class="ghost">Précédent</button>
-                      <span>Page <strong id="pfPage">1</strong></span>
-                      <button id="pfNext" class="ghost">Suivant</button>
-                    </div>
-                  </div>
-                </div>
+                
               </div>
             </div>
           </section>
