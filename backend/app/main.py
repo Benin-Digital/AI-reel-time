@@ -33,7 +33,6 @@ from .models import (
     JobEmbedding,
     JobOffer,
     MatchFeedback,
-    ParserFeedback,
     User,
 )
 from .schemas import (
@@ -57,8 +56,7 @@ from .schemas import (
     MatchRead,
     MatchFeedbackCreate,
     MatchFeedbackRead,
-    ParserFeedbackCreate,
-    ParserFeedbackRead,
+    
     SearchRequest,
     SearchHit,
     AuthLoginRequest,
@@ -1522,65 +1520,7 @@ def create_event(payload: EventCreate) -> EventRead:
     return _insert_event(payload)
 
 
-@app.get("/admin/parser-feedback", response_model=list[ParserFeedbackRead])
-def list_parser_feedback(
-    request: Request,
-    kind: str | None = None,
-    doc_id: int | None = None,
-    page: int = 1,
-    page_size: int = 50,
-    export: str | None = None,
-) -> Response | list[ParserFeedbackRead]:
-    current_user = _require_admin(request)
 
-    safe_page = max(1, page)
-    safe_size = max(1, min(page_size, 200))
-    offset = (safe_page - 1) * safe_size
-
-    with SessionLocal() as session:
-        q = select(ParserFeedback).order_by(ParserFeedback.created_at.desc())
-        if kind:
-            q = q.where(ParserFeedback.kind == kind)
-        if doc_id:
-            q = q.where(ParserFeedback.doc_id == doc_id)
-        q = q.offset(offset).limit(safe_size)
-        rows = session.scalars(q).all()
-
-        if export == "ndjson":
-            lines = []
-            for r in rows:
-                item = {
-                    "id": r.id,
-                    "kind": r.kind,
-                    "doc_id": r.doc_id,
-                    "corrections": r.corrections,
-                    "user_id": r.user_id,
-                    "created_at": r.created_at.isoformat() if r.created_at is not None else None,
-                }
-                lines.append(json.dumps(item, ensure_ascii=False))
-            filename = f"parser_feedback_{datetime.utcnow().strftime('%Y%m%d')}.ndjson"
-            return Response("\n".join(lines), media_type="application/x-ndjson", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-
-        if export == "csv":
-            import csv
-            from io import StringIO
-
-            buf = StringIO()
-            writer = csv.writer(buf)
-            writer.writerow(["id", "kind", "doc_id", "corrections", "user_id", "created_at"])
-            for r in rows:
-                writer.writerow([
-                    r.id,
-                    r.kind,
-                    r.doc_id,
-                    json.dumps(r.corrections, ensure_ascii=False),
-                    r.user_id,
-                    r.created_at.isoformat() if r.created_at is not None else None,
-                ])
-            filename = f"parser_feedback_{datetime.utcnow().strftime('%Y%m%d')}.csv"
-            return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-
-        return [ParserFeedbackRead.model_validate(r) for r in rows]
 
 
 @app.get("/events", response_model=list[EventRead])
@@ -2175,7 +2115,7 @@ def get_cv_document(doc_id: int) -> CvDocumentRead:
 
 
 @app.get("/cv-documents/{doc_id}/details", response_model=CvDocumentDetailRead)
-def get_cv_document_details(doc_id: int, limit: int = 6, debug: bool = False) -> CvDocumentDetailRead:
+def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead:
     safe_limit = max(1, min(limit, 50))
     with SessionLocal() as session:
         doc = session.get(CvDocument, doc_id)
@@ -2212,14 +2152,6 @@ def get_cv_document_details(doc_id: int, limit: int = 6, debug: bool = False) ->
             )[:12]
         ]
 
-        parser_debug = None
-        if debug and extraction and extraction.extracted_text:
-            try:
-                profile = _get_or_build_profile(session, extraction, "cv")
-                parser_debug = profile.debug_info if hasattr(profile, "debug_info") else None
-            except Exception:
-                parser_debug = {"error": "failed to build debug profile"}
-
         return CvDocumentDetailRead(
             id=doc.id,
             path=doc.path,
@@ -2244,7 +2176,7 @@ def get_cv_document_details(doc_id: int, limit: int = 6, debug: bool = False) ->
                 )
                 for row in match_rows
             ],
-            parser_debug=parser_debug,
+            
         )
 
 
@@ -2354,7 +2286,7 @@ def get_job_document(doc_id: int) -> JobDocumentRead:
 
 
 @app.get("/job-documents/{doc_id}/details", response_model=JobDocumentDetailRead)
-def get_job_document_details(doc_id: int, limit: int = 6, debug: bool = False) -> JobDocumentDetailRead:
+def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRead:
     safe_limit = max(1, min(limit, 50))
     with SessionLocal() as session:
         doc = session.get(JobDocument, doc_id)
@@ -2391,14 +2323,6 @@ def get_job_document_details(doc_id: int, limit: int = 6, debug: bool = False) -
             )[:12]
         ]
 
-        parser_debug = None
-        if debug and extraction and extraction.extracted_text:
-            try:
-                profile = _get_or_build_profile(session, extraction, "job")
-                parser_debug = profile.debug_info if hasattr(profile, "debug_info") else None
-            except Exception:
-                parser_debug = {"error": "failed to build debug profile"}
-
         return JobDocumentDetailRead(
             id=doc.id,
             path=doc.path,
@@ -2423,7 +2347,7 @@ def get_job_document_details(doc_id: int, limit: int = 6, debug: bool = False) -
                 )
                 for row in match_rows
             ],
-            parser_debug=parser_debug,
+            
         )
 
 
@@ -2690,25 +2614,7 @@ def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: 
         return MatchFeedbackRead.model_validate(feedback)
 
 
-@app.post("/documents/{kind}/{doc_id}/parser-feedback", response_model=ParserFeedbackRead)
-def submit_parser_feedback(kind: str, doc_id: int, payload: ParserFeedbackCreate, request: Request) -> ParserFeedbackRead:
-    if kind not in ("cv", "job"):
-        raise HTTPException(status_code=400, detail="Invalid kind")
 
-    current_user = getattr(request.state, "user", None)
-    user_id = current_user.id if current_user is not None else None
-
-    with SessionLocal() as session:
-        fb = ParserFeedback(
-            kind=kind,
-            doc_id=doc_id,
-            corrections=[c.model_dump() for c in payload.corrections],
-            user_id=user_id,
-        )
-        session.add(fb)
-        session.commit()
-        session.refresh(fb)
-        return ParserFeedbackRead.model_validate(fb)
 
 
 @app.post("/search", response_model=list[SearchHit])
