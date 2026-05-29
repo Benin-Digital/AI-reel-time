@@ -793,7 +793,7 @@ def _first_lines(lines: list[str], limit: int = 3) -> str:
     return "\n".join(lines[:limit]).strip()
 
 
-def build_document_profile(text: str, kind: str | None = None) -> StructuredDocument:
+def build_document_profile(text: str, kind: str | None = None, enable_ner: bool | None = None) -> StructuredDocument:
     cleaned_text = clean_document_text(text)
     lines = _line_chunks(cleaned_text)
     sections: dict[str, list[str]] = defaultdict(list)
@@ -862,11 +862,19 @@ def build_document_profile(text: str, kind: str | None = None) -> StructuredDocu
     contract_type = _detect_contract_type("\n".join(part for part in (contract_text, cleaned_text) if part))
     experience_years = _extract_years("\n".join(part for part in (experience_text, cleaned_text) if part))
 
-    ner_payload = _extract_ner_entities(cleaned_text)
-    person_name = ner_payload["person_name"]
-    organization_terms = list(ner_payload["organization_terms"])
-    location_terms = list(ner_payload["location_terms"])
-    date_terms = list(ner_payload["date_terms"])
+    # decide whether to run NER: default to settings.ner_enabled when enable_ner is None
+    do_ner = bool(settings.ner_enabled) if enable_ner is None else bool(enable_ner)
+    if do_ner:
+        ner_payload = _extract_ner_entities(cleaned_text)
+        person_name = ner_payload["person_name"]
+        organization_terms = list(ner_payload["organization_terms"])
+        location_terms = list(ner_payload["location_terms"])
+        date_terms = list(ner_payload["date_terms"])
+    else:
+        person_name = None
+        organization_terms = []
+        location_terms = []
+        date_terms = []
 
     if kind == "cv" and not skill_terms:
         fallback_sources = [skills_text, experience_text, education_text, certifications_text, summary_text]
