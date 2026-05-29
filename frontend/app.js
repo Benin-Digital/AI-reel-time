@@ -2139,7 +2139,7 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
   const previewTextNode = target.querySelector("[data-document-preview-text]");
   const structuredToggle = target.querySelector("[data-document-structured-toggle]");
   const structuredPdfButton = target.querySelector("[data-document-structured-pdf]");
-  const parsedTextKey = `${kind}:${doc.id}`;
+  const structuredTextKey = `${kind}:${doc.id}`;
 
   const setStructuredButtonLabel = (mode) => {
     if (!structuredToggle) {
@@ -2158,10 +2158,10 @@ const renderDocumentDetails = (doc, target, kind = "cv") => {
       if (nextMode === "structured") {
         setDocumentPreviewMode(target, "text");
         try {
-          let parsedText = structuredTextCache[parsedTextKey];
+          let parsedText = structuredTextCache[structuredTextKey];
           if (!parsedText) {
             parsedText = await fetchStructuredText(kind, doc.id);
-            structuredTextCache[parsedTextKey] = parsedText;
+            structuredTextCache[structuredTextKey] = parsedText;
           }
           previewLabelNode.textContent = "Texte structuré";
           previewTextNode.textContent = parsedText || "Aucun texte structuré";
