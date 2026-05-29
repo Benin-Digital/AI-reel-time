@@ -487,6 +487,12 @@ const openAuthenticatedPdf = async (kind, id) => {
     throw new Error("Base API manquante");
   }
 
+  // Open the tab synchronously so the browser does not treat the final navigation as a popup.
+  const popup = window.open("about:blank", "_blank");
+  if (!popup) {
+    throw new Error("Impossible d'ouvrir la fenêtre PDF");
+  }
+
   const headers = new Headers();
   if (authToken) {
     headers.set("Authorization", `Bearer ${authToken}`);
@@ -503,11 +509,7 @@ const openAuthenticatedPdf = async (kind, id) => {
 
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
-  const popup = window.open(objectUrl, "_blank");
-  if (!popup) {
-    URL.revokeObjectURL(objectUrl);
-    throw new Error("Impossible d'ouvrir la fenêtre PDF");
-  }
+  popup.location.href = objectUrl;
 
   window.setTimeout(() => {
     URL.revokeObjectURL(objectUrl);
@@ -518,6 +520,12 @@ const openStructuredPdf = async (kind, id) => {
   const pdfUrl = buildStructuredPdfUrl(kind, id);
   if (!pdfUrl) {
     throw new Error("Base API manquante");
+  }
+
+  // Open the tab synchronously so the browser does not block the PDF preview.
+  const popup = window.open("about:blank", "_blank");
+  if (!popup) {
+    throw new Error("Impossible d'ouvrir la fenêtre PDF");
   }
 
   const headers = new Headers();
@@ -536,11 +544,7 @@ const openStructuredPdf = async (kind, id) => {
 
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
-  const popup = window.open(objectUrl, "_blank");
-  if (!popup) {
-    URL.revokeObjectURL(objectUrl);
-    throw new Error("Impossible d'ouvrir la fenêtre PDF");
-  }
+  popup.location.href = objectUrl;
 
   window.setTimeout(() => {
     URL.revokeObjectURL(objectUrl);
