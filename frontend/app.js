@@ -2540,12 +2540,20 @@ const loadAuthUser = async () => {
     updateAuthUi();
     return true;
   } catch (error) {
-    authToken = "";
-    authUser = null;
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("authUser");
+    const isAuthError = error instanceof Error && (error.name === "AuthError" || error.message === "AUTH_REQUIRED");
+    if (isAuthError) {
+      authToken = "";
+      authUser = null;
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("authUser");
+      updateAuthUi();
+      return false;
+    }
+
+    // Network/backend failure: keep the existing session in localStorage/UI and let the dashboard recover.
+    setApiStatus(error instanceof Error ? error.message : "Impossible de vérifier la session");
     updateAuthUi();
-    return false;
+    return Boolean(authUser);
   }
 };
 
