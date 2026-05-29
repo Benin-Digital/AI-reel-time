@@ -803,8 +803,44 @@ def _vector_match_cv(
     if not text_value:
         return set()
 
+    # prefer using cached parsed_profile (which may have NER disabled for form-published docs)
+    vector = None
     try:
-        vector = embed_text(text_value)
+        with SessionLocal() as session:
+            row = session.scalar(select(ExtractedText).where(ExtractedText.file_path == str(cv_doc.path)))
+            profile = None
+            if row and row.parsed_profile and row.parsed_profile_hash and row.parsed_profile_hash == extraction.content_hash:
+                try:
+                    profile = StructuredDocument(**row.parsed_profile)
+                except Exception:
+                    profile = None
+            if profile is None:
+                profile = build_document_profile(text_value, kind="cv")
+
+            chunks = profile.embedding_chunks or ([profile.cleaned_text] if profile.cleaned_text else [])
+            if chunks:
+                vectors = embed_texts(chunks)
+                # average vectors
+                if vectors:
+                    if len(vectors) == 1:
+                        vector = vectors[0]
+                    else:
+                        length = len(vectors[0])
+                        totals = [0.0] * length
+                        count = 0
+                        for vec in vectors:
+                            if len(vec) != length:
+                                continue
+                            count += 1
+                            for i, v in enumerate(vec):
+                                totals[i] += v
+                        if count:
+                            averaged = [v / max(count, 1) for v in totals]
+                            # normalize
+                            norm = sum(v * v for v in averaged) ** 0.5
+                            if norm > 0:
+                                averaged = [v / norm for v in averaged]
+                            vector = averaged
     except Exception as exc:
         logger.warning("embedding failed for cv %s: %s", cv_doc.id, exc)
         return set()
@@ -856,8 +892,44 @@ def _vector_match_job(
     if not text_value:
         return set()
 
+    # prefer using cached parsed_profile (which may have NER disabled for form-published docs)
+    vector = None
     try:
-        vector = embed_text(text_value)
+        with SessionLocal() as session:
+            row = session.scalar(select(ExtractedText).where(ExtractedText.file_path == str(job_doc.path)))
+            profile = None
+            if row and row.parsed_profile and row.parsed_profile_hash and row.parsed_profile_hash == extraction.content_hash:
+                try:
+                    profile = StructuredDocument(**row.parsed_profile)
+                except Exception:
+                    profile = None
+            if profile is None:
+                profile = build_document_profile(text_value, kind="job")
+
+            chunks = profile.embedding_chunks or ([profile.cleaned_text] if profile.cleaned_text else [])
+            if chunks:
+                vectors = embed_texts(chunks)
+                # average vectors
+                if vectors:
+                    if len(vectors) == 1:
+                        vector = vectors[0]
+                    else:
+                        length = len(vectors[0])
+                        totals = [0.0] * length
+                        count = 0
+                        for vec in vectors:
+                            if len(vec) != length:
+                                continue
+                            count += 1
+                            for i, v in enumerate(vec):
+                                totals[i] += v
+                        if count:
+                            averaged = [v / max(count, 1) for v in totals]
+                            # normalize
+                            norm = sum(v * v for v in averaged) ** 0.5
+                            if norm > 0:
+                                averaged = [v / norm for v in averaged]
+                            vector = averaged
     except Exception as exc:
         logger.warning("embedding failed for job %s: %s", job_doc.id, exc)
         return set()
@@ -1669,9 +1741,7 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
         if offer.status == "published":
             job_root = Path(settings.watch_job_dir)
             job_root.mkdir(parents=True, exist_ok=True)
-            # write a plain text snapshot
             snapshot_path = job_root / f"offre-structuree-{offer.id}.txt"
-            snapshot_path.write_text(rendered_text, encoding="utf-8")
 
             # try to render a simple PDF representation of the offer
             title_safe = _sanitize_filename(offer.title or f"offre-{offer.id}")
@@ -1705,12 +1775,57 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
                 offer.published_document_path = str(pdf_path)
             except Exception as exc:  # pragma: no cover - optional PDF dependency
                 logger.info("PDF generation skipped or failed: %s", exc)
+                # fallback: write the plain text snapshot and publish it
+                try:
+                    snapshot_path.write_text(rendered_text, encoding="utf-8")
+                except Exception:
+                    logger.exception("Failed to write snapshot text for job offer %s", offer.id)
                 offer.published_document_path = str(snapshot_path)
 
             # ensure a JobDocument row exists for the published file so it appears in the job library
             try:
                 doc_path = Path(offer.published_document_path)
                 if doc_path.exists():
+                    # precompute and store extracted_text + parsed_profile with NER disabled
+                    try:
+                        extracted_value = extract_text(doc_path)
+                        content_hash_val = None
+                        try:
+                            content_hash_val = file_sha256(doc_path)
+                        except Exception:
+                            content_hash_val = None
+                        profile = build_document_profile(extracted_value or "", kind="job", enable_ner=False)
+                        with SessionLocal() as session2:
+                            existing_extraction = session2.scalar(
+                                select(ExtractedText).where(ExtractedText.file_path == str(doc_path))
+                            )
+                            if existing_extraction:
+                                existing_extraction.content_hash = content_hash_val
+                                existing_extraction.extracted_text = extracted_value
+                                existing_extraction.extraction_method = doc_path.suffix.lower().lstrip(".") or "unknown"
+                                existing_extraction.extraction_success = bool(extracted_value and extracted_value.strip())
+                                existing_extraction.error_message = None if existing_extraction.extraction_success else "No text extracted"
+                                existing_extraction.parsed_profile = asdict(profile)
+                                existing_extraction.parsed_profile_hash = content_hash_val
+                                existing_extraction.parsed_profile_updated_at = datetime.utcnow()
+                                session2.commit()
+                            else:
+                                extraction = ExtractedText(
+                                    file_path=str(doc_path),
+                                    content_hash=content_hash_val,
+                                    extracted_text=extracted_value,
+                                    extraction_method=doc_path.suffix.lower().lstrip(".") or "unknown",
+                                    extraction_success=bool(extracted_value and extracted_value.strip()),
+                                    error_message=None if (extracted_value and extracted_value.strip()) else "No text extracted",
+                                    parsed_profile=asdict(profile),
+                                    parsed_profile_hash=content_hash_val,
+                                    parsed_profile_updated_at=datetime.utcnow(),
+                                )
+                                session2.add(extraction)
+                                session2.commit()
+                    except Exception as exc:  # pragma: no cover
+                        logger.exception("Failed to precompute parsed profile for published offer: %s", exc)
+
                     with SessionLocal() as session2:
                         existing = session2.scalar(select(JobDocument).where(JobDocument.path == str(doc_path)))
                         if not existing:
@@ -1770,13 +1885,12 @@ def create_cv_profile(payload: CvProfileCreate, request: Request) -> CvProfileRe
     rendered_text = _render_cv_profile_text(cv_input)
     rendered_html = _render_cv_profile_html(cv_input, rendered_text)
 
-    published_document_path = None
+        published_document_path = None
     if cv_input.status == "published":
         cv_root = Path(settings.watch_cv_dir)
         cv_root.mkdir(parents=True, exist_ok=True)
         title_safe = _sanitize_filename(cv_input.full_name or cv_input.headline or "cv")
         snapshot_path = cv_root / f"cv-structure-{title_safe}.txt"
-        snapshot_path.write_text(rendered_text, encoding="utf-8")
 
         pdf_path = cv_root / f"cv-{title_safe}.pdf"
         if pdf_path.exists():
@@ -1805,11 +1919,56 @@ def create_cv_profile(payload: CvProfileCreate, request: Request) -> CvProfileRe
             published_document_path = str(pdf_path)
         except Exception as exc:  # pragma: no cover - optional PDF dependency
             logger.info("CV PDF generation skipped or failed: %s", exc)
+            # fallback: write the plain text snapshot and publish it
+            try:
+                snapshot_path.write_text(rendered_text, encoding="utf-8")
+            except Exception:
+                logger.exception("Failed to write snapshot text for CV %s", cv_input.full_name)
             published_document_path = str(snapshot_path)
 
         try:
             doc_path = Path(published_document_path)
             if doc_path.exists():
+                # precompute and store extracted_text + parsed_profile with NER disabled
+                try:
+                    extracted_value = extract_text(doc_path)
+                    content_hash_val = None
+                    try:
+                        content_hash_val = file_sha256(doc_path)
+                    except Exception:
+                        content_hash_val = None
+                    profile = build_document_profile(extracted_value or "", kind="cv", enable_ner=False)
+                    with SessionLocal() as session:
+                        existing_extraction = session.scalar(
+                            select(ExtractedText).where(ExtractedText.file_path == str(doc_path))
+                        )
+                        if existing_extraction:
+                            existing_extraction.content_hash = content_hash_val
+                            existing_extraction.extracted_text = extracted_value
+                            existing_extraction.extraction_method = doc_path.suffix.lower().lstrip(".") or "unknown"
+                            existing_extraction.extraction_success = bool(extracted_value and extracted_value.strip())
+                            existing_extraction.error_message = None if existing_extraction.extraction_success else "No text extracted"
+                            existing_extraction.parsed_profile = asdict(profile)
+                            existing_extraction.parsed_profile_hash = content_hash_val
+                            existing_extraction.parsed_profile_updated_at = datetime.utcnow()
+                            session.commit()
+                        else:
+                            extraction = ExtractedText(
+                                file_path=str(doc_path),
+                                content_hash=content_hash_val,
+                                extracted_text=extracted_value,
+                                extraction_method=doc_path.suffix.lower().lstrip(".") or "unknown",
+                                extraction_success=bool(extracted_value and extracted_value.strip()),
+                                error_message=None if (extracted_value and extracted_value.strip()) else "No text extracted",
+                                parsed_profile=asdict(profile),
+                                parsed_profile_hash=content_hash_val,
+                                parsed_profile_updated_at=datetime.utcnow(),
+                            )
+                            session.add(extraction)
+                            session.commit()
+                except Exception as exc:  # pragma: no cover
+                    logger.exception("Failed to precompute parsed profile for published CV: %s", exc)
+
                 with SessionLocal() as session:
                     existing = session.scalar(select(CvDocument).where(CvDocument.path == str(doc_path)))
                     if not existing:
