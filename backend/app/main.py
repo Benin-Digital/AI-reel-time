@@ -1825,7 +1825,7 @@ def create_cv_profile(payload: CvProfileCreate, request: Request) -> CvProfileRe
     rendered_text = _render_cv_profile_text(cv_input)
     rendered_html = _render_cv_profile_html(cv_input, rendered_text)
 
-        published_document_path = None
+    published_document_path = None
     if cv_input.status == "published":
         cv_root = Path(settings.watch_cv_dir)
         cv_root.mkdir(parents=True, exist_ok=True)
