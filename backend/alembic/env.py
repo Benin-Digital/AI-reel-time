@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from logging.config import fileConfig
+import sys
+from pathlib import Path
 
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+
+# Add parent directory to path so alembic can import app modules
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.models import Base
 from app.settings import get_settings
