@@ -1,2 +1,183 @@
-// TODO: migrer la logique depuis app.js
-export function initCvLibrary() {}
+import { safeFetch } from "../api.js";
+import { $, setBanner, openModal } from "../utils/dom.js";
+import { store, setStore } from "../store.js";
+import { navigateTo } from "../router.js";
+import { openDeleteConfirm } from "../utils/upload.js";
+import { buildParams, setPage, renderDocItem, renderDocDetail } from "../utils/docs.js";
+
+const MAX_MB = 20;
+const SUPPORTED = [".pdf", ".docx", ".txt"];
+
+// module-local state
+let _selectedId = null;
+let _page = 1;
+
+export function initCvLibrary() {
+  // Upload via button
+  const btn   = $("#uploadCvButton");
+  const input = $("#uploadCvInput");
+  btn?.addEventListener("click", () => input?.click());
+  input?.addEventListener("change", () => {
+    if (input.files?.length) _handleUpload(Array.from(input.files));
+    input.value = "";
+  });
+
+  // Filters & pagination
+  $("#applyCvFilters")?.addEventListener("click", () => { _page = 1; _load(); });
+  $("#cvPrev")?.addEventListener("click", () => { if (_page > 1) { _page--; _load(); } });
+  $("#cvNext")?.addEventListener("click", () => { _page++; _load(); });
+
+  // Delegation on list
+  $("#cvList")?.addEventListener("click", (e) => {
+    const item      = e.target.closest("[data-doc-id]");
+    const actionBtn = e.target.closest("[data-action]");
+    if (!item) return;
+
+    if (actionBtn) {
+      e.stopPropagation();
+      const action = actionBtn.dataset.action;
+      const doc    = actionBtn.dataset.doc;
+      if (action === "delete") {
+        _handleDelete(doc);
+      } else if (action === "matches") {
+        const filterCv  = $("#filterCv");
+        const filterJob = $("#filterJob");
+        if (filterCv)  filterCv.value  = doc;
+        if (filterJob) filterJob.value = "";
+        navigateTo("matches");
+        window.dispatchEvent(new CustomEvent("load-matches"));
+      }
+      return;
+    }
+
+    const id = item.dataset.docId;
+    _selectedId = id;
+    _loadDetail(id);
+    _refreshList();
+  });
+
+  window.addEventListener("load-cv-library", () => _load());
+}
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
+
+async function _load() {
+  const list = $("#cvList");
+  if (!list) return;
+  try {
+    const params = buildParams({
+      page:      _page,
+      page_size: $("#cvPageSize")?.value ?? 25,
+      status:    $("#cvStatus")?.value,
+      query:     $("#cvQuery")?.value,
+    });
+    const docs = await safeFetch(`/cv-documents${params}`);
+    setStore({ cachedCvDocuments: docs });
+
+    // sidebar badge
+    const badge = $("#cvCountBadge");
+    if (badge) {
+      if (docs.length > 0) {
+        badge.textContent = String(docs.length);
+        badge.hidden = false;
+      } else {
+        badge.hidden = true;
+      }
+    }
+
+    if (!docs.length) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state__icon">📄</div><div class="empty-state__title">Aucun CV importé</div></div>`;
+      return;
+    }
+
+    if (!_selectedId || !docs.some((d) => String(d.id) === _selectedId)) {
+      _selectedId = String(docs[0].id);
+    }
+
+    _refreshList(docs);
+
+    const pageEl  = $("#cvPage");
+    if (pageEl) setPage(pageEl, _page);
+    const prevBtn = $("#cvPrev");
+    if (prevBtn) prevBtn.disabled = _page <= 1;
+
+    if (_selectedId) _loadDetail(_selectedId);
+
+  } catch (err) {
+    if (err.name !== "AuthError") {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${err.message}</div></div>`;
+    }
+  }
+}
+
+function _refreshList(docs = store.cachedCvDocuments) {
+  const list = $("#cvList");
+  if (!list) return;
+  list.innerHTML = docs.map((d) => renderDocItem(d, "cv", _selectedId)).join("");
+}
+
+async function _loadDetail(id) {
+  const detail = $("#cvDetails");
+  if (!detail) return;
+  detail.innerHTML = `<div class="skeleton skeleton--card" style="margin:var(--space-5)"></div>`;
+  try {
+    const doc = await safeFetch(`/cv-documents/${id}/details`);
+    detail.innerHTML = `<div class="workspace__detail-body">${renderDocDetail(doc, "cv")}</div>`;
+
+    // wire explain buttons injected by renderDocDetail
+    detail.querySelectorAll("[data-explain]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        window.dispatchEvent(new CustomEvent("load-explain", { detail: { matchId: btn.dataset.explain } }));
+      });
+    });
+  } catch (err) {
+    if (err.name !== "AuthError") {
+      detail.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${err.message}</div></div>`;
+    }
+  }
+}
+
+async function _handleUpload(files) {
+  const statusEl = $("#uploadCvStatus");
+  for (const file of files) {
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!SUPPORTED.includes(ext)) {
+      setBanner(statusEl, `${file.name} — type non supporté`, "error");
+      continue;
+    }
+    if (file.size > MAX_MB * 1024 * 1024) {
+      setBanner(statusEl, `${file.name} — trop volumineux (max ${MAX_MB} Mo)`, "error");
+      continue;
+    }
+    try {
+      setBanner(statusEl, `Envoi de ${file.name}…`, "info");
+      const fd = new FormData();
+      fd.append("folder", "cv");
+      fd.append("upload", file, file.name);
+      fd.append("filename", file.name);
+      await safeFetch("/ingest", { method: "POST", body: fd });
+      setBanner(statusEl, `${file.name} importé avec succès`, "success");
+    } catch (err) {
+      setBanner(statusEl, `${file.name} — ${err.message}`, "error");
+    }
+  }
+  _load();
+}
+
+async function _handleDelete(filename) {
+  const confirmed = await openDeleteConfirm([filename]);
+  if (!confirmed) return;
+  try {
+    await safeFetch("/ingest/delete", {
+      method: "POST",
+      body: JSON.stringify({ folder: "cv", filename }),
+      json: true,
+    });
+    _selectedId = null;
+    _load();
+  } catch (err) {
+    setBanner($("#uploadCvStatus"), err.message, "error");
+  }
+}
