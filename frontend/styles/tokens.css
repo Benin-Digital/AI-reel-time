@@ -1,0 +1,209 @@
+/* ============================================================
+   DESIGN TOKENS
+   Source of truth for all visual decisions.
+   Usage: var(--token-name)
+   ============================================================ */
+
+:root {
+  /* --- Typography --- */
+  --font-ui: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-display: 'DM Serif Display', Georgia, serif;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 14px;
+  --text-md:   15px;
+  --text-lg:   17px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  30px;
+
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold: 600;
+  --weight-bold:    700;
+
+  --leading-tight:  1.25;
+  --leading-base:   1.5;
+  --leading-loose:  1.75;
+
+  /* --- Spacing (4px base unit) --- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* --- Border radius --- */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-2xl:  20px;
+  --radius-full: 9999px;
+
+  /* --- Z-index scale --- */
+  --z-base:    0;
+  --z-raised:  10;
+  --z-overlay: 100;
+  --z-modal:   200;
+  --z-toast:   300;
+
+  /* --- Transitions --- */
+  --ease-fast:   120ms ease;
+  --ease-base:   200ms ease;
+  --ease-slow:   300ms ease;
+  --ease-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* --- Brand / Primary accent --- */
+  --color-primary:        #4F6EF7;
+  --color-primary-hover:  #3d5ce5;
+  --color-primary-active: #2d4cd4;
+  --color-primary-subtle: rgba(79, 110, 247, 0.12);
+  --color-primary-border: rgba(79, 110, 247, 0.30);
+
+  /* --- Semantic status colors --- */
+  --color-success:        #22c55e;
+  --color-success-subtle: rgba(34, 197, 94, 0.12);
+  --color-success-border: rgba(34, 197, 94, 0.30);
+
+  --color-warning:        #f59e0b;
+  --color-warning-subtle: rgba(245, 158, 11, 0.12);
+  --color-warning-border: rgba(245, 158, 11, 0.30);
+
+  --color-error:          #ef4444;
+  --color-error-subtle:   rgba(239, 68, 68, 0.12);
+  --color-error-border:   rgba(239, 68, 68, 0.30);
+
+  --color-info:           #3b82f6;
+  --color-info-subtle:    rgba(59, 130, 246, 0.12);
+
+  /* --- Score tones --- */
+  --tone-excellent:        #22c55e;
+  --tone-excellent-subtle: rgba(34, 197, 94, 0.14);
+  --tone-strong:           #4F6EF7;
+  --tone-strong-subtle:    rgba(79, 110, 247, 0.14);
+  --tone-medium:           #f59e0b;
+  --tone-medium-subtle:    rgba(245, 158, 11, 0.14);
+  --tone-weak:             #ef4444;
+  --tone-weak-subtle:      rgba(239, 68, 68, 0.14);
+
+  /* --- Layout dimensions --- */
+  --sidebar-width:           240px;
+  --sidebar-collapsed-width: 64px;
+  --topbar-height:           56px;
+  --panel-max-width:         1280px;
+}
+
+/* ============================================================
+   DARK THEME (default)
+   ============================================================ */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Backgrounds */
+  --bg-app:           #0c0e16;
+  --bg-sidebar:       #11141f;
+  --bg-topbar:        #11141f;
+  --bg-surface:       #161925;
+  --bg-surface-raised:#1e2235;
+  --bg-surface-hover: rgba(255, 255, 255, 0.04);
+  --bg-surface-active:rgba(79, 110, 247, 0.10);
+  --bg-input:         rgba(255, 255, 255, 0.05);
+  --bg-input-focus:   rgba(255, 255, 255, 0.07);
+  --bg-skeleton:      rgba(255, 255, 255, 0.06);
+
+  /* Borders */
+  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.09);
+  --border-strong:  rgba(255, 255, 255, 0.16);
+  --border-focus:   var(--color-primary);
+
+  /* Text */
+  --text-primary:   #e8eaf4;
+  --text-secondary: #8b91aa;
+  --text-muted:     #4e5368;
+  --text-inverse:   #0c0e16;
+  --text-on-primary:#ffffff;
+
+  /* Sidebar nav item states */
+  --nav-item-color:        #8b91aa;
+  --nav-item-hover-bg:     rgba(255, 255, 255, 0.05);
+  --nav-item-hover-color:  #e8eaf4;
+  --nav-item-active-bg:    rgba(79, 110, 247, 0.12);
+  --nav-item-active-color: #4F6EF7;
+  --nav-item-active-border:#4F6EF7;
+
+  /* Shadows */
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.45);
+  --shadow-xl:  0 16px 48px rgba(0, 0, 0, 0.55);
+
+  /* Divider */
+  --divider: rgba(255, 255, 255, 0.06);
+
+  /* Scrollbar */
+  --scrollbar-track: rgba(255, 255, 255, 0.03);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.10);
+}
+
+/* ============================================================
+   LIGHT THEME
+   ============================================================ */
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Backgrounds */
+  --bg-app:           #f0f2f9;
+  --bg-sidebar:       #ffffff;
+  --bg-topbar:        #ffffff;
+  --bg-surface:       #ffffff;
+  --bg-surface-raised:#f7f8fd;
+  --bg-surface-hover: rgba(0, 0, 0, 0.03);
+  --bg-surface-active:rgba(79, 110, 247, 0.07);
+  --bg-input:         rgba(0, 0, 0, 0.03);
+  --bg-input-focus:   rgba(0, 0, 0, 0.05);
+  --bg-skeleton:      rgba(0, 0, 0, 0.06);
+
+  /* Borders */
+  --border-subtle:  rgba(0, 0, 0, 0.05);
+  --border-default: rgba(0, 0, 0, 0.09);
+  --border-strong:  rgba(0, 0, 0, 0.18);
+  --border-focus:   var(--color-primary);
+
+  /* Text */
+  --text-primary:   #111827;
+  --text-secondary: #4b5563;
+  --text-muted:     #9ca3af;
+  --text-inverse:   #ffffff;
+  --text-on-primary:#ffffff;
+
+  /* Sidebar nav item states */
+  --nav-item-color:        #4b5563;
+  --nav-item-hover-bg:     rgba(0, 0, 0, 0.04);
+  --nav-item-hover-color:  #111827;
+  --nav-item-active-bg:    rgba(79, 110, 247, 0.08);
+  --nav-item-active-color: #4F6EF7;
+  --nav-item-active-border:#4F6EF7;
+
+  /* Shadows */
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.07);
+  --shadow-md:  0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.10);
+  --shadow-xl:  0 16px 48px rgba(0, 0, 0, 0.12);
+
+  /* Divider */
+  --divider: rgba(0, 0, 0, 0.06);
+
+  /* Scrollbar */
+  --scrollbar-track: rgba(0, 0, 0, 0.03);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+}

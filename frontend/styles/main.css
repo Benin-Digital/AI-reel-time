@@ -1,0 +1,11 @@
+/* ============================================================
+   MAIN — Point d'entrée CSS. Ordre d'import : tokens → base
+          → layout → components
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './components.css';
