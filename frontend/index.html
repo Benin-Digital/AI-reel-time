@@ -1,511 +1,719 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AI Real-Time - Console RH</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="./styles.css" />
+    <title>AI Real-Time — Console RH</title>
+    <link rel="stylesheet" href="./styles/main.css" />
   </head>
   <body>
-    <div class="backdrop"></div>
-    <header class="hero">
-      <div class="brand">
-        <span id="appLogo" class="logo" role="button" tabindex="0" aria-label="Actualiser la page">
-          <img src="./cropped-Benin-digital-182.png" alt="Logo de l'entreprise" />
-        </span>
-      </div>
-      <div class="hero-actions">
-        <div class="api-config">
-          <label for="apiBase">Base API</label>
-          <input id="apiBase" type="text" placeholder="http://localhost:8000" />
-          <button id="applyApi" class="ghost">Appliquer</button>
-        </div>
-        <div class="auth-controls">
-          <span id="authStatus" class="auth-status">Non connecte</span>
-          <button id="loginButton" class="ghost">Se connecter</button>
-          <button id="logoutButton" class="ghost" hidden>Se deconnecter</button>
-        </div>
-        
-      </div>
-    </header>
 
-    <section id="authGate" class="auth-gate" hidden>
+    <!-- ============================================================
+         AUTH GATE — affiché quand l'utilisateur n'est pas connecté
+         ============================================================ -->
+    <div id="authGate" class="auth-gate" hidden>
       <div class="auth-gate__card">
         <div class="auth-gate__content">
           <div class="auth-gate__text">
             <p class="auth-gate__eyebrow">Accès sécurisé</p>
-            <h1>Connectez-vous pour accéder au dashboard.</h1>
-            <p>
-              Les comptes sont créés par le super-admin ou l’admin autorisé. Aucun compte public n’est disponible.
-            </p>
-            <div class="auth-gate__actions">
-              <button id="openLoginModal" class="primary" type="button">Se connecter</button>
-            </div>
+            <h1 class="auth-gate__title">Connectez-vous pour accéder au dashboard.</h1>
+            <p>Les comptes sont créés par le super-admin ou l'admin autorisé.</p>
+            <button id="openLoginModal" class="btn btn--primary btn--lg" type="button">
+              Se connecter
+            </button>
           </div>
           <div class="auth-gate__illustration" aria-hidden="true">
-            <!-- Simple, lightweight SVG illustration with subtle animation -->
-            <svg width="320" height="220" viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            <svg width="300" height="200" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
               <defs>
-                <linearGradient id="g1" x1="0" x2="1">
-                  <stop offset="0%" stop-color="#f7fbfa" />
-                  <stop offset="100%" stop-color="#eef7fb" />
+                <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0%" stop-color="var(--color-primary)" stop-opacity="0.15"/>
+                  <stop offset="100%" stop-color="var(--color-primary)" stop-opacity="0.04"/>
                 </linearGradient>
               </defs>
-              <rect x="0" y="0" width="320" height="220" rx="18" fill="url(#g1)" />
-              <g id="shapes" transform="translate(40,30)">
-                <circle class="il-circle il-circle-1" cx="40" cy="40" r="28" fill="#bfe6d0" />
-                <rect class="il-rect il-rect-1" x="110" y="18" width="72" height="48" rx="8" fill="#cfe6ff" />
-                <circle class="il-circle il-circle-2" cx="200" cy="90" r="18" fill="#ffdcb0" />
-                <g class="il-lines" transform="translate(36,140)">
-                  <rect x="0" y="0" width="220" height="8" rx="4" fill="#ffffff" opacity="0.12" />
-                  <rect x="0" y="18" width="160" height="8" rx="4" fill="#ffffff" opacity="0.1" />
-                </g>
-              </g>
+              <rect width="300" height="200" rx="16" fill="url(#g1)"/>
+              <rect x="24" y="24" width="120" height="8" rx="4" fill="var(--color-primary)" opacity="0.4"/>
+              <rect x="24" y="40" width="80" height="6" rx="3" fill="var(--border-default)"/>
+              <rect x="24" y="68" width="252" height="64" rx="8" fill="var(--bg-surface-raised)" opacity="0.6"/>
+              <circle cx="52" cy="100" r="16" fill="var(--color-primary)" opacity="0.3"/>
+              <rect x="80" y="90" width="90" height="7" rx="3.5" fill="var(--border-strong)"/>
+              <rect x="80" y="104" width="60" height="5" rx="2.5" fill="var(--border-default)"/>
+              <rect x="24" y="152" width="60" height="24" rx="6" fill="var(--color-primary)" opacity="0.7"/>
+              <rect x="94" y="152" width="60" height="24" rx="6" fill="var(--border-default)"/>
             </svg>
           </div>
         </div>
       </div>
-    </section>
+    </div>
 
-    <main id="dashboardShell" class="shell">
-      <div id="apiStatus" class="banner" hidden></div>
-      <section class="dashboard">
-        <div class="grid metrics">
-          <article class="card">
-            <h3>Disponibilité</h3>
-            <p id="metricUptime" class="metric">--</p>
-            <span class="hint">secondes</span>
-          </article>
-          <article class="card">
-            <h3>Événements</h3>
-            <p id="metricEvents" class="metric">--</p>
-            <span class="hint">journaux du watcher</span>
-          </article>
-          <article class="card">
-            <h3>Extractions</h3>
-            <p id="metricExtractions" class="metric">--</p>
-            <span class="hint">fichiers traités</span>
-          </article>
-          <article class="card">
-            <h3>Scores</h3>
-            <p id="metricScores" class="metric">--</p>
-            <span class="hint">résultats de correspondance</span>
-          </article>
-          <article class="card">
-            <h3>Worker</h3>
-            <p id="metricWorkerStatus" class="metric">--</p>
-            <span class="hint">traitement des événements</span>
-          </article>
+    <!-- ============================================================
+         APP SHELL — affiché après connexion
+         ============================================================ -->
+    <div id="appShell" class="app" hidden>
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar" id="sidebar" role="navigation" aria-label="Navigation principale">
+
+        <div class="sidebar__brand">
+          <div class="sidebar__logo">
+            <img src="./cropped-Benin-digital-182.png" alt="Logo Bénin Digital" />
+          </div>
+          <div>
+            <div class="sidebar__brand-name">AI Real-Time</div>
+            <div class="sidebar__brand-sub">Console RH</div>
+          </div>
         </div>
 
-        <div class="workspace-switcher" role="tablist" aria-label="Navigation des bibliothèques">
-          <button id="tabPublishCv" class="workspace-switcher__button is-active" type="button" data-panel="publish-cv" role="tab" aria-selected="true">Publier un CV</button>
-          <button id="tabCv" class="workspace-switcher__button" type="button" data-panel="cv" role="tab" aria-selected="false">Bibliothèque CV</button>
-          <button id="tabOffer" class="workspace-switcher__button" type="button" data-panel="offer" role="tab" aria-selected="false">Publier une offre</button>
-          <button id="tabJob" class="workspace-switcher__button" type="button" data-panel="job" role="tab" aria-selected="false">Bibliothèque offres</button>
-          <button id="tabMatches" class="workspace-switcher__button" type="button" data-panel="matches" role="tab" aria-selected="false">Correspondances</button>
-          <button id="tabAdmin" class="workspace-switcher__button" type="button" data-panel="admin" role="tab" aria-selected="false" hidden>Administration</button>
+        <nav class="sidebar__nav">
+
+          <div class="nav-section">
+            <button class="nav-item is-active" data-panel="dashboard" type="button" aria-current="page">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1.5" fill="currentColor"/><rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor" opacity=".6"/><rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity=".6"/><rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity=".6"/></svg>
+              </span>
+              <span class="nav-item__label">Tableau de bord</span>
+            </button>
+          </div>
+
+          <div class="nav-section">
+            <div class="nav-section__label">CVs</div>
+            <button class="nav-item" data-panel="publish-cv" type="button">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M1 14c0-3 2.5-5 6-5M11 10v4M13 12H9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </span>
+              <span class="nav-item__label">Publier un CV</span>
+            </button>
+            <button class="nav-item" data-panel="cv-library" type="button">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M1 14c0-2.761 2.239-4.5 5-4.5s5 1.739 5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="5" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M12 9.5c1.5 0 3 .9 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </span>
+              <span class="nav-item__label">Bibliothèque CV</span>
+              <span class="nav-item__badge" id="cvCountBadge" hidden>0</span>
+            </button>
+          </div>
+
+          <div class="nav-section">
+            <div class="nav-section__label">Offres</div>
+            <button class="nav-item" data-panel="publish-job" type="button">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="5" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5M11 10v2M12 11H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </span>
+              <span class="nav-item__label">Publier une offre</span>
+            </button>
+            <button class="nav-item" data-panel="job-library" type="button">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="5" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5" stroke="currentColor" stroke-width="1.5"/></svg>
+              </span>
+              <span class="nav-item__label">Bibliothèque offres</span>
+              <span class="nav-item__badge" id="jobCountBadge" hidden>0</span>
+            </button>
+          </div>
+
+          <div class="nav-section">
+            <div class="nav-section__label">Analyse</div>
+            <button class="nav-item" data-panel="matches" type="button">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6.5 9.5a3 3 0 0 0 4.243 0l2-2a3 3 0 0 0-4.243-4.243L7.5 4.257" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9.5 6.5a3 3 0 0 0-4.243 0l-2 2a3 3 0 0 0 4.243 4.243L8.5 11.743" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </span>
+              <span class="nav-item__label">Correspondances</span>
+            </button>
+            <button class="nav-item" data-panel="archives" type="button">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="3.5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 5.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-8" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </span>
+              <span class="nav-item__label">Archives</span>
+            </button>
+          </div>
+
+          <div class="nav-section" id="adminNavSection" hidden>
+            <div class="nav-section__label">Système</div>
+            <button class="nav-item" data-panel="admin" type="button">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1.5L2 4v4c0 3.5 2.5 5.5 6 6 3.5-.5 6-2.5 6-6V4L8 1.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="nav-item__label">Administration</span>
+            </button>
+          </div>
+
+        </nav>
+
+        <div class="sidebar__footer">
+          <div class="sidebar__user" id="sidebarUser" role="button" tabindex="0" aria-label="Informations utilisateur">
+            <div class="sidebar__avatar" id="sidebarAvatar">??</div>
+            <div style="min-width:0;flex:1">
+              <div class="sidebar__user-name truncate" id="sidebarUserName">—</div>
+              <div class="sidebar__user-role" id="sidebarUserRole">—</div>
+            </div>
+          </div>
+          <button class="nav-item" id="logoutBtn" type="button">
+            <span class="nav-item__icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M10 11l3-3-3-3M13 8H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </span>
+            <span class="nav-item__label">Se déconnecter</span>
+          </button>
         </div>
 
-        <div class="board">
-          <section class="panel panel-view panel-view--publish-cv is-active" data-panel="publish-cv" role="tabpanel" aria-labelledby="tabPublishCv">
-            <div class="panel-body">
-              <div class="document-workspace">
-                <div class="document-list-column">
-                  <div class="card job-offer-card">
-                    <div class="section-header compact">
-                      <h4>Publier un CV structuré</h4>
-                      <p>Le formulaire alimente directement la bibliothèque CV et le matching avec une structure canonique.</p>
+      </aside>
+
+      <!-- APP BODY -->
+      <div class="app-body">
+
+        <!-- TOPBAR -->
+        <header class="topbar" id="topbar">
+          <div class="topbar__breadcrumb" id="topbarBreadcrumb" aria-live="polite">
+            <span class="topbar__breadcrumb-current" id="topbarTitle">Tableau de bord</span>
+          </div>
+          <div class="topbar__actions">
+            <div id="apiStatusBanner" class="banner banner--error" hidden role="alert"></div>
+            <button class="theme-toggle" id="themeToggle" type="button" title="Changer le thème" aria-label="Basculer le thème">
+              <svg id="themeIconDark" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1v1M8 14v1M1 8H2M14 8h1M3.05 3.05l.707.707M12.243 12.243l.707.707M3.05 12.95l.707-.707M12.243 3.757l.707-.707" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/></svg>
+              <svg id="themeIconLight" width="16" height="16" viewBox="0 0 16 16" fill="none" hidden><path d="M13.5 8A5.5 5.5 0 0 1 5 13.9 6 6 0 1 0 13.5 8Z" fill="currentColor" opacity=".8"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content" id="mainContent">
+
+          <!-- ── PANEL: Tableau de bord ── -->
+          <section class="view" data-panel="dashboard" role="tabpanel">
+            <div class="view__header">
+              <div>
+                <h2 class="view__title">Tableau de bord</h2>
+                <p class="view__subtitle">Vue d'ensemble de la plateforme en temps réel.</p>
+              </div>
+            </div>
+            <div class="metrics-grid" id="metricsGrid">
+              <div class="metric-card">
+                <div class="metric-card__icon">⏱</div>
+                <div class="metric-card__label">Disponibilité</div>
+                <div class="metric-card__value" id="metricUptime"><span class="skeleton skeleton--metric"></span></div>
+                <div class="metric-card__hint">secondes</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card__icon">⚡</div>
+                <div class="metric-card__label">Événements</div>
+                <div class="metric-card__value" id="metricEvents"><span class="skeleton skeleton--metric"></span></div>
+                <div class="metric-card__hint">journaux watcher</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card__icon">📄</div>
+                <div class="metric-card__label">Extractions</div>
+                <div class="metric-card__value" id="metricExtractions"><span class="skeleton skeleton--metric"></span></div>
+                <div class="metric-card__hint">fichiers traités</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card__icon">🎯</div>
+                <div class="metric-card__label">Scores</div>
+                <div class="metric-card__value" id="metricScores"><span class="skeleton skeleton--metric"></span></div>
+                <div class="metric-card__hint">correspondances</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card__icon">⚙</div>
+                <div class="metric-card__label">Worker</div>
+                <div class="metric-card__value" id="metricWorkerStatus"><span class="skeleton skeleton--metric"></span></div>
+                <div class="metric-card__hint">statut traitement</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ── PANEL: Publier un CV ── -->
+          <section class="view" data-panel="publish-cv" hidden role="tabpanel">
+            <div class="view__header">
+              <div>
+                <h2 class="view__title">Publier un CV</h2>
+                <p class="view__subtitle">Saisie structurée pour un matching optimal.</p>
+              </div>
+            </div>
+            <div class="workspace">
+              <div class="workspace__list">
+                <div class="card">
+                  <form id="cvPublishForm" class="stack" style="gap:var(--space-4)">
+                    <div class="form-grid">
+                      <div class="form-group">
+                        <label class="form-label" for="cvPublishFullName">Nom complet *</label>
+                        <input id="cvPublishFullName" type="text" placeholder="Ex. Khalid Jaouani" required />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="cvPublishHeadline">Titre professionnel *</label>
+                        <input id="cvPublishHeadline" type="text" placeholder="Ex. DSI / IT Manager" required />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="cvPublishContractType">Contrat recherché</label>
+                        <select id="cvPublishContractType">
+                          <option value="">Non renseigné</option>
+                          <option value="CDI" selected>CDI</option>
+                          <option value="CDD">CDD</option>
+                          <option value="Freelance">Freelance</option>
+                          <option value="Stage">Stage</option>
+                          <option value="Alternance">Alternance</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="cvPublishLocation">Localisation</label>
+                        <input id="cvPublishLocation" type="text" placeholder="Ex. Casablanca, Maroc" />
+                      </div>
                     </div>
-                    <form id="cvPublishForm" class="job-offer-form">
-                      <div class="job-offer-form__grid">
-                        <label>
-                          Nom complet *
-                          <input id="cvPublishFullName" name="cvPublishFullName" type="text" placeholder="Ex. Khalid Jaouani" required />
-                        </label>
-                        <label>
-                          Titre professionnel *
-                          <input id="cvPublishHeadline" name="cvPublishHeadline" type="text" placeholder="Ex. DSI / IT Manager" required />
-                        </label>
-                        <label>
-                          Contrat recherché
-                          <select id="cvPublishContractType" name="cvPublishContractType">
-                            <option value="">Non renseigné</option>
-                            <option value="CDI" selected>CDI</option>
-                            <option value="CDD">CDD</option>
-                            <option value="Freelance">Freelance</option>
-                            <option value="Stage">Stage</option>
-                            <option value="Alternance">Alternance</option>
-                          </select>
-                        </label>
-                        <label>
-                          Localisation
-                          <input id="cvPublishLocation" name="cvPublishLocation" type="text" placeholder="Ex. Casablanca, Maroc" />
-                        </label>
+                    <div class="form-group">
+                      <label class="form-label" for="cvPublishSummary">Résumé *</label>
+                      <textarea id="cvPublishSummary" rows="4" placeholder="Positionnement, priorités et valeur ajoutée." required></textarea>
+                    </div>
+                    <div class="form-grid">
+                      <div class="form-group">
+                        <label class="form-label" for="cvPublishSkills">Compétences</label>
+                        <textarea id="cvPublishSkills" rows="3" placeholder="Gestion de projet, ERP, Python, SQL"></textarea>
                       </div>
-                      <label>
-                        Résumé *
-                        <textarea id="cvPublishSummary" name="cvPublishSummary" rows="5" placeholder="Décrivez votre positionnement, vos priorités et votre valeur ajoutée." required></textarea>
-                      </label>
-                      <div class="job-offer-form__grid job-offer-form__grid--stacked">
-                        <label>
-                          Compétences
-                          <textarea id="cvPublishSkills" name="cvPublishSkills" rows="4" placeholder="Gestion de projet, ERP, Python, SQL"></textarea>
-                        </label>
-                        <label>
-                          Expérience
-                          <textarea id="cvPublishExperience" name="cvPublishExperience" rows="4" placeholder="DSI chez X, Chef de projet chez Y"></textarea>
-                        </label>
+                      <div class="form-group">
+                        <label class="form-label" for="cvPublishExperience">Expérience</label>
+                        <textarea id="cvPublishExperience" rows="3" placeholder="DSI chez X, Chef de projet chez Y"></textarea>
                       </div>
-                      <div class="job-offer-form__grid job-offer-form__grid--stacked">
-                        <label>
-                          Formation
-                          <textarea id="cvPublishEducation" name="cvPublishEducation" rows="3" placeholder="Master, école, certifications académiques"></textarea>
-                        </label>
-                        <label>
-                          Certifications
-                          <textarea id="cvPublishCertifications" name="cvPublishCertifications" rows="3" placeholder="PMP, ITIL, Azure, AWS"></textarea>
-                        </label>
+                      <div class="form-group">
+                        <label class="form-label" for="cvPublishEducation">Formation</label>
+                        <textarea id="cvPublishEducation" rows="3" placeholder="Master, école, certifications"></textarea>
                       </div>
-                      <label>
-                        Langues
-                        <textarea id="cvPublishLanguages" name="cvPublishLanguages" rows="3" placeholder="Français, anglais, arabe"></textarea>
-                      </label>
-                      <div class="job-offer-form__actions">
-                        <label>
-                          Statut
-                          <select id="cvPublishStatus" name="cvPublishStatus">
-                            <option value="draft">Brouillon</option>
-                            <option value="published" selected>Publier maintenant</option>
-                          </select>
-                        </label>
-                        <button class="primary" type="submit">Enregistrer le CV</button>
+                      <div class="form-group">
+                        <label class="form-label" for="cvPublishCertifications">Certifications</label>
+                        <textarea id="cvPublishCertifications" rows="3" placeholder="PMP, ITIL, Azure, AWS"></textarea>
                       </div>
-                    </form>
-                    <div id="cvPublishFeedback" class="upload-status" hidden></div>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="cvPublishLanguages">Langues</label>
+                      <textarea id="cvPublishLanguages" rows="2" placeholder="Français, anglais, arabe"></textarea>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:var(--space-3);justify-content:space-between;flex-wrap:wrap">
+                      <div class="form-group" style="flex:0 0 auto">
+                        <label class="form-label" for="cvPublishStatus">Statut</label>
+                        <select id="cvPublishStatus" style="width:auto">
+                          <option value="draft">Brouillon</option>
+                          <option value="published" selected>Publier</option>
+                        </select>
+                      </div>
+                      <button class="btn btn--primary" type="submit">Enregistrer le CV</button>
+                    </div>
+                    <div id="cvPublishFeedback" class="banner" hidden role="alert"></div>
+                  </form>
+                </div>
+              </div>
+              <div class="workspace__detail" id="cvPublishDetailPane">
+                <div class="workspace__detail-header">
+                  <span style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:var(--text-primary)">Aperçu du CV publié</span>
+                </div>
+                <div class="workspace__detail-empty" id="cvPublishDetails">
+                  <div class="empty-state">
+                    <div class="empty-state__icon">👤</div>
+                    <div class="empty-state__title">Aucun CV publié</div>
+                    <div class="empty-state__hint">Le détail apparaîtra ici après publication.</div>
                   </div>
                 </div>
-                <aside class="document-detail-column">
-                  <div class="document-detail-header">
-                    <h3>Détail du CV publié</h3>
-                  </div>
-                  <div id="cvPublishDetails" class="document-detail-panel job-offer-detail-panel"></div>
-                </aside>
               </div>
             </div>
           </section>
 
-          <section class="panel panel-view panel-view--cv" data-panel="cv" role="tabpanel" aria-labelledby="tabCv" hidden>
-            <div class="panel-body">
-              <div class="document-workspace">
-                <div class="document-list-column">
-                  <div class="upload-card">
-                    <div id="uploadCvZone" class="upload-zone" data-kind="cv">
-                      <input id="uploadCvInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />
-                      <div>
-                        <h4>Ajouter des CV</h4>
-                        <p>Glisser-deposer vos fichiers ici ou choisir depuis votre ordinateur.</p>
-                      </div>
-                      <button id="uploadCvButton" class="ghost">Choisir des fichiers</button>
-                    </div>
-                    <div id="uploadCvStatus" class="upload-status"></div>
-                  </div>
-                  <div class="filters document-filters">
-                    <input id="cvQuery" type="text" placeholder="Rechercher un chemin ou un contenu CV" />
-                    <select id="cvStatus">
-                      <option value="">Tous les statuts</option>
-                      <option value="ready">Prêt</option>
-                      <option value="failed">Échec</option>
-                      <option value="pending">En attente</option>
-                    </select>
-                    <select id="cvPageSize">
-                      <option value="10">10 / page</option>
-                      <option value="25" selected>25 / page</option>
-                      <option value="50">50 / page</option>
-                    </select>
-                    <button id="applyCvFilters" class="ghost">Appliquer</button>
-                  </div>
-                  <div class="pagination-controls document-pagination">
-                    <button id="cvPrev" class="ghost">Précédent</button>
-                    <span>Page <strong id="cvPage">1</strong></span>
-                    <button id="cvNext" class="ghost">Suivant</button>
-                  </div>
-                  <div id="cvList" class="stack document-list"></div>
+          <!-- ── PANEL: Bibliothèque CV ── -->
+          <section class="view" data-panel="cv-library" hidden role="tabpanel">
+            <div class="view__header">
+              <div>
+                <h2 class="view__title">Bibliothèque CV</h2>
+                <p class="view__subtitle">Gérez et explorez les CV importés.</p>
+              </div>
+              <div class="view__actions">
+                <button class="btn btn--ghost" id="uploadCvButton" type="button">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4 4l3-3 3 3M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Importer
+                </button>
+                <input id="uploadCvInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />
+              </div>
+            </div>
+            <div id="uploadCvStatus" class="banner" hidden role="alert"></div>
+            <div class="filters-bar">
+              <input id="cvQuery" class="filters-bar__search" type="search" placeholder="Rechercher un CV…" />
+              <select id="cvStatus" class="filters-bar__select" style="width:auto">
+                <option value="">Tous les statuts</option>
+                <option value="ready">Prêt</option>
+                <option value="failed">Échec</option>
+                <option value="pending">En attente</option>
+              </select>
+              <select id="cvPageSize" class="filters-bar__select" style="width:auto">
+                <option value="10">10 / page</option>
+                <option value="25" selected>25 / page</option>
+                <option value="50">50 / page</option>
+              </select>
+              <div class="filters-bar__actions">
+                <button class="btn btn--ghost btn--sm" id="applyCvFilters" type="button">Appliquer</button>
+              </div>
+            </div>
+            <div class="workspace">
+              <div class="workspace__list">
+                <div class="stack" id="cvList"></div>
+                <div class="pagination" id="cvPagination">
+                  <span class="pagination__info">Page <strong id="cvPage">1</strong></span>
+                  <button class="btn btn--ghost btn--sm" id="cvPrev">Précédent</button>
+                  <button class="btn btn--ghost btn--sm" id="cvNext">Suivant</button>
                 </div>
-                <aside class="document-detail-column">
-                  <div class="document-detail-header">
-                    <h3>Détail du CV</h3>
-                  </div>
-                  <div id="cvDetails" class="document-detail-panel hidden"></div>
-                </aside>
               </div>
-            </div>
-          </section>
-
-          <section class="panel panel-view panel-view--offer" data-panel="offer" role="tabpanel" aria-labelledby="tabOffer" hidden>
-            <div class="panel-body">
-              <div class="document-workspace">
-                <div class="document-list-column">
-                  <div class="card job-offer-card">
-                    <div class="section-header compact">
-                      <h4>Publier une offre structurée</h4>
-                      <p>Le formulaire est prioritairement en français et alimente le matching avec des sections métier.</p>
-                    </div>
-                    <form id="jobOfferForm" class="job-offer-form">
-                      <div class="job-offer-form__grid">
-                        <label>
-                          Titre *
-                          <input id="jobOfferTitle" name="jobOfferTitle" type="text" placeholder="Ex. Développeur Python Senior" required />
-                        </label>
-                        <label>
-                          Catégorie *
-                          <input id="jobOfferCategory" name="jobOfferCategory" type="text" placeholder="Ex. Développeur" required />
-                        </label>
-                        <label>
-                          CDD/CDI *
-                          <select id="jobOfferContractType" name="jobOfferContractType" required>
-                            <option value="CDD">CDD</option>
-                            <option value="CDI" selected>CDI</option>
-                            <option value="Freelance">Freelance</option>
-                            <option value="Stage">Stage</option>
-                          </select>
-                        </label>
-                        <label>
-                          Type
-                          <select id="jobOfferType" name="jobOfferType">
-                            <option value="">Non renseigné</option>
-                            <option value="Temps plein" selected>Temps plein</option>
-                            <option value="Temps partiel">Temps partiel</option>
-                            <option value="Hybride">Hybride</option>
-                            <option value="Télétravail">Télétravail</option>
-                          </select>
-                        </label>
-                      </div>
-                      <label>
-                        Méta mots-clés
-                        <textarea id="jobOfferMetaKeywords" name="jobOfferMetaKeywords" rows="3" placeholder="recrutement, ERP, frontend, backend"></textarea>
-                      </label>
-                      <label>
-                        Description du poste *
-                        <textarea id="jobOfferDescription" name="jobOfferDescription" rows="5" placeholder="Décrivez les missions, le contexte et les attentes principales." required></textarea>
-                      </label>
-                      <div class="job-offer-form__grid job-offer-form__grid--stacked">
-                        <label>
-                          Compétences
-                          <textarea id="jobOfferSkills" name="jobOfferSkills" rows="4" placeholder="Python, FastAPI, PostgreSQL"></textarea>
-                        </label>
-                        <label>
-                          Contrainte forte du projet
-                          <textarea id="jobOfferStrongConstraints" name="jobOfferStrongConstraints" rows="4" placeholder="Disponibilité immédiate, anglais obligatoire, présence locale"></textarea>
-                        </label>
-                      </div>
-                      <div class="job-offer-form__actions">
-                        <label>
-                          Statut
-                          <select id="jobOfferStatus" name="jobOfferStatus">
-                            <option value="draft">Brouillon</option>
-                            <option value="published" selected>Publier maintenant</option>
-                          </select>
-                        </label>
-                        <button class="primary" type="submit">Enregistrer l’offre</button>
-                      </div>
-                    </form>
-                    <div id="jobOfferFeedback" class="upload-status" hidden></div>
+              <div class="workspace__detail" id="cvDetailPane">
+                <div class="workspace__detail-header">
+                  <span style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:var(--text-primary)">Détail du CV</span>
+                </div>
+                <div class="workspace__detail-empty" id="cvDetails">
+                  <div class="empty-state">
+                    <div class="empty-state__icon">📄</div>
+                    <div class="empty-state__title">Sélectionnez un CV</div>
+                    <div class="empty-state__hint">Cliquez sur un CV dans la liste pour voir le détail.</div>
                   </div>
                 </div>
-                <aside class="document-detail-column">
-                  <div class="document-detail-header">
-                    <h3>Détail de l’offre</h3>
-                  </div>
-                  <div id="jobOfferDetails" class="document-detail-panel job-offer-detail-panel"></div>
-                </aside>
               </div>
             </div>
           </section>
 
-          <section class="panel panel-view panel-view--job" data-panel="job" role="tabpanel" aria-labelledby="tabJob" hidden>
-            <div class="panel-body">
-              <div class="document-workspace">
-                <div class="document-list-column">
-                  <div class="upload-card">
-                    <div id="uploadJobZone" class="upload-zone" data-kind="job">
-                      <input id="uploadJobInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />
-                      <div>
-                        <h4>Ajouter des offres</h4>
-                        <p>Glisser-deposer vos fichiers ici ou choisir depuis votre ordinateur.</p>
+          <!-- ── PANEL: Publier une offre ── -->
+          <section class="view" data-panel="publish-job" hidden role="tabpanel">
+            <div class="view__header">
+              <div>
+                <h2 class="view__title">Publier une offre</h2>
+                <p class="view__subtitle">Formulaire structuré pour un matching précis.</p>
+              </div>
+            </div>
+            <div class="workspace">
+              <div class="workspace__list">
+                <div class="card">
+                  <form id="jobOfferForm" class="stack" style="gap:var(--space-4)">
+                    <div class="form-grid">
+                      <div class="form-group">
+                        <label class="form-label" for="jobOfferTitle">Titre du poste *</label>
+                        <input id="jobOfferTitle" type="text" placeholder="Ex. Développeur Python Senior" required />
                       </div>
-                      <button id="uploadJobButton" class="ghost">Choisir des fichiers</button>
+                      <div class="form-group">
+                        <label class="form-label" for="jobOfferCategory">Catégorie *</label>
+                        <input id="jobOfferCategory" type="text" placeholder="Ex. Développeur" required />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="jobOfferContractType">Type de contrat *</label>
+                        <select id="jobOfferContractType" required>
+                          <option value="CDI" selected>CDI</option>
+                          <option value="CDD">CDD</option>
+                          <option value="Freelance">Freelance</option>
+                          <option value="Stage">Stage</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="jobOfferType">Modalité</label>
+                        <select id="jobOfferType">
+                          <option value="">Non renseigné</option>
+                          <option value="Temps plein" selected>Temps plein</option>
+                          <option value="Temps partiel">Temps partiel</option>
+                          <option value="Hybride">Hybride</option>
+                          <option value="Télétravail">Télétravail</option>
+                        </select>
+                      </div>
                     </div>
-                    <div id="uploadJobStatus" class="upload-status"></div>
-                  </div>
-                  <div class="filters document-filters">
-                    <input id="jobQuery" type="text" placeholder="Rechercher un chemin ou un contenu d'offre" />
-                    <select id="jobStatus">
-                      <option value="">Tous les statuts</option>
-                      <option value="ready">Prêt</option>
-                      <option value="failed">Échec</option>
-                      <option value="pending">En attente</option>
-                    </select>
-                    <select id="jobPageSize">
-                      <option value="10">10 / page</option>
-                      <option value="25" selected>25 / page</option>
-                      <option value="50">50 / page</option>
-                    </select>
-                    <button id="applyJobFilters" class="ghost">Appliquer</button>
-                  </div>
-                  <div class="pagination-controls document-pagination">
-                    <button id="jobPrev" class="ghost">Précédent</button>
-                    <span>Page <strong id="jobPage">1</strong></span>
-                    <button id="jobNext" class="ghost">Suivant</button>
-                  </div>
-                  <div id="jobList" class="stack document-list"></div>
+                    <div class="form-group">
+                      <label class="form-label" for="jobOfferDescription">Description du poste *</label>
+                      <textarea id="jobOfferDescription" rows="5" placeholder="Missions, contexte et attentes principales." required></textarea>
+                    </div>
+                    <div class="form-grid">
+                      <div class="form-group">
+                        <label class="form-label" for="jobOfferSkills">Compétences requises</label>
+                        <textarea id="jobOfferSkills" rows="3" placeholder="Python, FastAPI, PostgreSQL"></textarea>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="jobOfferStrongConstraints">Contraintes du poste</label>
+                        <textarea id="jobOfferStrongConstraints" rows="3" placeholder="Disponibilité immédiate, anglais obligatoire"></textarea>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="jobOfferMetaKeywords">Mots-clés</label>
+                      <textarea id="jobOfferMetaKeywords" rows="2" placeholder="recrutement, ERP, frontend, backend"></textarea>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:var(--space-3);justify-content:space-between;flex-wrap:wrap">
+                      <div class="form-group" style="flex:0 0 auto">
+                        <label class="form-label" for="jobOfferStatus">Statut</label>
+                        <select id="jobOfferStatus" style="width:auto">
+                          <option value="draft">Brouillon</option>
+                          <option value="published" selected>Publier</option>
+                        </select>
+                      </div>
+                      <button class="btn btn--primary" type="submit">Enregistrer l'offre</button>
+                    </div>
+                    <div id="jobOfferFeedback" class="banner" hidden role="alert"></div>
+                  </form>
                 </div>
-                <aside class="document-detail-column">
-                  <div class="document-detail-header">
-                    <h3>Détail de l’offre</h3>
+              </div>
+              <div class="workspace__detail" id="jobPublishDetailPane">
+                <div class="workspace__detail-header">
+                  <span style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:var(--text-primary)">Aperçu de l'offre publiée</span>
+                </div>
+                <div class="workspace__detail-empty" id="jobOfferDetails">
+                  <div class="empty-state">
+                    <div class="empty-state__icon">💼</div>
+                    <div class="empty-state__title">Aucune offre publiée</div>
+                    <div class="empty-state__hint">Le détail apparaîtra ici après publication.</div>
                   </div>
-                  <div id="jobDetails" class="document-detail-panel hidden"></div>
-                </aside>
+                </div>
               </div>
             </div>
           </section>
 
-          <section class="panel panel-view panel-view--matches" data-panel="matches" role="tabpanel" aria-labelledby="tabMatches" hidden>
-            <div class="panel-body">
-              <div class="section-header compact">
-                <h3>Correspondances</h3>
-                <p>Filtrez les scores par CV, offre, note ou ordre de tri.</p>
+          <!-- ── PANEL: Bibliothèque offres ── -->
+          <section class="view" data-panel="job-library" hidden role="tabpanel">
+            <div class="view__header">
+              <div>
+                <h2 class="view__title">Bibliothèque offres</h2>
+                <p class="view__subtitle">Gérez et explorez les offres d'emploi.</p>
               </div>
-              <div class="filters">
-                <input id="matchSearch" type="text" placeholder="Rechercher par mot-clé ou chemin" />
-                <input id="filterCv" type="number" placeholder="Filtrer par ID CV" />
-                <input id="filterJob" type="number" placeholder="Filtrer par ID offre" />
-                <input id="minScore" type="number" placeholder="Score min" min="0" max="100" />
-                <input id="maxScore" type="number" placeholder="Score max" min="0" max="100" />
-                <select id="matchPageSize">
-                  <option value="10">10 / page</option>
-                  <option value="25" selected>25 / page</option>
-                  <option value="50">50 / page</option>
-                </select>
-                <select id="sortMatches">
-                  <option value="score_desc">Score décroissant</option>
-                  <option value="score_asc">Score croissant</option>
-                  <option value="created_at_desc">Plus récent</option>
-                  <option value="created_at_asc">Plus ancien</option>
-                </select>
-                <button id="applyFilters" class="ghost">Appliquer</button>
-                <button id="clearFilters" class="ghost">Réinitialiser</button>
+              <div class="view__actions">
+                <button class="btn btn--ghost" id="uploadJobButton" type="button">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4 4l3-3 3 3M2 11h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Importer
+                </button>
+                <input id="uploadJobInput" type="file" accept=".pdf,.docx,.txt" multiple hidden />
               </div>
-              <div class="pagination-controls">
-                <button id="matchesPrev" class="ghost">Précédent</button>
-                <span>Page <strong id="matchesPage">1</strong></span>
-                <button id="matchesNext" class="ghost">Suivant</button>
+            </div>
+            <div id="uploadJobStatus" class="banner" hidden role="alert"></div>
+            <div class="filters-bar">
+              <input id="jobQuery" class="filters-bar__search" type="search" placeholder="Rechercher une offre…" />
+              <select id="jobStatus" class="filters-bar__select" style="width:auto">
+                <option value="">Tous les statuts</option>
+                <option value="ready">Prêt</option>
+                <option value="failed">Échec</option>
+                <option value="pending">En attente</option>
+              </select>
+              <select id="jobPageSize" class="filters-bar__select" style="width:auto">
+                <option value="10">10 / page</option>
+                <option value="25" selected>25 / page</option>
+                <option value="50">50 / page</option>
+              </select>
+              <div class="filters-bar__actions">
+                <button class="btn btn--ghost btn--sm" id="applyJobFilters" type="button">Appliquer</button>
               </div>
-              <div id="matchList" class="stack"></div>
+            </div>
+            <div class="workspace">
+              <div class="workspace__list">
+                <div class="stack" id="jobList"></div>
+                <div class="pagination" id="jobPagination">
+                  <span class="pagination__info">Page <strong id="jobPage">1</strong></span>
+                  <button class="btn btn--ghost btn--sm" id="jobPrev">Précédent</button>
+                  <button class="btn btn--ghost btn--sm" id="jobNext">Suivant</button>
+                </div>
+              </div>
+              <div class="workspace__detail" id="jobDetailPane">
+                <div class="workspace__detail-header">
+                  <span style="font-size:var(--text-sm);font-weight:var(--weight-semibold);color:var(--text-primary)">Détail de l'offre</span>
+                </div>
+                <div class="workspace__detail-empty" id="jobDetails">
+                  <div class="empty-state">
+                    <div class="empty-state__icon">💼</div>
+                    <div class="empty-state__title">Sélectionnez une offre</div>
+                    <div class="empty-state__hint">Cliquez sur une offre dans la liste pour voir le détail.</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 
-          <section class="panel panel-view panel-view--admin" data-panel="admin" role="tabpanel" aria-labelledby="tabAdmin" hidden>
-            <div class="panel-body">
-              <div class="section-header compact">
-                <h3>Administration des comptes</h3>
-                <p>Créer des comptes et attribuer les droits selon le rôle connecté.</p>
+          <!-- ── PANEL: Correspondances ── -->
+          <section class="view" data-panel="matches" hidden role="tabpanel">
+            <div class="view__header">
+              <div>
+                <h2 class="view__title">Correspondances</h2>
+                <p class="view__subtitle">Scores de matching CV ↔ offres.</p>
               </div>
-              <div class="admin-workspace">
-                <div class="card admin-card">
-                  <h4>Créer un compte</h4>
-                  <form id="adminCreateUserForm" class="admin-form">
-                    <label for="adminUserEmail">Email</label>
+            </div>
+            <div class="filters-bar">
+              <input id="matchSearch" class="filters-bar__search" type="search" placeholder="Rechercher par mot-clé ou chemin…" />
+              <input id="filterCv"  type="number" placeholder="ID CV"   style="width:90px" />
+              <input id="filterJob" type="number" placeholder="ID offre" style="width:90px" />
+              <input id="minScore"  type="number" placeholder="Score min" min="0" max="100" style="width:90px" />
+              <input id="maxScore"  type="number" placeholder="Score max" min="0" max="100" style="width:90px" />
+              <select id="sortMatches" style="width:auto">
+                <option value="score_desc">Score ↓</option>
+                <option value="score_asc">Score ↑</option>
+                <option value="created_at_desc">Plus récent</option>
+                <option value="created_at_asc">Plus ancien</option>
+              </select>
+              <select id="matchPageSize" style="width:auto">
+                <option value="10">10 / page</option>
+                <option value="25" selected>25 / page</option>
+                <option value="50">50 / page</option>
+              </select>
+              <div class="filters-bar__actions">
+                <button class="btn btn--ghost btn--sm" id="applyFilters">Appliquer</button>
+                <button class="btn btn--ghost btn--sm" id="clearFilters">Réinitialiser</button>
+              </div>
+            </div>
+            <div class="pagination" style="justify-content:flex-start">
+              <span class="pagination__info">Page <strong id="matchesPage">1</strong></span>
+              <button class="btn btn--ghost btn--sm" id="matchesPrev">Précédent</button>
+              <button class="btn btn--ghost btn--sm" id="matchesNext">Suivant</button>
+            </div>
+            <div class="stack" id="matchList"></div>
+          </section>
+
+          <!-- ── PANEL: Archives ── -->
+          <section class="view" data-panel="archives" hidden role="tabpanel">
+            <div class="view__header">
+              <div>
+                <h2 class="view__title">Archives</h2>
+                <p class="view__subtitle">Gérez vos sessions d'analyse et rouvrez-les plus tard.</p>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:400px 1fr;gap:var(--space-4)">
+              <div class="card">
+                <div class="card__header">
+                  <div class="card__title">Créer une archive</div>
+                </div>
+                <form id="archiveCreateForm" class="stack" style="gap:var(--space-4)">
+                  <div class="form-group">
+                    <label class="form-label" for="archiveName">Nom de l'archive *</label>
+                    <input id="archiveName" type="text" placeholder="Batch de recrutement juin 2026" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="archiveDescription">Description</label>
+                    <textarea id="archiveDescription" rows="3" placeholder="Ex. lot CV / offres pour mission A"></textarea>
+                  </div>
+                  <button class="btn btn--primary" type="submit">Créer l'archive</button>
+                  <div id="archiveCreateFeedback" class="banner" hidden role="alert"></div>
+                </form>
+              </div>
+              <div class="card">
+                <div class="card__header">
+                  <div class="card__title">Sessions archivées</div>
+                </div>
+                <div class="stack" id="archiveSessionsList"></div>
+              </div>
+            </div>
+            <div id="archiveDetails" class="card" hidden></div>
+          </section>
+
+          <!-- ── PANEL: Administration ── -->
+          <section class="view" data-panel="admin" hidden role="tabpanel">
+            <div class="view__header">
+              <div>
+                <h2 class="view__title">Administration</h2>
+                <p class="view__subtitle">Gérez les comptes et les droits d'accès.</p>
+              </div>
+            </div>
+            <div class="admin-grid">
+              <div class="card">
+                <div class="card__header">
+                  <div class="card__title">Créer un compte</div>
+                </div>
+                <form id="adminCreateUserForm" class="stack" style="gap:var(--space-4)">
+                  <div class="form-group">
+                    <label class="form-label" for="adminUserEmail">Email</label>
                     <input id="adminUserEmail" type="email" placeholder="utilisateur@entreprise.com" required />
-                    <label for="adminUserFirst">Prénom</label>
-                    <input id="adminUserFirst" type="text" placeholder="Prénom" required />
-                    <label for="adminUserLast">Nom</label>
-                    <input id="adminUserLast" type="text" placeholder="Nom" required />
-                    <label for="adminUserPassword">Mot de passe</label>
+                  </div>
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label class="form-label" for="adminUserFirst">Prénom</label>
+                      <input id="adminUserFirst" type="text" placeholder="Prénom" required />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="adminUserLast">Nom</label>
+                      <input id="adminUserLast" type="text" placeholder="Nom" required />
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="adminUserPassword">Mot de passe</label>
                     <input id="adminUserPassword" type="password" placeholder="Mot de passe initial" required />
-                    <label for="adminUserRole">Rôle</label>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="adminUserRole">Rôle</label>
                     <select id="adminUserRole">
                       <option value="member">Utilisateur</option>
                       <option value="admin">Admin</option>
                     </select>
-                    <button id="adminCreateUserButton" class="primary" type="submit">Créer le compte</button>
-                    <p id="adminCreateUserError" class="form-error" hidden></p>
-                  </form>
-                </div>
-                <div class="card admin-card">
-                  <div class="section-header compact">
-                    <h4>Comptes existants</h4>
-                    <p>Liste des comptes autorisés à accéder à la plateforme.</p>
                   </div>
-                  <div id="adminUsersList" class="stack"></div>
+                  <button class="btn btn--primary" type="submit" id="adminCreateUserButton">Créer le compte</button>
+                  <div id="adminCreateUserError" class="banner banner--error" hidden role="alert"></div>
+                </form>
+              </div>
+              <div class="card">
+                <div class="card__header">
+                  <div class="card__title">Comptes existants</div>
                 </div>
-                
+                <div class="stack" id="adminUsersList"></div>
               </div>
             </div>
           </section>
-        </div>
-      </section>
-    </main>
 
-    <footer id="appFooter" class="footer">
-      <p>Console MVP AI Real-Time. Conçue pour les équipes RH internes. Bénin Digital © 2026</p>
-    </footer>
+        </main>
+      </div>
+    </div>
 
-    <div id="loginModal" class="modal" hidden>
-      <div class="modal-backdrop" data-modal-close></div>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-        <div class="modal-header">
-          <h3 id="loginTitle">Connexion</h3>
-          <button class="ghost modal-close" data-modal-close>Fermer</button>
+    <!-- ============================================================
+         MODALS
+         ============================================================ -->
+
+    <!-- Modal: Connexion -->
+    <div id="loginModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__card">
+        <div class="modal__header">
+          <h3 class="modal__title" id="loginTitle">Connexion</h3>
+          <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
         </div>
-        <form id="loginForm" class="modal-body">
-          <label for="loginEmail">Email</label>
-          <input id="loginEmail" type="email" placeholder="admin@entreprise.com" required />
-          <label for="loginPassword">Mot de passe</label>
-          <input id="loginPassword" type="password" placeholder="Mot de passe" required />
-          <button class="primary" type="submit">Se connecter</button>
-          <p id="loginError" class="form-error" hidden></p>
+        <form id="loginForm" class="modal__body">
+          <div class="form-group">
+            <label class="form-label" for="loginEmail">Email</label>
+            <input id="loginEmail" type="email" placeholder="admin@entreprise.com" required autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="loginPassword">Mot de passe</label>
+            <input id="loginPassword" type="password" placeholder="Mot de passe" required autocomplete="current-password" />
+          </div>
+          <div id="loginError" class="banner banner--error" hidden role="alert"></div>
+          <button class="btn btn--primary" type="submit" style="width:100%">Se connecter</button>
         </form>
       </div>
     </div>
 
-    <div id="explainModal" class="modal" hidden>
-      <div class="modal-backdrop" data-modal-close></div>
-      <div class="modal-card modal-card--wide" role="dialog" aria-modal="true" aria-labelledby="explainTitle">
-        <div class="modal-header">
-          <h3 id="explainTitle">Analyse de la correspondance du profil</h3>
-          <button class="ghost modal-close" data-modal-close>Fermer</button>
+    <!-- Modal: Analyse d'une correspondance -->
+    <div id="explainModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="explainTitle">
+      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__card modal__card--wide">
+        <div class="modal__header">
+          <h3 class="modal__title" id="explainTitle">Analyse de la correspondance</h3>
+          <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
         </div>
-        <div id="explainContent" class="modal-body"></div>
+        <div id="explainContent" class="modal__body"></div>
       </div>
     </div>
 
-    <div id="deleteConfirmModal" class="modal" hidden>
-      <div class="modal-backdrop" data-modal-close></div>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
-        <div class="modal-header">
-          <h3 id="deleteConfirmTitle">Confirmation de suppression</h3>
-          <button class="ghost modal-close" data-modal-close>Fermer</button>
+    <!-- Modal: Confirmation suppression -->
+    <div id="deleteConfirmModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__card">
+        <div class="modal__header">
+          <h3 class="modal__title" id="deleteConfirmTitle">Confirmer la suppression</h3>
+          <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
         </div>
-        <div class="modal-body">
-          <p id="deleteConfirmText">Vous vous apprêtez à supprimer des fichiers du serveur.</p>
-          <div id="deleteConfirmList" class="muted"></div>
-          <label for="deleteConfirmInput">Tapez <strong>SUPPRIMER</strong> pour confirmer</label>
-          <input id="deleteConfirmInput" type="text" placeholder="SUPPRIMER" />
-          <div class="actions">
-            <button id="deleteConfirmCancel" class="ghost" data-modal-close>Annuler</button>
-            <button id="deleteConfirmConfirm" class="primary" disabled>Supprimer</button>
+        <div class="modal__body">
+          <p id="deleteConfirmText" style="color:var(--text-secondary);font-size:var(--text-sm)"></p>
+          <div id="deleteConfirmList" class="stack" style="font-size:var(--text-xs);color:var(--text-muted);max-height:120px;overflow-y:auto"></div>
+          <div class="form-group">
+            <label class="form-label" for="deleteConfirmInput">
+              Tapez <strong>SUPPRIMER</strong> pour confirmer
+            </label>
+            <input id="deleteConfirmInput" type="text" placeholder="SUPPRIMER" />
           </div>
         </div>
+        <div class="modal__footer">
+          <button id="deleteConfirmCancel" class="btn btn--ghost" data-modal-close>Annuler</button>
+          <button id="deleteConfirmConfirm" class="btn btn--danger" disabled>Supprimer</button>
+        </div>
       </div>
     </div>
 
-    <script src="./app.js"></script>
+    <!-- Upload zone drag & drop (overlay global) -->
+    <div id="uploadCvZone" data-kind="cv" hidden></div>
+    <div id="uploadJobZone" data-kind="job" hidden></div>
+
+    <script type="module" src="./js/main.js"></script>
   </body>
 </html>
