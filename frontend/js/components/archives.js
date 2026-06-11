@@ -189,12 +189,13 @@ async function _loadDetail(sessionId) {
       const btn = e.currentTarget;
       const confirmed = await openConfirm(
         "Désarchiver la session",
-        `Désarchiver "${s.name}" ? Les CV et offres redeviendront actifs dans l'espace de travail.`,
+        `Désarchiver "${s.name}" ? Les CV et offres redeviendront actifs dans l'espace de travail et la session sera supprimée.`,
         "Désarchiver"
       );
       if (!confirmed) return;
       btn.disabled = true;
       try {
+        // DELETE without delete_documents → FK SET NULL auto-unassigns docs, session removed
         await safeFetch(`/sessions/${sessionId}`, { method: "DELETE" });
         window.dispatchEvent(new CustomEvent("load-matches"));
         _loadSessions();
