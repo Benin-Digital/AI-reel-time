@@ -195,6 +195,7 @@ async function _handleDelete(filename) {
     });
     _selectedId = null;
     _load();
+    window.dispatchEvent(new CustomEvent("load-matches"));
   } catch (err) {
     setBanner($("#uploadCvStatus"), err.message, "error");
   }

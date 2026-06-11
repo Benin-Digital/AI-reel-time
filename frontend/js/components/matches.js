@@ -59,15 +59,17 @@ async function _load() {
     <div class="skeleton skeleton--card"></div>
     <div class="skeleton skeleton--card"></div>`;
   try {
+    const includeArchived = $("#includeArchived")?.checked ?? false;
     const params = buildParams({
-      page:      _page,
-      page_size: $("#matchPageSize")?.value ?? 25,
-      cv_id:     $("#filterCv")?.value,
-      job_id:    $("#filterJob")?.value,
-      min_score: $("#minScore")?.value,
-      max_score: $("#maxScore")?.value,
-      sort_by:   $("#sortMatches")?.value,
-      search:    $("#matchSearch")?.value,
+      page:             _page,
+      page_size:        $("#matchPageSize")?.value ?? 25,
+      cv_id:            $("#filterCv")?.value,
+      job_id:           $("#filterJob")?.value,
+      min_score:        $("#minScore")?.value,
+      max_score:        $("#maxScore")?.value,
+      sort_by:          $("#sortMatches")?.value,
+      search:           $("#matchSearch")?.value,
+      unassigned_only:  includeArchived ? null : "true",
     });
     const data = await safeFetch(`/matches${params}`);
 
@@ -79,7 +81,7 @@ async function _load() {
     if (!data.length) {
       list.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state__icon">🔗</div>
+          <div class="empty-state__icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M10 16h12M16 10l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="1.5"/></svg></div>
           <div class="empty-state__title">Aucune correspondance</div>
           <div class="empty-state__hint">Importez des CV et des offres, puis attendez le traitement.</div>
         </div>`;
