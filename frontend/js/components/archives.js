@@ -1,7 +1,7 @@
 import { safeFetch } from "../api.js";
 import { $, setBanner, show, hide, escapeHtml } from "../utils/dom.js";
 import { formatDate } from "../utils/format.js";
-import { openDeleteConfirm } from "../utils/upload.js";
+import { openDeleteConfirm, openConfirm } from "../utils/upload.js";
 
 export function initArchives() {
   $("#archiveCreateForm")?.addEventListener("submit", async (e) => {
@@ -187,7 +187,11 @@ async function _loadDetail(sessionId) {
     // Wire action buttons
     detailEl.querySelector("[data-action='unarchive']")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget;
-      const confirmed = await openDeleteConfirm([s.name]);
+      const confirmed = await openConfirm(
+        "Désarchiver la session",
+        `Désarchiver "${s.name}" ? Les CV et offres redeviendront actifs dans l'espace de travail.`,
+        "Désarchiver"
+      );
       if (!confirmed) return;
       btn.disabled = true;
       try {

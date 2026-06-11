@@ -9,12 +9,13 @@ import { initPublishJob } from "./components/publish-job.js";
 import { initMatches } from "./components/matches.js";
 import { initArchives } from "./components/archives.js";
 import { initAdmin } from "./components/admin.js";
-import { initDeleteConfirm } from "./utils/upload.js";
+import { initDeleteConfirm, initGenericConfirm } from "./utils/upload.js";
 
 document.addEventListener("DOMContentLoaded", () => {
   initAuth();
   initRouter();
   initDeleteConfirm();
+  initGenericConfirm();
 
   initMetrics();
   initCvLibrary();

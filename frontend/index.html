@@ -714,6 +714,26 @@
       </div>
     </div>
 
+    <!-- Modal: Confirmation générique -->
+    <div id="genericConfirmModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="genericConfirmTitle">
+      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__card">
+        <div class="modal__header">
+          <h3 class="modal__title" id="genericConfirmTitle"></h3>
+          <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal__body">
+          <p id="genericConfirmText" style="color:var(--text-secondary);font-size:var(--text-sm)"></p>
+        </div>
+        <div class="modal__footer">
+          <button id="genericConfirmCancel" class="btn btn--ghost" data-modal-close>Annuler</button>
+          <button id="genericConfirmOk" class="btn btn--primary">Confirmer</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Upload zone drag & drop (overlay global) -->
     <div id="uploadCvZone" data-kind="cv" hidden></div>
     <div id="uploadJobZone" data-kind="job" hidden></div>

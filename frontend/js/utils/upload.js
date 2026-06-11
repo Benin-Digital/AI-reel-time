@@ -2,6 +2,39 @@ import { $, show, hide, openModal, closeModal } from "./dom.js";
 
 let _pendingResolve = null;
 
+let _pendingGenericResolve = null;
+
+export function initGenericConfirm() {
+  const modal     = $("#genericConfirmModal");
+  const okBtn     = $("#genericConfirmOk");
+  const cancelBtn = $("#genericConfirmCancel");
+
+  okBtn?.addEventListener("click", () => {
+    closeModal(modal);
+    if (_pendingGenericResolve) { _pendingGenericResolve(true); _pendingGenericResolve = null; }
+  });
+
+  cancelBtn?.addEventListener("click", () => {
+    if (_pendingGenericResolve) { _pendingGenericResolve(false); _pendingGenericResolve = null; }
+  });
+}
+
+export function openConfirm(title, message, confirmLabel = "Confirmer") {
+  return new Promise((resolve) => {
+    _pendingGenericResolve = resolve;
+    const modal   = $("#genericConfirmModal");
+    const titleEl = $("#genericConfirmTitle");
+    const textEl  = $("#genericConfirmText");
+    const okBtn   = $("#genericConfirmOk");
+
+    if (titleEl) titleEl.textContent = title;
+    if (textEl)  textEl.textContent  = message;
+    if (okBtn)   okBtn.textContent   = confirmLabel;
+
+    openModal(modal);
+  });
+}
+
 export function initDeleteConfirm() {
   const modal      = $("#deleteConfirmModal");
   const input      = $("#deleteConfirmInput");
