@@ -1310,7 +1310,6 @@ async def lifespan(app: FastAPI):
 
 _configure_logging()
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
-_configure_cors(app)
 
 
 @app.middleware("http")
@@ -1325,8 +1324,10 @@ async def security_middleware(request: Request, call_next):
         response.headers["x-request-id"] = request_id
         return response
     
-    # JWT authentication: try to authenticate the request
-    if settings.auth_enabled:
+    # JWT authentication: allow preflight OPTIONS requests through without authorization
+    if request.method == "OPTIONS":
+        request.state.user = None
+    elif settings.auth_enabled:
         try:
             with SessionLocal() as session:
                 user = authenticate_request(request, session)
@@ -1334,7 +1335,7 @@ async def security_middleware(request: Request, call_next):
         except HTTPException as exc:
             # If authentication is required but fails, return 401
             # Skip paths that don't require auth (like /health, /auth/login, etc.)
-            skip_auth_paths = {"/health", "/ready", "/auth/login"}
+            skip_auth_paths = {"/health", "/ready", "/auth/login", "/auth/register"}
             if request.url.path not in skip_auth_paths and not request.url.path.startswith("/docs") and not request.url.path.startswith("/openapi"):
                 response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
                 response.headers["x-request-id"] = request_id
@@ -1365,6 +1366,13 @@ async def security_middleware(request: Request, call_next):
         },
     )
     return response
+
+
+# CORS doit être ajouté EN DERNIER pour être la couche la plus externe.
+# En Starlette, chaque add_middleware s'insère en tête de pile (position 0),
+# donc le dernier ajouté est exécuté en premier pour les requêtes entrantes.
+# Ainsi CORS s'exécute avant security_middleware et ajoute ses headers même sur les 401.
+_configure_cors(app)
 
 
 @app.get("/health")

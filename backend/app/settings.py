@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_max_requests: int = 120
     rate_limit_window_seconds: int = 60
-    cors_allow_origins: str = ""
+    cors_allow_origins: str = "*"
     cors_allow_methods: str = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
     cors_allow_headers: str = "Authorization,Content-Type,X-API-Key"
     log_level: str = "INFO"
