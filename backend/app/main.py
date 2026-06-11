@@ -1335,7 +1335,7 @@ async def security_middleware(request: Request, call_next):
         except HTTPException as exc:
             # If authentication is required but fails, return 401
             # Skip paths that don't require auth (like /health, /auth/login, etc.)
-            skip_auth_paths = {"/health", "/ready", "/auth/login", "/auth/register"}
+            skip_auth_paths = {"/health", "/ready", "/auth/login", "/auth/register", "/auth/token"}
             if request.url.path not in skip_auth_paths and not request.url.path.startswith("/docs") and not request.url.path.startswith("/openapi"):
                 response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
                 response.headers["x-request-id"] = request_id
