@@ -62,11 +62,11 @@
   --ease-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* --- Brand / Primary accent --- */
-  --color-primary:        #4F6EF7;
-  --color-primary-hover:  #3d5ce5;
-  --color-primary-active: #2d4cd4;
-  --color-primary-subtle: rgba(79, 110, 247, 0.12);
-  --color-primary-border: rgba(79, 110, 247, 0.30);
+  --color-primary:        #10b981;
+  --color-primary-hover:  #059669;
+  --color-primary-active: #047857;
+  --color-primary-subtle: rgba(16, 185, 129, 0.12);
+  --color-primary-border: rgba(16, 185, 129, 0.30);
 
   /* --- Semantic status colors --- */
   --color-success:        #22c55e;
@@ -115,7 +115,7 @@
   --bg-surface:       #161925;
   --bg-surface-raised:#1e2235;
   --bg-surface-hover: rgba(255, 255, 255, 0.04);
-  --bg-surface-active:rgba(79, 110, 247, 0.10);
+  --bg-surface-active:rgba(16, 185, 129, 0.10);
   --bg-input:         rgba(255, 255, 255, 0.05);
   --bg-input-focus:   rgba(255, 255, 255, 0.07);
   --bg-skeleton:      rgba(255, 255, 255, 0.06);
@@ -137,9 +137,9 @@
   --nav-item-color:        #8b91aa;
   --nav-item-hover-bg:     rgba(255, 255, 255, 0.05);
   --nav-item-hover-color:  #e8eaf4;
-  --nav-item-active-bg:    rgba(79, 110, 247, 0.12);
-  --nav-item-active-color: #4F6EF7;
-  --nav-item-active-border:#4F6EF7;
+  --nav-item-active-bg:    rgba(16, 185, 129, 0.12);
+  --nav-item-active-color: #10b981;
+  --nav-item-active-border:#10b981;
 
   /* Shadows */
   --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.30);
@@ -168,7 +168,7 @@
   --bg-surface:       #ffffff;
   --bg-surface-raised:#f7f8fd;
   --bg-surface-hover: rgba(0, 0, 0, 0.03);
-  --bg-surface-active:rgba(79, 110, 247, 0.07);
+  --bg-surface-active:rgba(16, 185, 129, 0.07);
   --bg-input:         rgba(0, 0, 0, 0.03);
   --bg-input-focus:   rgba(0, 0, 0, 0.05);
   --bg-skeleton:      rgba(0, 0, 0, 0.06);
@@ -190,9 +190,9 @@
   --nav-item-color:        #4b5563;
   --nav-item-hover-bg:     rgba(0, 0, 0, 0.04);
   --nav-item-hover-color:  #111827;
-  --nav-item-active-bg:    rgba(79, 110, 247, 0.08);
-  --nav-item-active-color: #4F6EF7;
-  --nav-item-active-border:#4F6EF7;
+  --nav-item-active-bg:    rgba(16, 185, 129, 0.08);
+  --nav-item-active-color: #10b981;
+  --nav-item-active-border:#10b981;
 
   /* Shadows */
   --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.07);
