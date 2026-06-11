@@ -2,6 +2,11 @@
    BASE — Reset, box model, typographie globale, scrollbars
    ============================================================ */
 
+/* Force [hidden] sur tous les éléments — nécessaire car les classes CSS
+   (.modal, .app, .auth-gate…) définissent display:flex/grid et écrasent
+   le display:none par défaut du navigateur pour l'attribut hidden. */
+[hidden] { display: none !important; }
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
