@@ -2756,6 +2756,7 @@ def list_matches(
     cv_id: int | None = None,
     job_id: int | None = None,
     session_id: int | None = None,
+    unassigned_only: bool = False,
     min_score: float | None = None,
     max_score: float | None = None,
     sort_by: str = "score_desc",
@@ -2764,7 +2765,7 @@ def list_matches(
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(MatchResult)
-    if session_id is not None or search:
+    if session_id is not None or unassigned_only or search:
         stmt = stmt.join(CvDocument, MatchResult.cv_id == CvDocument.id)
         stmt = stmt.join(JobDocument, MatchResult.job_id == JobDocument.id)
     if cv_id is not None:
@@ -2775,6 +2776,11 @@ def list_matches(
         stmt = stmt.where(
             CvDocument.session_id == session_id,
             JobDocument.session_id == session_id,
+        )
+    if unassigned_only:
+        stmt = stmt.where(
+            CvDocument.session_id.is_(None),
+            JobDocument.session_id.is_(None),
         )
     if min_score is not None:
         stmt = stmt.where(MatchResult.score >= min_score)
