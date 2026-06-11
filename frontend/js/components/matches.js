@@ -22,6 +22,8 @@ export function initMatches() {
     });
     const sort = $("#sortMatches");
     if (sort) sort.value = "score_desc";
+    const includeArchived = $("#includeArchived");
+    if (includeArchived) includeArchived.checked = false;
     _page = 1;
     _load();
   });
