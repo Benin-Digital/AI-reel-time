@@ -84,7 +84,9 @@ function _basename(path) {
 export function renderDocItem(doc, kind, selectedId) {
   const id = doc.id;
   const isSelected = selectedId != null && String(id) === String(selectedId);
-  const icon = kind === "cv" ? "📄" : "💼";
+  const icon = kind === "cv"
+    ? `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`
+    : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="5" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5" stroke="currentColor" stroke-width="1.5"/></svg>`;
   const name = escapeHtml(_basename(doc.path ?? doc.filename ?? String(id)));
   const badge = documentStatusBadge(doc.status);
   const date = formatDate(doc.updated_at ?? doc.created_at);
@@ -165,8 +167,13 @@ export function renderDocDetail(doc, kind) {
       </div>`
     : "";
 
+  const pdfSvg = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+
   return `
 <div class="stack" style="gap:var(--space-5)">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-1)">
+    <button class="btn btn--ghost btn--sm" data-action="preview-pdf" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}">${pdfSvg}Aperçu PDF</button>
+  </div>
   <div style="display:flex;gap:var(--space-4);flex-wrap:wrap">
     <div class="metric-card" style="flex:1;min-width:100px">
       <div class="metric-card__label">ID</div>

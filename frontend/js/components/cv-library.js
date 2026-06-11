@@ -1,4 +1,4 @@
-import { safeFetch } from "../api.js";
+import { safeFetch, fetchBlob } from "../api.js";
 import { $, setBanner, openModal } from "../utils/dom.js";
 import { store, setStore } from "../store.js";
 import { navigateTo } from "../router.js";
@@ -88,7 +88,7 @@ async function _load() {
     }
 
     if (!docs.length) {
-      list.innerHTML = `<div class="empty-state"><div class="empty-state__icon">📄</div><div class="empty-state__title">Aucun CV importé</div></div>`;
+      list.innerHTML = `<div class="empty-state"><div class="empty-state__icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect x="6" y="3" width="20" height="26" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M11 11h10M11 16h10M11 21h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div><div class="empty-state__title">Aucun CV importé</div></div>`;
       return;
     }
 
@@ -132,6 +132,24 @@ async function _loadDetail(id) {
         window.dispatchEvent(new CustomEvent("load-explain", { detail: { matchId: btn.dataset.explain } }));
       });
     });
+
+    // wire PDF preview button
+    const pdfBtn = detail.querySelector("[data-action='preview-pdf']");
+    if (pdfBtn) {
+      pdfBtn.addEventListener("click", async () => {
+        pdfBtn.disabled = true;
+        try {
+          const blob = await fetchBlob(`/cv-documents/${id}/pdf`);
+          const url = URL.createObjectURL(blob);
+          window.open(url, "_blank");
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (err) {
+          setBanner($("#uploadCvStatus"), `PDF : ${err.message}`, "error");
+        } finally {
+          pdfBtn.disabled = false;
+        }
+      });
+    }
   } catch (err) {
     if (err.name !== "AuthError") {
       detail.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${err.message}</div></div>`;
