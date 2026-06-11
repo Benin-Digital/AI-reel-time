@@ -187,7 +187,8 @@ async function _loadDetail(sessionId) {
     // Wire action buttons
     detailEl.querySelector("[data-action='unarchive']")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget;
-      if (!window.confirm(`Désarchiver "${s.name}" ?\nLes CV et offres redeviendront actifs dans l'espace de travail.`)) return;
+      const confirmed = await openDeleteConfirm([s.name]);
+      if (!confirmed) return;
       btn.disabled = true;
       try {
         await safeFetch(`/sessions/${sessionId}/unassign`, { method: "POST", json: true });
