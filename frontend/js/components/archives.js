@@ -76,7 +76,7 @@ async function _loadSessions() {
       .map(
         (s) => `
       <article class="doc-item" style="cursor:pointer" data-archive-id="${s.id}">
-        <div class="doc-item__icon">🗂</div>
+        <div class="doc-item__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="3.5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 5.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-8" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
         <div class="doc-item__body">
           <div class="doc-item__name truncate">${escapeHtml(s.name)}</div>
           <div class="doc-item__meta">
