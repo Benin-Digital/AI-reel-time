@@ -168,12 +168,12 @@ async function _loadDetail(sessionId) {
           </button>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-4)">
-        <div class="card card--flat">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-4);min-width:0">
+        <div class="card card--flat" style="min-width:0;overflow:hidden">
           <div class="card__title text-sm" style="margin-bottom:var(--space-3)">CV archivés</div>
           <div class="stack" style="gap:var(--space-2)">${cvHtml}</div>
         </div>
-        <div class="card card--flat">
+        <div class="card card--flat" style="min-width:0;overflow:hidden">
           <div class="card__title text-sm" style="margin-bottom:var(--space-3)">Offres archivées</div>
           <div class="stack" style="gap:var(--space-2)">${jobHtml}</div>
         </div>
@@ -189,17 +189,14 @@ async function _loadDetail(sessionId) {
       const btn = e.currentTarget;
       const confirmed = await openConfirm(
         "Désarchiver la session",
-        `Désarchiver "${s.name}" ? Les CV et offres redeviendront actifs dans l'espace de travail et la session sera supprimée.`,
+        `Désarchiver "${s.name}" ? Les CV et offres redeviendront actifs dans l'espace de travail.`,
         "Désarchiver"
       );
       if (!confirmed) return;
       btn.disabled = true;
       try {
-        // DELETE without delete_documents → FK SET NULL auto-unassigns docs, session removed
-        await safeFetch(`/sessions/${sessionId}`, { method: "DELETE" });
+        await safeFetch(`/sessions/${sessionId}/unassign`, { method: "POST", json: true });
         window.dispatchEvent(new CustomEvent("load-matches"));
-        window.dispatchEvent(new CustomEvent("load-cv-library"));
-        window.dispatchEvent(new CustomEvent("load-job-library"));
         _loadSessions();
         hide(detailEl);
       } catch (err) {
