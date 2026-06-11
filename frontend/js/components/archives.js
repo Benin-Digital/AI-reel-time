@@ -110,9 +110,35 @@ async function _loadDetail(sessionId) {
   detailEl.innerHTML = `<div class="skeleton skeleton--card"></div>`;
 
   try {
-    const s = await safeFetch(`/sessions/${sessionId}`);
+    const [s, matches] = await Promise.all([
+      safeFetch(`/sessions/${sessionId}`),
+      safeFetch(`/matches?session_id=${sessionId}&page_size=50&sort_by=score_desc`).catch(() => []),
+    ]);
+
     const statusVariant = s.status === "closed" ? "default" : "success";
     const statusLabel   = s.status === "closed" ? "Fermée" : "Ouverte";
+
+    const _basename = (p) => (p ? p.replace(/\\/g, "/").split("/").pop() : "");
+
+    const cvHtml = s.cv_documents?.length
+      ? s.cv_documents.map((d) => `<div class="text-xs text-secondary truncate" title="${escapeHtml(d.path ?? "")}">CV ${d.id} — ${escapeHtml(_basename(d.path))}</div>`).join("")
+      : `<span class="text-xs text-muted">Aucun</span>`;
+
+    const jobHtml = s.job_documents?.length
+      ? s.job_documents.map((d) => `<div class="text-xs text-secondary truncate" title="${escapeHtml(d.path ?? "")}">Offre ${d.id} — ${escapeHtml(_basename(d.path))}</div>`).join("")
+      : `<span class="text-xs text-muted">Aucune</span>`;
+
+    const matchHtml = matches?.length
+      ? matches.map((m) => {
+          const score = Math.max(0, Math.min(100, Math.round(Number(m.score) || 0)));
+          const tone  = score >= 70 ? "high" : score >= 40 ? "mid" : "low";
+          return `
+            <div style="display:flex;align-items:center;gap:var(--space-3);background:var(--bg-surface-raised);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3)">
+              <span class="score-chip score-chip--${tone}">${score}%</span>
+              <span class="text-xs text-secondary">CV ${m.cv_id} ↔ Offre ${m.job_id}</span>
+            </div>`;
+        }).join("")
+      : `<span class="text-xs text-muted">Aucune correspondance trouvée.</span>`;
 
     detailEl.innerHTML = `
       <div class="card__header">
@@ -123,34 +149,22 @@ async function _loadDetail(sessionId) {
       <div style="display:flex;gap:var(--space-4);flex-wrap:wrap;margin-bottom:var(--space-4)">
         <span class="text-sm text-muted">${s.cv_count ?? 0} CV</span>
         <span class="text-sm text-muted">${s.job_count ?? 0} offres</span>
-        <span class="text-sm text-muted">${s.match_count ?? 0} matches</span>
+        <span class="text-sm text-muted">${s.match_count ?? 0} correspondances</span>
         <span class="text-sm text-muted">Créée le ${new Date(s.created_at).toLocaleString("fr-FR")}</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-4)">
         <div class="card card--flat">
           <div class="card__title text-sm" style="margin-bottom:var(--space-3)">CV archivés</div>
-          <div class="stack" style="gap:var(--space-2)">
-            ${
-              s.cv_documents?.length
-                ? s.cv_documents
-                    .map((d) => `<div class="text-xs text-secondary truncate">ID ${d.id} — ${escapeHtml(d.path ?? "")}</div>`)
-                    .join("")
-                : `<span class="text-xs text-muted">Aucun</span>`
-            }
-          </div>
+          <div class="stack" style="gap:var(--space-2)">${cvHtml}</div>
         </div>
         <div class="card card--flat">
           <div class="card__title text-sm" style="margin-bottom:var(--space-3)">Offres archivées</div>
-          <div class="stack" style="gap:var(--space-2)">
-            ${
-              s.job_documents?.length
-                ? s.job_documents
-                    .map((d) => `<div class="text-xs text-secondary truncate">ID ${d.id} — ${escapeHtml(d.path ?? "")}</div>`)
-                    .join("")
-                : `<span class="text-xs text-muted">Aucune</span>`
-            }
-          </div>
+          <div class="stack" style="gap:var(--space-2)">${jobHtml}</div>
         </div>
+      </div>
+      <div class="card card--flat">
+        <div class="card__title text-sm" style="margin-bottom:var(--space-3)">Correspondances archivées</div>
+        <div class="stack" style="gap:var(--space-2)">${matchHtml}</div>
       </div>
     `;
   } catch (err) {
