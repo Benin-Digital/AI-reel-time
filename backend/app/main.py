@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File,
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import redis
-from sqlalchemy import delete, func, or_, select, text
+from sqlalchemy import delete, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from .db import SessionLocal, init_db
@@ -2596,6 +2596,48 @@ def assign_documents_to_session(session_id: int, payload: SessionAssignRequest) 
             cv_documents=[CvDocumentRead.model_validate(doc) for doc in cv_docs],
             job_documents=[JobDocumentRead.model_validate(doc) for doc in job_docs],
         )
+
+
+@app.post("/sessions/{session_id}/unassign", response_model=AnalysisSessionDetailRead)
+def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
+    with SessionLocal() as session:
+        session_obj = session.get(AnalysisSession, session_id)
+        if not session_obj:
+            raise HTTPException(status_code=404, detail="Session not found")
+        session.execute(
+            update(CvDocument).where(CvDocument.session_id == session_id).values(session_id=None)
+        )
+        session.execute(
+            update(JobDocument).where(JobDocument.session_id == session_id).values(session_id=None)
+        )
+        session_obj.status = "open"
+        session_obj.closed_at = None
+        session.commit()
+        session.refresh(session_obj)
+        return AnalysisSessionDetailRead(
+            id=session_obj.id,
+            name=session_obj.name,
+            description=session_obj.description,
+            status=session_obj.status,
+            closed_at=session_obj.closed_at,
+            cv_count=0,
+            job_count=0,
+            match_count=0,
+            created_at=session_obj.created_at,
+            updated_at=session_obj.updated_at,
+            cv_documents=[],
+            job_documents=[],
+        )
+
+
+@app.delete("/sessions/{session_id}", status_code=204)
+def delete_analysis_session(session_id: int) -> None:
+    with SessionLocal() as session:
+        session_obj = session.get(AnalysisSession, session_id)
+        if not session_obj:
+            raise HTTPException(status_code=404, detail="Session not found")
+        session.delete(session_obj)
+        session.commit()
 
 
 @app.post("/matches/analyze")

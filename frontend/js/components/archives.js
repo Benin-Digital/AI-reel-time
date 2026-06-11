@@ -152,12 +152,20 @@ async function _loadDetail(sessionId) {
         <div class="card__title">${escapeHtml(s.name)}</div>
         <span class="badge badge--${statusVariant}">${statusLabel}</span>
       </div>
-      ${s.description ? `<p class="text-sm text-secondary" style="margin-bottom:var(--space-4)">${escapeHtml(s.description)}</p>` : ""}
-      <div style="display:flex;gap:var(--space-4);flex-wrap:wrap;margin-bottom:var(--space-4)">
+      ${s.description ? `<p class="text-sm text-secondary" style="margin-bottom:var(--space-3)">${escapeHtml(s.description)}</p>` : ""}
+      <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;margin-bottom:var(--space-4)">
         <span class="text-sm text-muted">${s.cv_count ?? 0} CV</span>
         <span class="text-sm text-muted">${s.job_count ?? 0} offres</span>
         <span class="text-sm text-muted">${s.match_count ?? 0} correspondances</span>
         <span class="text-sm text-muted">Créée le ${new Date(s.created_at).toLocaleString("fr-FR")}</span>
+        <div style="margin-left:auto;display:flex;gap:var(--space-2)">
+          <button class="btn btn--ghost btn--sm" data-action="unarchive" data-session="${escapeHtml(String(s.id))}">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><rect x="1" y="2" width="14" height="3.5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 5.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-8" stroke="currentColor" stroke-width="1.5"/><path d="M8 8v4M6 10l2-2 2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Désarchiver
+          </button>
+          <button class="btn btn--danger btn--sm" data-action="delete-session" data-session="${escapeHtml(String(s.id))}" data-name="${escapeHtml(s.name)}">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><path d="M2 4h12M5 4V2.5A.5.5 0 0 1 5.5 2h5a.5.5 0 0 1 .5.5V4M6 7v5M10 7v5M3 4l1 9.5A.5.5 0 0 0 4.5 14h7a.5.5 0 0 0 .5-.5L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Supprimer
+          </button>
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-4)">
         <div class="card card--flat">
@@ -174,6 +182,40 @@ async function _loadDetail(sessionId) {
         <div class="stack" style="gap:var(--space-2)">${matchHtml}</div>
       </div>
     `;
+
+    // Wire action buttons
+    detailEl.querySelector("[data-action='unarchive']")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      if (!confirm(`Désarchiver la session "${s.name}" ? Les CV et offres redeviendront actifs.`)) return;
+      btn.disabled = true;
+      try {
+        await safeFetch(`/sessions/${sessionId}/unassign`, { method: "POST", json: true });
+        window.dispatchEvent(new CustomEvent("load-matches"));
+        _loadSessions();
+        hide(detailEl);
+      } catch (err) {
+        detailEl.insertAdjacentHTML("beforeend", `<div class="banner banner--error" style="margin-top:var(--space-3)">${escapeHtml(err.message)}</div>`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    detailEl.querySelector("[data-action='delete-session']")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      if (!confirm(`Supprimer la session "${s.name}" ? Les CV et offres redeviendront actifs mais les données de session seront perdues.`)) return;
+      btn.disabled = true;
+      try {
+        await safeFetch(`/sessions/${sessionId}`, { method: "DELETE" });
+        window.dispatchEvent(new CustomEvent("load-matches"));
+        _loadSessions();
+        hide(detailEl);
+      } catch (err) {
+        detailEl.insertAdjacentHTML("beforeend", `<div class="banner banner--error" style="margin-top:var(--space-3)">${escapeHtml(err.message)}</div>`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
   } catch (err) {
     detailEl.innerHTML = `<div class="banner banner--error">${escapeHtml(err.message)}</div>`;
   }
