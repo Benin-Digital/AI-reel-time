@@ -207,7 +207,7 @@ async function _loadDetail(sessionId) {
       if (!confirmed) return;
       btn.disabled = true;
       try {
-        await safeFetch(`/sessions/${sessionId}`, { method: "DELETE" });
+        await safeFetch(`/sessions/${sessionId}?delete_documents=true`, { method: "DELETE" });
         window.dispatchEvent(new CustomEvent("load-matches"));
         _loadSessions();
         hide(detailEl);

@@ -2631,11 +2631,24 @@ def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
 
 
 @app.delete("/sessions/{session_id}", status_code=204)
-def delete_analysis_session(session_id: int) -> None:
+def delete_analysis_session(session_id: int, delete_documents: bool = False) -> None:
     with SessionLocal() as session:
         session_obj = session.get(AnalysisSession, session_id)
         if not session_obj:
             raise HTTPException(status_code=404, detail="Session not found")
+
+        if delete_documents:
+            cv_docs  = session.scalars(select(CvDocument).where(CvDocument.session_id == session_id)).all()
+            job_docs = session.scalars(select(JobDocument).where(JobDocument.session_id == session_id)).all()
+            for doc in cv_docs:
+                _cleanup_removed_file(Path(doc.path), "cv")
+                try: Path(doc.path).unlink(missing_ok=True)
+                except Exception: pass
+            for doc in job_docs:
+                _cleanup_removed_file(Path(doc.path), "job")
+                try: Path(doc.path).unlink(missing_ok=True)
+                except Exception: pass
+
         session.delete(session_obj)
         session.commit()
 
