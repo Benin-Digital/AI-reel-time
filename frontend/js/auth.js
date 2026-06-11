@@ -32,20 +32,15 @@ export function updateAuthUi() {
 }
 
 export async function login(email, password) {
-  const form = new URLSearchParams({ username: email, password });
-  const data = await safeFetch("/auth/token", {
+  const data = await safeFetch("/auth/login", {
     method: "POST",
-    body: form.toString(),
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: JSON.stringify({ email, password }),
+    json: true,
     skipAuth: true,
     allowAuthErrors: true,
   });
-  const user = await safeFetch("/auth/me", {
-    headers: { Authorization: `Bearer ${data.access_token}` },
-    skipAuth: true,
-  });
-  persistAuth(data.access_token, user);
-  setStore({ authToken: data.access_token, authUser: user });
+  persistAuth(data.access_token, data.user);
+  setStore({ authToken: data.access_token, authUser: data.user });
   updateAuthUi();
 }
 
