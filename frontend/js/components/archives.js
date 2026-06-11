@@ -1,6 +1,7 @@
 import { safeFetch } from "../api.js";
 import { $, setBanner, show, hide, escapeHtml } from "../utils/dom.js";
 import { formatDate } from "../utils/format.js";
+import { openDeleteConfirm } from "../utils/upload.js";
 
 export function initArchives() {
   $("#archiveCreateForm")?.addEventListener("submit", async (e) => {
@@ -186,7 +187,7 @@ async function _loadDetail(sessionId) {
     // Wire action buttons
     detailEl.querySelector("[data-action='unarchive']")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget;
-      if (!confirm(`Désarchiver la session "${s.name}" ? Les CV et offres redeviendront actifs.`)) return;
+      if (!window.confirm(`Désarchiver "${s.name}" ?\nLes CV et offres redeviendront actifs dans l'espace de travail.`)) return;
       btn.disabled = true;
       try {
         await safeFetch(`/sessions/${sessionId}/unassign`, { method: "POST", json: true });
@@ -202,7 +203,8 @@ async function _loadDetail(sessionId) {
 
     detailEl.querySelector("[data-action='delete-session']")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget;
-      if (!confirm(`Supprimer la session "${s.name}" ? Les CV et offres redeviendront actifs mais les données de session seront perdues.`)) return;
+      const confirmed = await openDeleteConfirm([s.name]);
+      if (!confirmed) return;
       btn.disabled = true;
       try {
         await safeFetch(`/sessions/${sessionId}`, { method: "DELETE" });
