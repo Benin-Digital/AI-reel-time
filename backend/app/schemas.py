@@ -89,6 +89,7 @@ class CvDocumentRead(BaseModel):
     content_hash: str | None
     status: str
     last_error: str | None
+    session_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -101,8 +102,46 @@ class JobDocumentRead(BaseModel):
     content_hash: str | None
     status: str
     last_error: str | None
+    session_id: int | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AnalysisSessionCreate(BaseModel):
+    name: str
+    description: str | None = None
+    status: Literal["open", "closed"] = "open"
+
+
+class AnalysisSessionUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    status: Literal["open", "closed"] | None = None
+
+
+class SessionAssignRequest(BaseModel):
+    cv_ids: list[int] = Field(default_factory=list)
+    job_ids: list[int] = Field(default_factory=list)
+
+
+class AnalysisSessionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None
+    status: str
+    closed_at: datetime | None
+    cv_count: int | None = None
+    job_count: int | None = None
+    match_count: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalysisSessionDetailRead(AnalysisSessionRead):
+    cv_documents: list[CvDocumentRead] = Field(default_factory=list)
+    job_documents: list[JobDocumentRead] = Field(default_factory=list)
 
 
 class JobOfferCreate(BaseModel):
@@ -321,3 +360,26 @@ class MatchExplainRead(BaseModel):
     vigilance: list[str]
     evidence: list[str]
     keyword_hits: list[str]
+
+
+class AnalyzeRequest(BaseModel):
+    cv_text: str | None = ""
+    job_text: str | None = ""
+
+
+class ScoringWeightsRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    structured_lexical_weight: float
+    structured_skill_weight: float
+    structured_must_have_weight: float
+    structured_experience_weight: float
+    structured_language_weight: float
+    structured_contract_weight: float
+    structured_summary_weight: float
+    structured_education_weight: float
+    structured_missing_required_penalty: float
+    structured_missing_experience_penalty: float
+    scoring_skill_weight: float
+    scoring_phrase_bonus: float
+    scoring_max_bonus: float
