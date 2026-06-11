@@ -198,6 +198,8 @@ async function _loadDetail(sessionId) {
         // DELETE without delete_documents → FK SET NULL auto-unassigns docs, session removed
         await safeFetch(`/sessions/${sessionId}`, { method: "DELETE" });
         window.dispatchEvent(new CustomEvent("load-matches"));
+        window.dispatchEvent(new CustomEvent("load-cv-library"));
+        window.dispatchEvent(new CustomEvent("load-job-library"));
         _loadSessions();
         hide(detailEl);
       } catch (err) {
