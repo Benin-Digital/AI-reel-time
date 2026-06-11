@@ -1,6 +1,5 @@
 import { safeFetch } from "../api.js";
 import { $, setBanner, show, hide, escapeHtml } from "../utils/dom.js";
-import { store } from "../store.js";
 import { formatDate } from "../utils/format.js";
 
 export function initArchives() {
@@ -26,20 +25,28 @@ export function initArchives() {
         json: true,
       });
 
-      // Assign current cached documents to the new session
-      const payload = {};
-      const cvs  = store.cachedCvDocuments;
-      const jobs = store.cachedJobDocuments;
-      if (cvs?.length)  payload.cv_ids  = cvs.map((d) => d.id);
-      if (jobs?.length) payload.job_ids = jobs.map((d) => d.id);
+      // Fetch ALL unassigned documents from API (don't rely on potentially-stale cache)
+      setBanner(feedback, "Récupération des documents…", "info");
+      const [allCvs, allJobs] = await Promise.all([
+        safeFetch("/cv-documents?page_size=500"),
+        safeFetch("/job-documents?page_size=500"),
+      ]);
 
-      if (payload.cv_ids || payload.job_ids) {
+      const payload = {
+        cv_ids:  (allCvs  ?? []).filter((d) => !d.session_id).map((d) => d.id),
+        job_ids: (allJobs ?? []).filter((d) => !d.session_id).map((d) => d.id),
+      };
+
+      if (payload.cv_ids.length || payload.job_ids.length) {
         await safeFetch(`/sessions/${session.id}/assign`, {
           method: "POST",
           body: JSON.stringify(payload),
           json: true,
         });
       }
+
+      // Refresh matches page so archived docs disappear from it
+      window.dispatchEvent(new CustomEvent("load-matches"));
 
       setBanner(feedback, "Archive créée.", "success");
       e.target.reset();

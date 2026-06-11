@@ -195,7 +195,8 @@ async function _handleDelete(filename) {
     });
     _selectedId = null;
     _load();
-    window.dispatchEvent(new CustomEvent("load-matches"));
+    // delay to let the async worker finish cleaning up match_results
+    setTimeout(() => window.dispatchEvent(new CustomEvent("load-matches")), 2000);
   } catch (err) {
     setBanner($("#uploadCvStatus"), err.message, "error");
   }
