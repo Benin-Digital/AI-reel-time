@@ -195,7 +195,7 @@ async function _loadDetail(sessionId) {
       if (!confirmed) return;
       btn.disabled = true;
       try {
-        await safeFetch(`/sessions/${sessionId}/unassign`, { method: "POST", json: true });
+        await safeFetch(`/sessions/${sessionId}`, { method: "DELETE" });
         window.dispatchEvent(new CustomEvent("load-matches"));
         _loadSessions();
         hide(detailEl);
