@@ -92,6 +92,7 @@ from .services import (
 )
 from .services.scoring import analyze_match
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
+from .services.matcher import match_cv_to_job
 from .services.explain import build_match_explanation
 from dataclasses import asdict
 from .security import enforce_security, validate_security_settings
@@ -348,7 +349,14 @@ def _upsert_job_document(path: Path, extraction: ExtractedTextRead) -> JobDocume
         return JobDocumentRead.model_validate(doc)
 
 
-def _upsert_match_result(cv_id: int, job_id: int, score: float, common: list[str]) -> MatchRead:
+def _upsert_match_result(
+    cv_id: int,
+    job_id: int,
+    score: float,
+    common: list[str],
+    component_scores: dict | None = None,
+) -> MatchRead:
+    cs = component_scores or {}
     with SessionLocal() as session:
         existing = session.scalar(
             select(MatchResult).where(
@@ -359,6 +367,14 @@ def _upsert_match_result(cv_id: int, job_id: int, score: float, common: list[str
         if existing:
             existing.score = score
             existing.common_keywords = serialize_keywords(common)
+            if cs:
+                existing.score_semantic = cs.get("semantic")
+                existing.score_skills = cs.get("skills")
+                existing.score_experience = cs.get("experience")
+                existing.score_education = cs.get("education")
+                existing.score_languages = cs.get("languages")
+                existing.score_contract = cs.get("contract")
+                existing.match_domain = cs.get("domain")
             session.commit()
             session.refresh(existing)
             return MatchRead(
@@ -376,6 +392,13 @@ def _upsert_match_result(cv_id: int, job_id: int, score: float, common: list[str
             job_id=job_id,
             score=score,
             common_keywords=serialize_keywords(common),
+            score_semantic=cs.get("semantic"),
+            score_skills=cs.get("skills"),
+            score_experience=cs.get("experience"),
+            score_education=cs.get("education"),
+            score_languages=cs.get("languages"),
+            score_contract=cs.get("contract"),
+            match_domain=cs.get("domain"),
         )
         session.add(match)
         session.commit()
@@ -879,14 +902,26 @@ def _vector_match_cv(
     matched_job_ids: set[int] = set()
     for row in rows:
         job_text = (row.extracted_text or "").strip()
-        lexical_score = 0.0
-        common: list[str] = []
         if job_text:
-            lexical_score, common = score_texts(text_value, job_text)
-        vector_score = _vector_score(float(row.distance))
-        score = _hybrid_score(vector_score, lexical_score)
+            match_result = match_cv_to_job(text_value, job_text)
+            score = match_result.score
+            common = match_result.common_skills
+            cs = {
+                "semantic": match_result.score_semantic,
+                "skills": match_result.score_skills,
+                "experience": match_result.score_experience,
+                "education": match_result.score_education,
+                "languages": match_result.score_languages,
+                "contract": match_result.score_contract,
+                "domain": match_result.domain,
+            }
+        else:
+            vector_score = _vector_score(float(row.distance))
+            score = vector_score
+            common = []
+            cs = {}
         _insert_score_result(Path(cv_doc.path), Path(row.path), score, common)
-        _upsert_match_result(cv_doc.id, row.job_id, score, common)
+        _upsert_match_result(cv_doc.id, row.job_id, score, common, cs)
         matched_job_ids.add(int(row.job_id))
 
     return matched_job_ids
@@ -974,22 +1009,32 @@ def _vector_match_job(
     matched_cv_ids: set[int] = set()
     for row in rows:
         cv_text = (row.extracted_text or "").strip()
-        lexical_score = 0.0
-        common: list[str] = []
         if cv_text:
-            lexical_score, common = score_texts(cv_text, text_value)
-            if structured_offer is not None:
-                structured_score, structured_common = score_texts(
-                    cv_text,
-                    _render_job_offer_focus_text(structured_offer),
-                )
-                if structured_score > lexical_score:
-                    lexical_score = structured_score
-                    common = structured_common
-        vector_score = _vector_score(float(row.distance))
-        score = _hybrid_score(vector_score, lexical_score)
+            # Use structured offer text when available for richer job representation
+            job_repr = (
+                _render_job_offer_focus_text(structured_offer)
+                if structured_offer is not None
+                else text_value
+            )
+            match_result = match_cv_to_job(cv_text, job_repr)
+            score = match_result.score
+            common = match_result.common_skills
+            cs = {
+                "semantic": match_result.score_semantic,
+                "skills": match_result.score_skills,
+                "experience": match_result.score_experience,
+                "education": match_result.score_education,
+                "languages": match_result.score_languages,
+                "contract": match_result.score_contract,
+                "domain": match_result.domain,
+            }
+        else:
+            vector_score = _vector_score(float(row.distance))
+            score = vector_score
+            common = []
+            cs = {}
         _insert_score_result(Path(row.path), Path(job_doc.path), score, common)
-        _upsert_match_result(row.cv_id, job_doc.id, score, common)
+        _upsert_match_result(row.cv_id, job_doc.id, score, common, cs)
         matched_cv_ids.add(int(row.cv_id))
 
     return matched_cv_ids
