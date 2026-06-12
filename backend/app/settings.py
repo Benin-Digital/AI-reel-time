@@ -88,6 +88,13 @@ class Settings(BaseSettings):
     ocr_languages: str = "fra+eng"
     ocr_psm: int = 6
     ocr_oem: int = 3
+    # Hybrid scoring: combine vector (bi-encoder) score with structured score
+    hybrid_scoring_enabled: bool = True
+    hybrid_vector_weight: float = 0.3
+    hybrid_lexical_weight: float = 0.7
+    # Cross-encoder model for semantic matching (matcher.py)
+    crossencoder_model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    crossencoder_enabled: bool = True
 
     model_config = SettingsConfigDict(env_prefix="AI_REALTIME_", extra="ignore")
 
