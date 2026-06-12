@@ -2,7 +2,8 @@ from .extraction import extract_text
 from .event_queue import dequeue_event, enqueue_event
 from .fingerprint import file_sha256
 from .embeddings import embed_text, embed_texts
-from .scoring import score_texts, serialize_keywords, deserialize_keywords
+from .matcher import score_texts
+from .scoring import serialize_keywords, deserialize_keywords
 from .watcher import LocalFolderWatcher, WatchEvent
 from .worker import EventWorker
 from .event_queue import get_queue_status
