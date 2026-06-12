@@ -226,6 +226,14 @@ class MatchResult(Base):
     job_id: Mapped[int] = mapped_column(ForeignKey("job_documents.id"))
     score: Mapped[float] = mapped_column(Float)
     common_keywords: Mapped[str] = mapped_column(Text, nullable=True)
+    # Component scores from the AI engine (v2)
+    score_semantic: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_skills: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_experience: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_education: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_languages: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_contract: Mapped[float | None] = mapped_column(Float, nullable=True)
+    match_domain: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
