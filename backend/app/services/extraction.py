@@ -1,4 +1,14 @@
+"""
+Text extraction from PDF, DOCX and TXT files.
+
+Fixes vs previous version:
+- clean_text() is called AFTER the page loop, not inside it (was O(N²))
+- DOCX table cells in the same row are joined with a tab separator
+- OCR uses psm=3 (auto-detect page columns) instead of psm=6
+"""
 import logging
+import re
+import unicodedata
 from pathlib import Path
 
 from docx import Document
@@ -7,112 +17,152 @@ from pypdf import PdfReader
 import pytesseract
 
 from ..settings import get_settings
-from .structured import clean_document_text
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+def clean_text(text: str) -> str:
+    """
+    Normalize extracted text:
+    - fix hyphenated line breaks
+    - strip bullet/dash prefixes
+    - deduplicate repeated lines
+    """
+    if not text:
+        return ""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Rejoin words split by a hyphen at line break
+    text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
+
+    lines: list[str] = []
+    seen: dict[str, int] = {}
+    prev = ""
+
+    for raw in text.split("\n"):
+        # Remove soft hyphens and bullet characters, collapse whitespace
+        line = re.sub(r"\u00ad", "", raw)
+        line = re.sub(r"\s+", " ", line.strip())
+        line = re.sub(r"^[\-*•·\u2022\u25e6]+\s*", "", line).strip()
+
+        if not line or len(line) < 2:
+            prev = ""
+            continue
+
+        key = unicodedata.normalize("NFKD", line).encode("ascii", "ignore").decode().lower()
+        if key == prev:
+            continue
+        seen[key] = seen.get(key, 0) + 1
+        if seen[key] > 2:
+            continue
+
+        lines.append(line)
+        prev = key
+
+    return "\n".join(lines).strip()
+
+
+# Keep the old name as an alias so structured.py keeps working without changes
+clean_document_text = clean_text
+
+
 def extract_text_from_pdf(path: Path) -> str:
-    """Extract text from PDF using pypdf, fallback to OCR if empty."""
+    """Extract PDF text via pypdf; fall back to Tesseract OCR if too short."""
     try:
         reader = PdfReader(path)
-        text_content = []
+        parts: list[str] = []
         for page_num, page in enumerate(reader.pages):
             try:
-                text = page.extract_text()
-                if text.strip():
-                    text_content.append(text)
+                t = page.extract_text() or ""
+                if t.strip():
+                    parts.append(t)
             except Exception as exc:
-                logger.warning(f"Failed to extract text from PDF page {page_num}: {exc}")
+                logger.warning("PDF page %d extraction failed: %s", page_num, exc)
 
-            extracted_text = clean_document_text("\n".join(text_content))
-        if len(extracted_text.strip()) >= settings.ocr_min_text_length:
-            return extracted_text
+        # FIX: clean AFTER the loop, not inside it (was O(N²))
+        extracted = clean_text("\n".join(parts))
+
+        if len(extracted.strip()) >= settings.ocr_min_text_length:
+            return extracted
 
         logger.info(
-            "PDF %s extracted text below threshold (%d chars), attempting OCR...",
+            "PDF %s below OCR threshold (%d chars), running OCR",
             path.name,
             settings.ocr_min_text_length,
         )
-        ocr_text = clean_document_text(_ocr_pdf(path))
-        if len(ocr_text.strip()) > len(extracted_text.strip()):
-            return ocr_text
-        return extracted_text
+        ocr = clean_text(_ocr_pdf(path))
+        return ocr if len(ocr) > len(extracted) else extracted
+
     except Exception as exc:
-        logger.exception(f"PDF extraction failed for {path.name}: {exc}")
+        logger.exception("PDF extraction failed for %s: %s", path.name, exc)
         return ""
 
 
 def _ocr_pdf(path: Path) -> str:
-    """Use OCR (tesseract) on PDF images."""
+    """Tesseract OCR on each page image; uses psm=3 for multi-column layouts."""
     try:
         images = convert_from_path(str(path), dpi=settings.ocr_dpi)
-        ocr_config = f"--psm {settings.ocr_psm} --oem {settings.ocr_oem}"
-        text_content = []
+        # psm 3 = fully automatic page segmentation (handles multi-column CVs)
+        config = f"--psm 3 --oem {settings.ocr_oem}"
+        parts: list[str] = []
         for img in images:
-            ocr_text = pytesseract.image_to_string(
-                img,
-                lang=settings.ocr_languages,
-                config=ocr_config,
-            )
-            if ocr_text.strip():
-                text_content.append(ocr_text)
-        return clean_document_text("\n".join(text_content))
+            t = pytesseract.image_to_string(img, lang=settings.ocr_languages, config=config)
+            if t.strip():
+                parts.append(t)
+        return "\n".join(parts)
     except Exception as exc:
-        logger.exception(f"OCR fallback failed for {path.name}: {exc}")
+        logger.exception("OCR failed for %s: %s", path.name, exc)
         return ""
 
 
 def extract_text_from_docx(path: Path) -> str:
-    """Extract text from DOCX file."""
+    """Extract DOCX paragraphs and tables with proper cell separation."""
     try:
         doc = Document(path)
-        text_content = []
+        parts: list[str] = []
+
         for para in doc.paragraphs:
-            if para.text.strip():
-                text_content.append(para.text)
+            t = para.text.strip()
+            if t:
+                parts.append(t)
+
         for table in doc.tables:
             for row in table.rows:
-                for cell in row.cells:
-                    cell_text = cell.text.strip()
-                    if cell_text:
-                        text_content.append(cell_text)
-        return clean_document_text("\n".join(text_content))
+                # FIX: join cells in same row with tab so columns stay readable
+                cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                if cells:
+                    parts.append("\t".join(cells))
+
+        return clean_text("\n".join(parts))
     except Exception as exc:
-        logger.exception(f"DOCX extraction failed for {path.name}: {exc}")
+        logger.exception("DOCX extraction failed for %s: %s", path.name, exc)
         return ""
 
 
 def extract_text_from_txt(path: Path) -> str:
-    """Extract text from plain text file."""
-    try:
-        return clean_document_text(path.read_text(encoding="utf-8"))
-    except UnicodeDecodeError:
+    """Extract plain text, trying UTF-8 then latin-1."""
+    for encoding in ("utf-8", "latin-1"):
         try:
-            return clean_document_text(path.read_text(encoding="latin-1"))
+            return clean_text(path.read_text(encoding=encoding))
+        except UnicodeDecodeError:
+            continue
         except Exception as exc:
-            logger.exception(f"TXT extraction failed for {path.name}: {exc}")
+            logger.exception("TXT extraction failed for %s: %s", path.name, exc)
             return ""
+    return ""
 
 
 def extract_text(path: Path) -> str:
-    """
-    Extract text from file based on extension.
-    Returns empty string if extraction fails.
-    """
+    """Dispatch extraction by file extension. Returns '' on any failure."""
     if not path.exists() or not path.is_file():
-        logger.warning(f"File does not exist: {path}")
+        logger.warning("File not found: %s", path)
         return ""
-
     suffix = path.suffix.lower()
-
     if suffix == ".pdf":
         return extract_text_from_pdf(path)
-    elif suffix == ".docx":
+    if suffix == ".docx":
         return extract_text_from_docx(path)
-    elif suffix == ".txt":
+    if suffix == ".txt":
         return extract_text_from_txt(path)
-    else:
-        logger.warning(f"Unsupported file format: {suffix} for {path.name}")
-        return ""
+    logger.warning("Unsupported file format: %s for %s", suffix, path.name)
+    return ""
