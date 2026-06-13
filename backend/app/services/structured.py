@@ -992,6 +992,10 @@ def build_document_profile(text: str, kind: str | None = None, enable_ner: bool 
     skill_sources = [skills_text, job_required_text, job_nice_text]
     if kind == "cv":
         skill_sources.extend([experience_text, certifications_text])
+    elif kind == "job":
+        # Some job offers put tech stack in the summary/intro ("I. Savoir") or in
+        # uncategorised sections — include them so nothing is missed.
+        skill_sources.extend([summary_text, other_text])
     skill_terms = _extract_skill_terms("\n".join(part for part in skill_sources if part))
     required_skill_terms = _extract_skill_terms(job_required_text)
     nice_skill_terms = _extract_skill_terms(job_nice_text)
