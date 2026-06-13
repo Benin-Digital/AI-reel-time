@@ -11,6 +11,8 @@ import {
 import { buildParams, setPage } from "../utils/docs.js";
 
 let _page = 1;
+// Local cache: matchId → decision ("accept" | "reject" | "review")
+const _feedbackCache = new Map();
 
 export function initMatches() {
   $("#applyFilters")?.addEventListener("click", () => { _page = 1; _load(); });
@@ -37,6 +39,10 @@ export function initMatches() {
   $("#matchList")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-explain]");
     if (btn) _loadExplain(btn.dataset.explain);
+
+    // Quick feedback from match card (decision only, no rating/comment)
+    const fb = e.target.closest("[data-feedback]");
+    if (fb) _submitQuickFeedback(fb);
   });
 
   // Close modal when a [data-modal-close] element is clicked
@@ -102,9 +108,10 @@ function _renderMatchCard(match) {
   const tone     = scoreTone(score);
   const keywords = (match.common_keywords ?? []).filter(Boolean).slice(0, 6);
   const domain   = match.match_domain ? `<span class="badge badge--primary">${escapeHtml(match.match_domain)}</span>` : "";
+  const current  = _feedbackCache.get(String(match.id)) ?? null;
 
   return `
-<article class="match-card">
+<article class="match-card" data-match-id="${escapeHtml(String(match.id))}">
   <div class="match-card__score">
     ${renderScoreChip(score)}
     <span class="text-xs text-muted">${tone.label}</span>
@@ -119,6 +126,7 @@ function _renderMatchCard(match) {
     ${renderScoreBar(score)}
     ${_renderComponentScores(match)}
     <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
+    ${_renderFeedbackBar(match.id, current)}
   </div>
   <div class="match-card__actions">
     <button class="btn btn--ghost btn--sm" data-explain="${escapeHtml(String(match.id))}">Analyser</button>
@@ -142,8 +150,16 @@ async function _loadExplain(matchId) {
   openModal(modal);
 
   try {
-    const data = await safeFetch(`/matches/${matchId}/explain`);
+    // Load explain data and existing feedback in parallel
+    const [data, existingFb] = await Promise.all([
+      safeFetch(`/matches/${matchId}/explain`),
+      safeFetch(`/matches/${matchId}/feedback`).catch(() => null),
+    ]);
+
+    if (existingFb) _feedbackCache.set(String(matchId), existingFb);
+
     content.innerHTML = _renderExplainContent(data);
+    _wireFeedbackForm(matchId);
 
     // Wire copy button
     const copyBtn = content.querySelector("[data-explain-copy]");
@@ -210,6 +226,7 @@ function _renderExplainContent(data) {
        </div>`
     : ""}
   ${_renderComponentScoresDetailed(data)}
+  ${_renderFeedbackForm(data.match_id)}
   <div style="display:flex;gap:var(--space-2);flex-wrap:wrap">
     <button class="btn btn--ghost btn--sm" data-explain-copy="${escapeHtml(String(data.match_id ?? ""))}">Copier le texte</button>
     <button class="btn btn--ghost btn--sm" data-explain-print="${escapeHtml(String(data.match_id ?? ""))}">Imprimer le rapport</button>
@@ -265,6 +282,143 @@ function _renderComponentScoresDetailed(data) {
     <div class="divider-label" style="margin-bottom:var(--space-3)">Détail des scores${domain}</div>
     <div class="score-breakdown">${rows}</div>
   </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Feedback helpers
+// ---------------------------------------------------------------------------
+
+const _FB_LABELS = {
+  accept: { label: "Accepté",  icon: "✓", cls: "accept" },
+  review: { label: "À revoir", icon: "↩", cls: "review" },
+  reject: { label: "Rejeté",   icon: "✗", cls: "reject" },
+};
+
+function _renderFeedbackBar(matchId, current) {
+  const mid = escapeHtml(String(matchId));
+  return `<div class="feedback-bar">
+    <span class="feedback-bar__label">Évaluation :</span>
+    ${Object.entries(_FB_LABELS).map(([decision, { label, icon, cls }]) => {
+      const active = current === decision ? " is-active" : "";
+      return `<button class="feedback-btn feedback-btn--${cls}${active}"
+        data-feedback data-match="${mid}" data-decision="${decision}"
+        title="${label}">${icon} ${label}</button>`;
+    }).join("")}
+  </div>`;
+}
+
+function _renderFeedbackForm(matchId) {
+  if (!matchId) return "";
+  const mid = escapeHtml(String(matchId));
+  const current = _feedbackCache.get(String(matchId));
+  return `
+<div class="stack" style="gap:var(--space-3)" id="feedbackForm-${mid}">
+  <div class="divider-label">Votre évaluation</div>
+  <div class="feedback-bar">
+    ${Object.entries(_FB_LABELS).map(([decision, { label, icon, cls }]) => {
+      const active = current?.decision === decision ? " is-active" : "";
+      return `<button class="feedback-btn feedback-btn--${cls}${active}"
+        data-fb-decision="${decision}">${icon} ${label}</button>`;
+    }).join("")}
+  </div>
+  <div class="star-rating" id="feedbackStars-${mid}">
+    ${[1,2,3,4,5].map((n) => {
+      const active = current?.rating >= n ? " is-active" : "";
+      return `<span class="star-rating__star${active}" data-star="${n}">★</span>`;
+    }).join("")}
+  </div>
+  <textarea id="feedbackComment-${mid}" rows="2"
+    class="input" style="resize:vertical"
+    placeholder="Commentaire optionnel…">${escapeHtml(current?.comment ?? "")}</textarea>
+  <div>
+    <button class="btn btn--primary btn--sm" data-fb-submit="${mid}">Enregistrer</button>
+    <span id="feedbackMsg-${mid}" class="text-xs text-muted" style="margin-left:var(--space-2)"></span>
+  </div>
+</div>`;
+}
+
+async function _submitQuickFeedback(btn) {
+  const matchId  = btn.dataset.match;
+  const decision = btn.dataset.decision;
+  if (!matchId || !decision) return;
+
+  // Optimistic update
+  _feedbackCache.set(matchId, decision);
+  _refreshCardFeedback(matchId, decision);
+
+  try {
+    await safeFetch(`/matches/${matchId}/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    });
+  } catch {
+    // Revert on error
+    _feedbackCache.delete(matchId);
+    _refreshCardFeedback(matchId, null);
+  }
+}
+
+function _refreshCardFeedback(matchId, decision) {
+  const card = document.querySelector(`[data-match-id="${matchId}"]`);
+  if (!card) return;
+  const bar = card.querySelector(".feedback-bar");
+  if (!bar) return;
+  bar.outerHTML = _renderFeedbackBar(matchId, decision);
+}
+
+function _wireFeedbackForm(matchId) {
+  const mid    = String(matchId);
+  const form   = document.getElementById(`feedbackForm-${mid}`);
+  const stars  = document.getElementById(`feedbackStars-${mid}`);
+  const msg    = document.getElementById(`feedbackMsg-${mid}`);
+  if (!form) return;
+
+  let selectedDecision = _feedbackCache.get(mid)?.decision ?? null;
+  let selectedRating   = _feedbackCache.get(mid)?.rating   ?? 0;
+
+  // Decision buttons
+  form.querySelectorAll("[data-fb-decision]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      selectedDecision = btn.dataset.fbDecision;
+      form.querySelectorAll("[data-fb-decision]").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.fbDecision === selectedDecision);
+      });
+    });
+  });
+
+  // Star rating
+  stars?.querySelectorAll(".star-rating__star").forEach((star) => {
+    star.addEventListener("click", () => {
+      selectedRating = Number(star.dataset.star);
+      stars.querySelectorAll(".star-rating__star").forEach((s) => {
+        s.classList.toggle("is-active", Number(s.dataset.star) <= selectedRating);
+      });
+    });
+  });
+
+  // Submit
+  form.querySelector(`[data-fb-submit="${mid}"]`)?.addEventListener("click", async () => {
+    if (!selectedDecision) {
+      if (msg) msg.textContent = "Choisissez une décision.";
+      return;
+    }
+    const comment = document.getElementById(`feedbackComment-${mid}`)?.value.trim() || null;
+    const payload = { decision: selectedDecision, rating: selectedRating || null, comment };
+
+    try {
+      await safeFetch(`/matches/${mid}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      _feedbackCache.set(mid, payload);
+      if (msg) { msg.textContent = "Enregistré ✓"; msg.style.color = "var(--color-success)"; }
+      _refreshCardFeedback(mid, selectedDecision);
+    } catch (err) {
+      if (msg) { msg.textContent = err.message; msg.style.color = "var(--color-error)"; }
+    }
+  });
 }
 
 /**
