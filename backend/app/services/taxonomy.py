@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 _SKILLS: dict[str, list[str]] = {
     # ── INFORMATIQUE & TECH ────────────────────────────────────────────────
     "Python": ["python", "py"],
-    "JavaScript": ["javascript", "js", "ecmascript"],
+    "JavaScript": ["javascript", "js", "ecmascript", "es6", "es6+", "es2015", "vanilla js"],
     "TypeScript": ["typescript", "ts"],
+    "PHP": ["php", "php 7", "php 8", "php7", "php8", "composer", "symfony"],
     "Java": ["java"],
     "C#": ["c#", "csharp", "c sharp", ".net", "dotnet"],
     "C++": ["c++", "cplusplus", "c plus plus"],
-    "PHP": ["php"],
     "Ruby": ["ruby", "ruby on rails", "rails"],
     "Golang": ["golang", "go lang", "go programming"],
     "Rust": ["rust"],
@@ -52,9 +52,10 @@ _SKILLS: dict[str, list[str]] = {
     "Kafka": ["kafka", "apache kafka", "kafka streams", "kafka connect"],
     "RabbitMQ": ["rabbitmq", "rabbit mq", "amqp"],
     "Blockchain": ["solidity", "web3", "web3.js", "web3js", "dapp", "dapps", "smart contract", "smart contracts", "ethereum", "blockchain"],
-    "React": ["react", "react.js", "reactjs", "react js"],
-    "Angular": ["angular", "angularjs"],
-    "Vue.js": ["vue", "vue.js", "vuejs", "vue js"],
+    "HTML/CSS": ["html", "html5", "css", "css3", "sass", "scss", "tailwind", "tailwindcss", "bootstrap", "styled components"],
+    "React": ["react", "react.js", "reactjs", "react js", "redux", "react redux", "react hooks", "jsx", "react native"],
+    "Angular": ["angular", "angularjs", "ngrx", "rxjs", "angular js"],
+    "Vue.js": ["vue", "vue.js", "vuejs", "vue js", "vuex", "pinia", "vue 3", "vue 2"],
     "Node.js": ["node", "nodejs", "node.js", "node js"],
     "Next.js": ["next.js", "nextjs", "next js"],
     "Express.js": ["express.js", "expressjs", "express js", "express"],
@@ -95,6 +96,9 @@ _SKILLS: dict[str, list[str]] = {
     "ServiceNow": ["servicenow", "service now", "snow"],
     "Jira": ["jira", "confluence", "atlassian"],
     "Excel avancé": ["excel", "microsoft excel", "tableur", "vba", "macros excel", "google sheets"],
+    "Tests automatisés": ["jest", "cypress", "playwright", "selenium", "phpunit", "junit", "mocha", "chai",
+                          "supertest", "newman", "vitest", "pytest", "test unitaire", "tests unitaires",
+                          "test integration", "tests integration", "tests e2e", "tdd", "bdd"],
 
     # ── GESTION DE PROJET & MANAGEMENT ────────────────────────────────────
     "Gestion de projet": ["gestion de projet", "project management", "chef de projet", "pilotage de projet", "project manager"],
@@ -114,7 +118,7 @@ _SKILLS: dict[str, list[str]] = {
     "Résolution de problèmes": ["resolution de problemes", "problem solving", "analyse de problemes"],
     "Coaching": ["coaching", "mentoring", "mentorat", "accompagnement"],
     "Formation": ["developpement des competences", "animation de formation", "plan de formation professionnelle", "ingenierie pedagogique"],
-    "Stratégie": ["strategie", "strategic planning", "planification strategique", "vision strategique"],
+    "Stratégie": ["strategic planning", "planification strategique", "vision strategique", "plan strategique"],
     "Gouvernance": ["gouvernance", "governance", "pilotage", "controle interne"],
 
     # ── COMMERCIAL & VENTE ────────────────────────────────────────────────
