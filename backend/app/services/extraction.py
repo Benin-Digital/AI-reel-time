@@ -35,6 +35,12 @@ def clean_text(text: str) -> str:
     # Rejoin words split by a hyphen at line break
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
 
+    # Fix PDF font ligature substitutions that PyMuPDF can't decode
+    # U+25A0 (■) is used as a stand-in for the fi ligature (fiabilité → ■abilité)
+    text = text.replace("\u25a0", "fi")
+    # A "?" between two letters is an unmapped ti-ligature glyph (conception → concep?on)
+    text = re.sub(r"(?<=[a-zA-Z\u00c0-\u024f])\?(?=[a-zA-Z\u00c0-\u024f])", "ti", text)
+
     lines: list[str] = []
     seen: dict[str, int] = {}
     prev = ""
