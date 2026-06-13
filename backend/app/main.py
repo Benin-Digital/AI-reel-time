@@ -494,6 +494,13 @@ def _vector_score(distance: float) -> float:
     return round(similarity * 100, 2)
 
 
+def _require_auth(request: Request) -> User:
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
+
+
 def _require_admin(request: Request) -> User:
     user = getattr(request.state, "user", None)
     if user is None:
@@ -2980,9 +2987,24 @@ def explain_match(match_id: int) -> MatchExplainRead:
         )
 
 
+@app.get("/matches/{match_id}/feedback", response_model=MatchFeedbackRead | None)
+def get_match_feedback(match_id: int, request: Request) -> MatchFeedbackRead | None:
+    _require_auth(request)
+    with SessionLocal() as session:
+        match = session.get(MatchResult, match_id)
+        if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+        feedback = session.scalar(
+            select(MatchFeedback)
+            .where(MatchFeedback.match_id == match_id)
+            .order_by(MatchFeedback.created_at.desc())
+        )
+        return MatchFeedbackRead.model_validate(feedback) if feedback else None
+
+
 @app.post("/matches/{match_id}/feedback", response_model=MatchFeedbackRead)
 def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: Request) -> MatchFeedbackRead:
-    _require_admin(request)
+    _require_auth(request)
 
     rating = payload.rating
     if rating is not None:
