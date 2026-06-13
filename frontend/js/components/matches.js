@@ -101,6 +101,7 @@ function _renderMatchCard(match) {
   const score    = clampScore(match.score);
   const tone     = scoreTone(score);
   const keywords = (match.common_keywords ?? []).filter(Boolean).slice(0, 6);
+  const domain   = match.match_domain ? `<span class="badge badge--primary">${escapeHtml(match.match_domain)}</span>` : "";
 
   return `
 <article class="match-card">
@@ -113,8 +114,10 @@ function _renderMatchCard(match) {
       Match #${escapeHtml(String(match.id))}
       <span class="badge badge--default">CV ${escapeHtml(String(match.cv_id))}</span>
       <span class="badge badge--default">Offre ${escapeHtml(String(match.job_id))}</span>
+      ${domain}
     </div>
     ${renderScoreBar(score)}
+    ${_renderComponentScores(match)}
     <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
   </div>
   <div class="match-card__actions">
@@ -206,11 +209,62 @@ function _renderExplainContent(data) {
         ${list(evidence)}
        </div>`
     : ""}
+  ${_renderComponentScoresDetailed(data)}
   <div style="display:flex;gap:var(--space-2);flex-wrap:wrap">
     <button class="btn btn--ghost btn--sm" data-explain-copy="${escapeHtml(String(data.match_id ?? ""))}">Copier le texte</button>
     <button class="btn btn--ghost btn--sm" data-explain-print="${escapeHtml(String(data.match_id ?? ""))}">Imprimer le rapport</button>
   </div>
 </div>`.trim();
+}
+
+const _SCORE_COMPONENTS = [
+  { key: "score_skills",     label: "Compétences" },
+  { key: "score_semantic",   label: "Sémantique" },
+  { key: "score_experience", label: "Expérience" },
+  { key: "score_education",  label: "Formation" },
+  { key: "score_languages",  label: "Langues" },
+  { key: "score_contract",   label: "Contrat" },
+];
+
+function _renderComponentScores(match) {
+  const available = _SCORE_COMPONENTS.filter((c) => match[c.key] != null);
+  if (!available.length) return "";
+
+  const items = available.map(({ key, label }) => {
+    const pct  = Math.round((match[key] ?? 0) * 100);
+    const tone = scoreTone(pct).key;
+    return `<div class="score-breakdown__item">
+      <span class="score-breakdown__label">${label}</span>
+      <div class="score-breakdown__bar"><div class="score-breakdown__bar-fill score-bar__fill--${tone}" style="width:${pct}%"></div></div>
+      <span class="score-breakdown__value">${pct}%</span>
+    </div>`;
+  }).join("");
+
+  return `<div class="score-breakdown">${items}</div>`;
+}
+
+function _renderComponentScoresDetailed(data) {
+  const available = _SCORE_COMPONENTS.filter((c) => data[c.key] != null);
+  if (!available.length) return "";
+
+  const domain = data.match_domain
+    ? `<span class="badge badge--primary" style="margin-left:var(--space-2)">${escapeHtml(data.match_domain)}</span>`
+    : "";
+
+  const rows = available.map(({ key, label }) => {
+    const pct  = Math.round((data[key] ?? 0) * 100);
+    const tone = scoreTone(pct).key;
+    return `<div class="score-breakdown__item">
+      <span class="score-breakdown__label">${label}</span>
+      <div class="score-breakdown__bar"><div class="score-breakdown__bar-fill score-bar__fill--${tone}" style="width:${pct}%"></div></div>
+      <span class="score-breakdown__value">${pct}%</span>
+    </div>`;
+  }).join("");
+
+  return `<div>
+    <div class="divider-label" style="margin-bottom:var(--space-3)">Détail des scores${domain}</div>
+    <div class="score-breakdown">${rows}</div>
+  </div>`;
 }
 
 /**

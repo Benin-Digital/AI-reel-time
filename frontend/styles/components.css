@@ -342,6 +342,45 @@ select:disabled {
 .score-bar__fill--medium    { background: var(--tone-medium); }
 .score-bar__fill--weak      { background: var(--tone-weak); }
 
+/* ---- COMPONENT SCORE BREAKDOWN ---- */
+.score-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.score-breakdown__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 130px;
+  flex: 1 1 130px;
+}
+.score-breakdown__label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  min-width: 72px;
+  white-space: nowrap;
+}
+.score-breakdown__bar {
+  flex: 1;
+  height: 4px;
+  background: var(--border-subtle);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.score-breakdown__bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--ease-slow);
+}
+.score-breakdown__value {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---- KEYWORD CHIPS ---- */
 .chip-row {
   display: flex;
