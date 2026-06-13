@@ -35,9 +35,17 @@ _SKILLS: dict[str, list[str]] = {
     "Scala": ["scala"],
     "R": ["r stats", "langage r"],
     "SQL": ["sql", "structured query language"],
+    "SQL Server": ["sql server", "ms sql server", "sqlserver", "mssql", "t-sql", "tsql",
+                   "ssis", "ssas", "ssrs",
+                   "sql server integration services", "sql server analysis services",
+                   "sql server reporting services"],
     "PostgreSQL": ["postgresql", "postgres", "psql"],
-    "MySQL": ["mysql"],
+    "MySQL": ["mysql", "maria db", "mariadb"],
     "Oracle DB": ["oracle", "oracle database", "oracle db", "pl/sql"],
+    "Snowflake": ["snowflake"],
+    "QlikSense": ["qliksense", "qlik sense", "qlikview", "qlik view", "qlik"],
+    "Talend": ["talend", "talend etl", "talend open studio"],
+    "Power Query": ["power query", "powerquery", "power query m", "scripts m"],
     "MongoDB": ["mongodb", "mongo"],
     "Redis": ["redis"],
     "Elasticsearch": ["elasticsearch", "opensearch", "elastic"],
@@ -79,7 +87,7 @@ _SKILLS: dict[str, list[str]] = {
     # ── GESTION DE PROJET & MANAGEMENT ────────────────────────────────────
     "Gestion de projet": ["gestion de projet", "project management", "chef de projet", "pilotage de projet", "project manager"],
     "Leadership": ["leadership", "direction d equipe", "team leadership", "encadrement"],
-    "Management d'équipe": ["management", "management d equipe", "team management", "encadrement d equipe", "manager"],
+    "Management d'équipe": ["management d equipe", "team management", "encadrement d equipe", "gestion d equipe", "people management"],
     "Conduite du changement": ["conduite du changement", "change management", "transformation organisationnelle"],
     "PMO": ["pmo", "project management office", "bureau de projet"],
     "Prince2": ["prince2", "prince 2"],
@@ -174,10 +182,10 @@ _SKILLS: dict[str, list[str]] = {
     "ERP Logistique": ["sap mm", "sap sd", "oracle scm", "erp logistique", "sap wm"],
     "Approvisionnement": ["approvisionnement", "achats", "procurement", "purchasing", "acheteur"],
     "Planification logistique": ["planification logistique", "s&op", "sales and operations planning", "mrp"],
-    "Distribution": ["distribution", "reseau de distribution", "livraison", "logistique du dernier km"],
+    "Distribution": ["reseau de distribution", "logistique du dernier km", "livraison last mile"],
     "Lean": ["lean", "lean management", "lean manufacturing", "amelioration continue", "kaizen"],
     "Six Sigma": ["six sigma", "6 sigma", "6sigma", "black belt", "green belt", "dmaic"],
-    "Qualité": ["qualite", "management de la qualite", "iso 9001", "iso", "certification qualite", "smed"],
+    "Qualité": ["management de la qualite", "iso 9001", "certification qualite", "demarche qualite", "smed"],
 
     # ── SANTÉ & MÉDICAL ───────────────────────────────────────────────────
     "Soins infirmiers": ["soins infirmiers", "infirmier", "nursing", "soins aux patients", "ide"],
@@ -197,7 +205,7 @@ _SKILLS: dict[str, list[str]] = {
     "Génie civil": ["genie civil", "civil engineering", "beton arme", "gros oeuvre"],
     "Conduite de travaux": ["conduite de travaux", "chef de chantier", "maitrise d oeuvre", "moe", "conducteur de travaux"],
     "Maîtrise d'ouvrage": ["maitrise d ouvrage", "moa", "maitre d ouvrage", "amoa"],
-    "Électricité bâtiment": ["electricite", "electrotechnique", "courants forts", "courants faibles", "cfao"],
+    "Électricité bâtiment": ["electrotechnique", "courants forts", "courants faibles", "cfao", "electricite batiment"],
     "Plomberie CVC": ["plomberie", "sanitaire", "genie climatique", "cvc", "hvac"],
     "Métré": ["metre", "metreur", "estimatif", "quantitatif", "bordereau"],
     "QSE": ["qse", "hse", "qhse", "securite chantier", "prevention des risques", "document unique"],
@@ -232,7 +240,13 @@ def _fold(text: str) -> str:
 
 @lru_cache(maxsize=1)
 def _build_lookup() -> dict[str, str]:
-    """Return alias → canonical_name mapping (cached)."""
+    """Return alias → canonical_name mapping (cached).
+
+    Only aliases are indexed — canonical names are NOT auto-indexed.
+    This prevents single common words (e.g. "distribution", "qualite")
+    from generating false positives when they happen to match a canonical name.
+    Each skill that should match its own canonical word must include it as an alias.
+    """
     lookup: dict[str, str] = {}
     for canonical, aliases in _SKILLS.items():
         for alias in aliases:
@@ -244,7 +258,6 @@ def _build_lookup() -> dict[str, str]:
                     space_key = key.replace("/", " ")
                     if space_key and space_key not in lookup:
                         lookup[space_key] = canonical
-        lookup[_fold(canonical)] = canonical
     return lookup
 
 
