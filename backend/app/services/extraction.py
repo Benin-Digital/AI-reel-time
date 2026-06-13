@@ -11,9 +11,9 @@ import re
 import unicodedata
 from pathlib import Path
 
+import fitz  # PyMuPDF
 from docx import Document
 from pdf2image import convert_from_path
-from pypdf import PdfReader
 import pytesseract
 
 from ..settings import get_settings
@@ -67,19 +67,19 @@ clean_document_text = clean_text
 
 
 def extract_text_from_pdf(path: Path) -> str:
-    """Extract PDF text via pypdf; fall back to Tesseract OCR if too short."""
-    try:
-        reader = PdfReader(path)
-        parts: list[str] = []
-        for page_num, page in enumerate(reader.pages):
-            try:
-                t = page.extract_text() or ""
-                if t.strip():
-                    parts.append(t)
-            except Exception as exc:
-                logger.warning("PDF page %d extraction failed: %s", page_num, exc)
+    """Extract PDF text via PyMuPDF with layout-aware sorting; OCR fallback for scanned PDFs.
 
-        # FIX: clean AFTER the loop, not inside it (was O(N²))
+    sort=True makes PyMuPDF order text spans by reading position (y then x),
+    which correctly reconstructs multi-column CVs that pypdf/pdfminer mangles.
+    """
+    try:
+        doc = fitz.open(str(path))
+        parts: list[str] = []
+        for page in doc:
+            t = page.get_text("text", sort=True)
+            if t.strip():
+                parts.append(t)
+        doc.close()
         extracted = clean_text("\n".join(parts))
 
         if len(extracted.strip()) >= settings.ocr_min_text_length:
