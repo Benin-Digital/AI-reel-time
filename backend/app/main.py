@@ -36,6 +36,7 @@ from .models import (
     MatchFeedback,
     User,
     AnalysisSession,
+    LearnedWeights,
 )
 from .schemas import (
     EventCreate,
@@ -68,6 +69,8 @@ from .schemas import (
     FeedbackComponentScores,
     FeedbackDomainRow,
     FeedbackWeightHint,
+    LearnedWeightsRead,
+    WeightComputeResult,
     SearchRequest,
     SearchHit,
     AuthLoginRequest,
@@ -96,7 +99,8 @@ from .services import (
 )
 from .services.scoring import analyze_match
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
-from .services.matcher import match_cv_to_job
+from .services.matcher import match_cv_to_job, set_learned_weights, get_active_weights
+from .services.weight_learner import compute_learned_weights
 from .services.explain import build_match_explanation
 from dataclasses import asdict
 from .security import enforce_security, validate_security_settings
@@ -1343,6 +1347,7 @@ async def lifespan(app: FastAPI):
     init_db()
     with SessionLocal() as session:
         ensure_bootstrap_user(session)
+        _load_active_weights(session)
     app.state.started_at = time()
     watched_folders = [Path(settings.watch_cv_dir), Path(settings.watch_job_dir)]
     watcher = LocalFolderWatcher(folders=watched_folders, callback=_on_watch_event)
@@ -3151,6 +3156,102 @@ def get_feedback_stats(request: Request) -> FeedbackStatsRead:
             weight_hints=weight_hints,
         )
 
+
+def _load_active_weights(session) -> None:
+    row = session.scalar(
+        select(LearnedWeights)
+        .where(LearnedWeights.is_active == True)  # noqa: E712
+        .order_by(LearnedWeights.created_at.desc())
+    )
+    if row:
+        set_learned_weights({
+            "semantic":   row.w_semantic,
+            "skills":     row.w_skills,
+            "experience": row.w_experience,
+            "education":  row.w_education,
+            "languages":  row.w_languages,
+            "contract":   row.w_contract,
+        })
+
+
+@app.get("/feedback/learned-weights", response_model=LearnedWeightsRead | None)
+def get_learned_weights(request: Request) -> LearnedWeightsRead | None:
+    _require_auth(request)
+    with SessionLocal() as session:
+        row = session.scalar(
+            select(LearnedWeights)
+            .where(LearnedWeights.is_active == True)  # noqa: E712
+            .order_by(LearnedWeights.created_at.desc())
+        )
+        return LearnedWeightsRead.model_validate(row) if row else None
+
+
+@app.post("/feedback/compute-weights", response_model=WeightComputeResult)
+def compute_weights(request: Request) -> WeightComputeResult:
+    _require_admin(request)
+    with SessionLocal() as session:
+        try:
+            result = compute_learned_weights(session)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+    current = get_active_weights() or {
+        "semantic": 0.40, "skills": 0.30, "experience": 0.12,
+        "education": 0.08, "languages": 0.05, "contract": 0.05,
+    }
+    return WeightComputeResult(
+        weights={k: round(v, 4) for k, v in result.items()
+                 if k not in ("sample_count", "accuracy")},
+        sample_count=result["sample_count"],
+        accuracy=result["accuracy"],
+        current_weights={k: round(v, 4) for k, v in current.items()},
+    )
+
+
+@app.post("/feedback/apply-weights", response_model=LearnedWeightsRead)
+def apply_weights(request: Request) -> LearnedWeightsRead:
+    _require_admin(request)
+    user = _require_admin(request)
+    with SessionLocal() as session:
+        try:
+            result = compute_learned_weights(session)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+        # Deactivate previous
+        session.execute(
+            select(LearnedWeights).where(LearnedWeights.is_active == True)  # noqa: E712
+        )
+        for old in session.scalars(
+            select(LearnedWeights).where(LearnedWeights.is_active == True)  # noqa: E712
+        ):
+            old.is_active = False
+
+        row = LearnedWeights(
+            w_semantic=result["semantic"],
+            w_skills=result["skills"],
+            w_experience=result["experience"],
+            w_education=result["education"],
+            w_languages=result["languages"],
+            w_contract=result["contract"],
+            sample_count=result["sample_count"],
+            accuracy=result["accuracy"],
+            is_active=True,
+            created_by=user.id,
+        )
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+
+        set_learned_weights({
+            "semantic":   row.w_semantic,
+            "skills":     row.w_skills,
+            "experience": row.w_experience,
+            "education":  row.w_education,
+            "languages":  row.w_languages,
+            "contract":   row.w_contract,
+        })
+        return LearnedWeightsRead.model_validate(row)
 
 
 @app.post("/search", response_model=list[SearchHit])

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, func
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -332,4 +332,27 @@ class JobEmbedding(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+class LearnedWeights(Base):
+    __tablename__ = "learned_weights"
+    __table_args__ = (
+        Index("ix_learned_weights_is_active", "is_active"),
+        Index("ix_learned_weights_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    w_semantic: Mapped[float] = mapped_column(Float)
+    w_skills: Mapped[float] = mapped_column(Float)
+    w_experience: Mapped[float] = mapped_column(Float)
+    w_education: Mapped[float] = mapped_column(Float)
+    w_languages: Mapped[float] = mapped_column(Float)
+    w_contract: Mapped[float] = mapped_column(Float)
+    sample_count: Mapped[int] = mapped_column(Integer)
+    accuracy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
     )

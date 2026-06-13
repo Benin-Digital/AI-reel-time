@@ -5,6 +5,12 @@ import { clampScore, scoreTone } from "../utils/format.js";
 export function initFeedbackStats() {
   $("#refreshFeedbackStats")?.addEventListener("click", _load);
   window.addEventListener("load-feedback-stats", _load);
+
+  // Weight learning actions (delegated — buttons rendered dynamically)
+  document.addEventListener("click", async (e) => {
+    if (e.target.closest("#btnComputeWeights"))  _computeWeights();
+    if (e.target.closest("#btnApplyWeights"))    _applyWeights();
+  });
 }
 
 async function _load() {
@@ -16,8 +22,11 @@ async function _load() {
     <div class="skeleton skeleton--card" style="margin-top:var(--space-4)"></div>`;
 
   try {
-    const data = await safeFetch("/feedback/stats");
-    container.innerHTML = _render(data);
+    const [data, activeWeights] = await Promise.all([
+      safeFetch("/feedback/stats"),
+      safeFetch("/feedback/learned-weights").catch(() => null),
+    ]);
+    container.innerHTML = _render(data, activeWeights);
   } catch (err) {
     if (err.name !== "AuthError") {
       container.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${escapeHtml(err.message)}</div></div>`;
@@ -25,7 +34,7 @@ async function _load() {
   }
 }
 
-function _render(data) {
+function _render(data, activeWeights) {
   if (data.total === 0) {
     return `<div class="empty-state">
       <div class="empty-state__icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="1.5"/><path d="M16 10v6M16 20v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
@@ -41,6 +50,7 @@ function _render(data) {
       ${_renderDecisionScores(data)}
     </div>
     ${data.by_domain.length ? `<div style="margin-top:var(--space-4)">${_renderDomainTable(data.by_domain)}</div>` : ""}
+    <div style="margin-top:var(--space-4)">${_renderWeightLearning(activeWeights)}</div>
   `.trim();
 }
 
@@ -221,4 +231,123 @@ function _renderDomainTable(domains) {
       </table>
     </div>
   </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Weight learning widget
+// ---------------------------------------------------------------------------
+
+const _W_LABELS = {
+  w_skills: "Compétences", w_semantic: "Sémantique",
+  w_experience: "Expérience", w_education: "Formation",
+  w_languages: "Langues", w_contract: "Contrat",
+};
+
+function _renderWeightLearning(active) {
+  const activeSection = active ? `
+    <div class="banner banner--success" style="margin-bottom:var(--space-3)">
+      Poids actifs depuis le ${new Date(active.created_at).toLocaleDateString("fr-FR")}
+      — ${active.sample_count} feedbacks — précision ${Math.round(active.accuracy * 100)}%
+    </div>
+    <div class="score-breakdown" style="flex-direction:column;gap:var(--space-1);margin-bottom:var(--space-3)">
+      ${Object.entries(_W_LABELS).map(([k, label]) => {
+        const pct = Math.round((active[k] ?? 0) * 100);
+        const tone = scoreTone(pct).key;
+        return `<div class="score-breakdown__item">
+          <span class="score-breakdown__label">${label}</span>
+          <div class="score-breakdown__bar"><div class="score-breakdown__bar-fill score-bar__fill--${tone}" style="width:${pct}%"></div></div>
+          <span class="score-breakdown__value">${pct}%</span>
+        </div>`;
+      }).join("")}
+    </div>` : `<p class="text-sm text-muted" style="margin-bottom:var(--space-3)">Aucun poids appris actif — le moteur utilise les poids par défaut.</p>`;
+
+  return `<div class="card">
+    <div class="card__header">
+      <div class="card__title">Ajustement automatique des poids</div>
+    </div>
+    <div style="padding:var(--space-4)">
+      ${activeSection}
+      <div id="weightComputeResult" style="margin-bottom:var(--space-3)"></div>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center">
+        <button class="btn btn--primary btn--sm" id="btnComputeWeights">Calculer les poids suggérés</button>
+        <button class="btn btn--ghost btn--sm" id="btnApplyWeights" disabled>Appliquer ces poids</button>
+        <span id="weightMsg" class="text-xs text-muted"></span>
+      </div>
+      <p class="text-xs text-muted" style="margin-top:var(--space-2)">
+        Calcule les poids optimaux par régression logistique sur vos évaluations.
+        Cliquez "Calculer" pour prévisualiser, puis "Appliquer" pour activer.
+      </p>
+    </div>
+  </div>`;
+}
+
+async function _computeWeights() {
+  const btn  = $("#btnComputeWeights");
+  const applyBtn = $("#btnApplyWeights");
+  const result = $("#weightComputeResult");
+  const msg  = $("#weightMsg");
+  if (!btn) return;
+
+  btn.disabled = true;
+  btn.textContent = "Calcul en cours…";
+  if (msg) msg.textContent = "";
+  if (result) result.innerHTML = "";
+
+  try {
+    const data = await safeFetch("/feedback/compute-weights", { method: "POST" });
+    if (result) result.innerHTML = _renderWeightComparison(data);
+    if (applyBtn) applyBtn.disabled = false;
+    if (msg) { msg.textContent = `Calculé sur ${data.sample_count} feedbacks — précision ${Math.round(data.accuracy * 100)}%`; }
+  } catch (err) {
+    if (msg) { msg.textContent = err.message; msg.style.color = "var(--color-error)"; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Calculer les poids suggérés"; }
+  }
+}
+
+async function _applyWeights() {
+  const applyBtn = $("#btnApplyWeights");
+  const msg = $("#weightMsg");
+  if (!applyBtn) return;
+
+  applyBtn.disabled = true;
+  applyBtn.textContent = "Application…";
+
+  try {
+    await safeFetch("/feedback/apply-weights", { method: "POST" });
+    if (msg) { msg.textContent = "✓ Poids appliqués — le moteur les utilise maintenant."; msg.style.color = "var(--color-success)"; }
+    // Reload the whole panel to show updated active weights
+    setTimeout(() => window.dispatchEvent(new CustomEvent("load-feedback-stats")), 800);
+  } catch (err) {
+    if (msg) { msg.textContent = err.message; msg.style.color = "var(--color-error)"; }
+    if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = "Appliquer ces poids"; }
+  }
+}
+
+function _renderWeightComparison(data) {
+  const comps = Object.entries(_W_LABELS);
+  const rows = comps.map(([wk, label]) => {
+    const key      = wk.replace("w_", "");
+    const current  = Math.round((data.current_weights[key]  ?? 0) * 100);
+    const suggested = Math.round((data.weights[key]         ?? 0) * 100);
+    const delta     = suggested - current;
+    const arrow     = delta > 0 ? "↑" : delta < 0 ? "↓" : "=";
+    const color     = delta > 0 ? "var(--color-success)" : delta < 0 ? "var(--color-error)" : "var(--text-muted)";
+    return `<tr>
+      <td class="text-sm text-secondary" style="padding:2px 8px">${label}</td>
+      <td class="text-sm text-muted"    style="padding:2px 8px">${current}%</td>
+      <td class="text-sm font-semibold" style="padding:2px 8px;color:var(--color-primary)">${suggested}%</td>
+      <td class="text-sm"               style="padding:2px 8px;color:${color}">${arrow} ${delta > 0 ? "+" : ""}${delta}%</td>
+    </tr>`;
+  }).join("");
+
+  return `<table style="width:100%;border-collapse:collapse;margin-bottom:var(--space-2)">
+    <thead><tr style="border-bottom:1px solid var(--border-subtle)">
+      <th class="text-xs text-muted" style="text-align:left;padding:2px 8px">Composante</th>
+      <th class="text-xs text-muted" style="padding:2px 8px">Actuel</th>
+      <th class="text-xs" style="color:var(--color-primary);padding:2px 8px">Suggéré</th>
+      <th class="text-xs text-muted" style="padding:2px 8px">Delta</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }

@@ -436,3 +436,26 @@ class FeedbackStatsRead(BaseModel):
     avg_scores_by_decision: dict[str, FeedbackComponentScores]
     by_domain: list[FeedbackDomainRow]
     weight_hints: list[FeedbackWeightHint]
+
+
+class LearnedWeightsRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    w_semantic: float
+    w_skills: float
+    w_experience: float
+    w_education: float
+    w_languages: float
+    w_contract: float
+    sample_count: int
+    accuracy: float | None = None
+    is_active: bool
+    created_at: datetime
+
+
+class WeightComputeResult(BaseModel):
+    weights: dict[str, float]
+    sample_count: int
+    accuracy: float
+    current_weights: dict[str, float]

@@ -149,7 +149,26 @@ _DOMAIN_W: dict[str, dict[str, float]] = {
 }
 
 
+# Learned weights set by the API after loading from DB
+_learned_weights: dict[str, float] | None = None
+_learned_weights_lock = threading.Lock()
+
+
+def set_learned_weights(weights: dict[str, float] | None) -> None:
+    global _learned_weights
+    with _learned_weights_lock:
+        _learned_weights = weights
+
+
+def get_active_weights() -> dict[str, float] | None:
+    with _learned_weights_lock:
+        return _learned_weights.copy() if _learned_weights else None
+
+
 def _weights(domain: str) -> dict[str, float]:
+    with _learned_weights_lock:
+        if _learned_weights is not None:
+            return _learned_weights.copy()
     raw = _DOMAIN_W.get(domain, _DEFAULT_W).copy()
     total = sum(raw.values())
     return {k: v / total for k, v in raw.items()} if total else raw
