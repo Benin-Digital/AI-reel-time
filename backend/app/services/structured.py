@@ -593,6 +593,25 @@ def _load_ner_model_for(model_name: str):
         return None
 
 
+def _is_valid_ner_entity(value: str) -> bool:
+    """Filter NER org/location false positives.
+
+    spaCy fr_core_news_sm often tags tech tools (Django, Express.js) and generic
+    words (Freelance, Remote) as ORG or LOC entities. We reject:
+    - values with no capital letter (not a proper noun)
+    - values that are known skills in the taxonomy
+    """
+    if not value or not any(c.isupper() for c in value):
+        return False
+    try:
+        from .taxonomy import find_skills as _tx
+        if _tx(value):
+            return False
+    except Exception:
+        pass
+    return True
+
+
 def _extract_ner_entities(text: str) -> dict[str, object]:
     if not text:
         return {
@@ -659,8 +678,8 @@ def _extract_ner_entities(text: str) -> dict[str, object]:
             dates.append(value)
 
     persons = _unique_preserve_order(persons)
-    orgs = _unique_preserve_order(orgs)
-    locs = _unique_preserve_order(locs)
+    orgs = [v for v in _unique_preserve_order(orgs) if _is_valid_ner_entity(v)]
+    locs = [v for v in _unique_preserve_order(locs) if _is_valid_ner_entity(v)]
     dates = _unique_preserve_order(dates)
 
     return {
