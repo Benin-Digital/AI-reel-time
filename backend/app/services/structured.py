@@ -783,12 +783,25 @@ _NAME_STOP_WORDS = frozenset([
     "technicien", "technicienne", "responsable", "analyste", "architecte",
     "assistant", "assistante", "coordinateur", "coordinatrice", "gestionnaire",
     "senior", "junior", "lead", "stagiaire", "superviseur", "superviseure",
+    "charge", "chargee", "president", "vice",
     # Work context
     "direction", "transition", "gouvernance", "pilotage", "gestion", "management",
     "programme", "projet", "projets", "service", "services", "objectif",
+    "activite", "activites", "operations", "organisation",
     # Language levels
     "natif", "native", "courant", "bilingue", "intermediaire", "avance",
     "avancee", "elementaire", "notions", "professionnel", "professionnelle",
+    # English technical/domain words — appear capitalised in CVs but never in names
+    "data", "business", "intelligence", "cloud", "computing", "analytics",
+    "warehousing", "warehouse", "reporting", "solutions", "systems",
+    "architecture", "infrastructure", "development", "integration", "implementation",
+    "deployment", "information", "enterprise", "global", "group", "international",
+    "technical", "digital", "technology", "technologies", "platform", "network",
+    "security", "software", "hardware", "application", "applications",
+    "conception", "modelisation", "certifie", "certified",
+    # Common product / company names that appear capitalised
+    "microsoft", "oracle", "azure", "google", "amazon", "office", "power",
+    "sharepoint", "teams", "excel", "windows", "linux", "gitlab", "github",
 ])
 
 
