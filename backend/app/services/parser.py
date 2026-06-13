@@ -227,13 +227,43 @@ def _is_heading(line: str, next_line: str | None) -> bool:
 
 # ── Field extractors ──────────────────────────────────────────────────────────
 
-_YEAR_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)", re.IGNORECASE)
+_YEAR_CTX_RE = re.compile(
+    r"(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)\s+d[e']\s*(?:exp[eé]rience|exp\b)"
+    r"|(?:exp[eé]rience|exp)\s+(?:de\s+)?(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)"
+    r"|depuis\s+(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)"
+    r"|\+\s*(\d{1,2})\s*(?:years?|ans?|ann[eé]e?s?)",
+    re.IGNORECASE,
+)
+_YEAR_PLAIN_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)", re.IGNORECASE)
+_AGE_CTX_RE = re.compile(r"\bne\b.{0,20}\d{4}|\bnaissance\b|\bage\s*[:\-]?\s*\d{1,2}\b", re.IGNORECASE)
+_EXP_CTX_RE = re.compile(r"exp[eé]rience|exp\b|pratique", re.IGNORECASE)
 
 
 def _extract_years(text: str) -> int:
     if not text:
         return 0
-    values = [int(m) for m in _YEAR_RE.findall(_fold(text)) if m.isdigit()]
+    folded = _fold(text)
+
+    # Priority: explicit experience context patterns
+    for m in _YEAR_CTX_RE.finditer(folded):
+        groups = [g for g in m.groups() if g and g.isdigit()]
+        if groups:
+            v = int(groups[0])
+            if 1 <= v <= 40:
+                return v
+
+    # Fallback: skip standalone age lines and age-context lines without experience
+    safe_lines = []
+    for line in folded.split("\n"):
+        if re.fullmatch(r"\d{1,2}\s+ans?\.?", line.strip()):
+            continue
+        if _AGE_CTX_RE.search(line) and not _EXP_CTX_RE.search(line):
+            continue
+        safe_lines.append(line)
+    values = [
+        int(m) for m in _YEAR_PLAIN_RE.findall("\n".join(safe_lines))
+        if m.isdigit() and 1 <= int(m) <= 40
+    ]
     return max(values) if values else 0
 
 

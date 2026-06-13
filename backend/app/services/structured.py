@@ -6,8 +6,6 @@ from functools import lru_cache
 import logging
 import re
 import unicodedata
-import difflib
-
 from ..settings import get_settings
 
 settings = get_settings()
@@ -478,83 +476,25 @@ def canonical_token_set(text: str) -> set[str]:
 def _extract_skill_terms(text: str) -> list[str]:
     if not text:
         return []
-    # Build a whitelist of known skills from settings to reduce noise and enable fuzzy matching
+    from .taxonomy import find_skills as _taxonomy_find
+
     def _skill_whitelist() -> list[str]:
         raw = (settings.scoring_skill_keywords or "")
         parts = [p.strip() for p in re.split(r"[,;]+", raw) if p.strip()]
         return [_apply_synonyms(p) for p in parts]
 
-    whitelist = _skill_whitelist()
+    # Primary: taxonomy — only known canonical skills, no false positives
+    found = _taxonomy_find(text)
+    found_set = set(found)
 
-    # split into candidate chunks
-    chunks = re.split(r"[\n,;/|•]+|\band\b|\bet\b|\bou\b", text, flags=re.IGNORECASE)
-    candidates: set[str] = set()
-    for chunk in chunks:
-        normalized = _apply_synonyms(chunk)
-        normalized = re.sub(r"[^a-z0-9+.# ]+", " ", normalized)
-        normalized = re.sub(r"\s+", " ", normalized).strip()
-        if "@" in normalized or "http" in normalized or "www" in normalized:
-            continue
-        if not normalized or len(normalized) < 2:
-            continue
+    # Secondary: settings whitelist exact match
+    for skill in _skill_whitelist():
+        if skill and skill not in found_set:
+            if re.search(rf"\b{re.escape(skill)}\b", _apply_synonyms(text)):
+                found.append(skill)
+                found_set.add(skill)
 
-        tokens = re.findall(r"[a-z0-9]+", normalized)
-        if not tokens:
-            continue
-        # skip pure-noise chunks
-        if set(tokens).issubset(_NOISE_TERMS):
-            continue
-        # generate n-grams up to trigrams to capture multi-word skills
-        for n in range(1, min(4, len(tokens) + 1)):
-            for i in range(0, len(tokens) - n + 1):
-                gram = " ".join(tokens[i : i + n])
-                if len(gram) >= 2 and not any(tok.isdigit() for tok in gram.split()):
-                    candidates.add(gram)
-
-    # match candidates to whitelist via exact or fuzzy match
-    matched: list[str] = []
-    seen: set[str] = set()
-    whitelist_set = set(whitelist)
-    for cand in sorted(candidates, key=lambda s: (-len(s), s)):
-        if cand in seen:
-            continue
-        # exact whitelist match
-        if cand in whitelist_set:
-            seen.add(cand)
-            matched.append(cand)
-            continue
-
-        # token intersection heuristic: if any token in cand matches whitelist tokens, accept
-        cand_tokens = set(re.findall(r"[a-z0-9]+", cand))
-        intersect = False
-        for w in whitelist:
-            w_tokens = set(re.findall(r"[a-z0-9]+", w))
-            if cand_tokens & w_tokens:
-                # prefer canonical whitelist term
-                if w not in seen:
-                    seen.add(w)
-                    matched.append(w)
-                intersect = True
-                break
-        if intersect:
-            continue
-
-        # fuzzy match against whitelist
-        if whitelist:
-            close = difflib.get_close_matches(cand, whitelist, n=1, cutoff=0.78)
-            if close:
-                w = close[0]
-                if w not in seen:
-                    seen.add(w)
-                    matched.append(w)
-                continue
-
-        # fallback: include candidate if reasonably long and not noise
-        if len(cand) >= 3 and not cand.isdigit():
-            seen.add(cand)
-            matched.append(cand)
-
-    return matched
+    return found
 
 
 def _detect_contract_type(text: str) -> str | None:
@@ -580,8 +520,34 @@ def _extract_years(text: str) -> int:
     if not text:
         return 0
     folded = fold_text(text)
-    matches = re.findall(r"(\d{1,2})\s*(?:\+|\-|plus)?\s*(?:years|year|ans|annees?|ann[eé]e?s?)", folded)
-    values = [int(value) for value in matches if value.isdigit()]
+
+    # Priority: patterns with explicit experience context
+    _exp_ctx = [
+        r"(\d{1,2})\s*\+?\s*(?:years?|ans?|annees?|ann[eé]e?s?)\s+d[e']\s*(?:experience|exp\b)",
+        r"(?:experience|exp)\s+(?:de\s+)?(\d{1,2})\s*\+?\s*(?:years?|ans?|annees?)",
+        r"depuis\s+(\d{1,2})\s*\+?\s*(?:years?|ans?|annees?)",
+        r"\+\s*(\d{1,2})\s*(?:years?|ans?|annees?)",
+    ]
+    for pattern in _exp_ctx:
+        hits = re.findall(pattern, folded)
+        values = [int(v) for v in hits if v.isdigit() and 1 <= int(v) <= 40]
+        if values:
+            return max(values)
+
+    # Fallback: plain "X ans/years" — skip age-context lines and standalone age lines
+    safe: list[str] = []
+    for line in folded.split("\n"):
+        stripped = line.strip()
+        # "29 ans" alone on a line → age, not experience
+        if re.fullmatch(r"\d{1,2}\s+ans?\.?", stripped):
+            continue
+        if re.search(r"\bne\b.{0,20}\d{4}|\bnaissance\b|\bage\s*[:\-]?\s*\d{1,2}\b", line):
+            if not re.search(r"experience|exp\b|pratique", line):
+                continue
+        safe.append(line)
+
+    hits = re.findall(r"(\d{1,2})\s*\+?\s*(?:years?|ans?|annees?|ann[eé]e?s?)", "\n".join(safe))
+    values = [int(v) for v in hits if v.isdigit() and 1 <= int(v) <= 40]
     return max(values) if values else 0
 
 
@@ -793,6 +759,40 @@ def _first_lines(lines: list[str], limit: int = 3) -> str:
     return "\n".join(lines[:limit]).strip()
 
 
+_NAME_CONTACT_RE = re.compile(
+    r"@|https?://|www\.|linkedin|github|\+?\d[\d\s.\-()]{7,}",
+    re.IGNORECASE,
+)
+_NAME_SECTION_RE = re.compile(
+    r"compétence|competence|expérience|experience|formation|education|"
+    r"skills|profil|summary|contact|certif|langue|language|loisir|hobby|"
+    r"réf|ref\b|version\b|doc-",
+    re.IGNORECASE,
+)
+_NAME_YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
+
+
+def _extract_name_rule_based(lines: list[str]) -> str | None:
+    """Extract person name from first lines of a CV using heuristics only."""
+    for line in lines[:12]:
+        line = line.strip()
+        if not line or len(line) < 3 or len(line) > 60:
+            continue
+        if _NAME_CONTACT_RE.search(line):
+            continue
+        if _NAME_SECTION_RE.search(line):
+            continue
+        if _NAME_YEAR_RE.search(line):
+            continue
+        if re.search(r"\d{3,}", line):
+            continue
+        words = [w for w in line.split() if re.match(r"^[A-Za-zÀ-ÿ'\-]+$", w)]
+        if 2 <= len(words) <= 4:
+            if all(w[0].isupper() for w in words if len(w) > 1):
+                return " ".join(words)
+    return None
+
+
 def build_document_profile(text: str, kind: str | None = None, enable_ner: bool | None = None) -> StructuredDocument:
     cleaned_text = clean_document_text(text)
     lines = _line_chunks(cleaned_text)
@@ -859,7 +859,12 @@ def build_document_profile(text: str, kind: str | None = None, enable_ner: bool 
     required_skill_terms = _extract_skill_terms(job_required_text)
     nice_skill_terms = _extract_skill_terms(job_nice_text)
     language_terms = _detect_languages("\n".join(part for part in (languages_text, cleaned_text) if part))
-    contract_type = _detect_contract_type("\n".join(part for part in (contract_text, cleaned_text) if part))
+    if contract_text:
+        contract_type = _detect_contract_type(contract_text)
+    else:
+        contract_type = _detect_contract_type(
+            "\n".join(p for p in [job_required_text, cleaned_text[:600]] if p)
+        )
     experience_years = _extract_years("\n".join(part for part in (experience_text, cleaned_text) if part))
 
     # decide whether to run NER: default to settings.ner_enabled when enable_ner is None
@@ -875,6 +880,12 @@ def build_document_profile(text: str, kind: str | None = None, enable_ner: bool 
         organization_terms = []
         location_terms = []
         date_terms = []
+
+    # For CVs: rule-based name extraction overrides NER (spaCy confuses orgs/titles with persons)
+    if kind == "cv":
+        rule_name = _extract_name_rule_based(lines)
+        if rule_name:
+            person_name = rule_name
 
     if kind == "cv" and not skill_terms:
         fallback_sources = [skills_text, experience_text, education_text, certifications_text, summary_text]
