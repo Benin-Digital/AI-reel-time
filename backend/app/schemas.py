@@ -225,6 +225,13 @@ class MatchRead(BaseModel):
     job_id: int
     score: float
     common_keywords: list[str]
+    score_semantic: float | None = None
+    score_skills: float | None = None
+    score_experience: float | None = None
+    score_education: float | None = None
+    score_languages: float | None = None
+    score_contract: float | None = None
+    match_domain: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -360,6 +367,13 @@ class MatchExplainRead(BaseModel):
     vigilance: list[str]
     evidence: list[str]
     keyword_hits: list[str]
+    score_semantic: float | None = None
+    score_skills: float | None = None
+    score_experience: float | None = None
+    score_education: float | None = None
+    score_languages: float | None = None
+    score_contract: float | None = None
+    match_domain: str | None = None
 
 
 class AnalyzeRequest(BaseModel):

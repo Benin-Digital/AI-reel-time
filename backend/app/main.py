@@ -2970,6 +2970,13 @@ def explain_match(match_id: int) -> MatchExplainRead:
             vigilance=list(details["vigilance"]),
             evidence=list(details["evidence"]),
             keyword_hits=list(details["keyword_hits"]),
+            score_semantic=match.score_semantic,
+            score_skills=match.score_skills,
+            score_experience=match.score_experience,
+            score_education=match.score_education,
+            score_languages=match.score_languages,
+            score_contract=match.score_contract,
+            match_domain=match.match_domain,
         )
 
 
