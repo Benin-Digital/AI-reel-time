@@ -523,6 +523,11 @@ def _detect_languages(text: str) -> list[str]:
 def _extract_years(text: str) -> int:
     if not text:
         return 0
+    # Strip contact info: email "user96@mail.com", phone "+33 6 ...", URLs
+    # to prevent their embedded numbers from matching the "X ans" pattern.
+    text = re.sub(r'\S+@\S+', '', text)
+    text = re.sub(r'https?://\S+|www\.\S+', '', text)
+    text = re.sub(r'\+?\d[\d\s.\-()]{7,}\d', '', text)
     folded = fold_text(text)
 
     # Priority: patterns with explicit experience context
@@ -821,6 +826,12 @@ _NAME_STOP_WORDS = frozenset([
     # Common product / company names that appear capitalised
     "microsoft", "oracle", "azure", "google", "amazon", "office", "power",
     "sharepoint", "teams", "excel", "windows", "linux", "gitlab", "github",
+    # Collaboration / DevOps tools often read before the name in multi-column CVs
+    "jira", "confluence", "bitbucket", "bitbuckets", "trello", "notion",
+    "snowflake", "tableau", "qlik", "qliksense", "qlikview",
+    "servicenow", "sonarqube", "datadog", "sentry", "grafana", "prometheus",
+    "docker", "kubernetes", "terraform", "ansible", "jenkins",
+    "mongodb", "redis", "kafka", "rabbitmq", "elasticsearch",
 ])
 
 
@@ -829,6 +840,12 @@ def _extract_name_rule_based(lines: list[str]) -> str | None:
 
     Handles: typographic apostrophes, all-caps names, multi-column PDF merges.
     """
+    # Lazy import: any word that resolves to a known skill is not part of a person name.
+    # normalize_skill uses an lru_cache so repeated calls are just a dict lookup.
+    try:
+        from .taxonomy import normalize_skill as _is_known_skill
+    except Exception:
+        _is_known_skill = None
 
     def _fold_ascii(w: str) -> str:
         return unicodedata.normalize("NFKD", w.lower()).encode("ascii", "ignore").decode("ascii")
@@ -858,6 +875,8 @@ def _extract_name_rule_based(lines: list[str]) -> str | None:
                     break
                 continue
             if _fold_ascii(clean) in _NAME_STOP_WORDS:
+                break
+            if _is_known_skill and _is_known_skill(clean):
                 break
             collected.append(clean)
             if len(collected) == 4:
