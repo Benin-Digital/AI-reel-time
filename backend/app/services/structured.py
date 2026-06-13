@@ -775,26 +775,107 @@ _NAME_SECTION_RE = re.compile(
 )
 _NAME_YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
 
+# Words that start with uppercase but are NOT part of a person name
+_NAME_STOP_WORDS = frozenset([
+    # Job titles
+    "developpeur", "developer", "manager", "directeur", "directrice", "chef",
+    "consultant", "consultante", "expert", "experte", "ingenieur", "ingenieure",
+    "technicien", "technicienne", "responsable", "analyste", "architecte",
+    "assistant", "assistante", "coordinateur", "coordinatrice", "gestionnaire",
+    "senior", "junior", "lead", "stagiaire", "superviseur", "superviseure",
+    # Work context
+    "direction", "transition", "gouvernance", "pilotage", "gestion", "management",
+    "programme", "projet", "projets", "service", "services", "objectif",
+    # Language levels
+    "natif", "native", "courant", "bilingue", "intermediaire", "avance",
+    "avancee", "elementaire", "notions", "professionnel", "professionnelle",
+])
+
 
 def _extract_name_rule_based(lines: list[str]) -> str | None:
-    """Extract person name from first lines of a CV using heuristics only."""
-    for line in lines[:12]:
-        # Normalize typographic apostrophes (U+2019 ' and U+2018 ') to standard apostrophe
+    """Extract person name from first lines of a CV using heuristics only.
+
+    Handles: typographic apostrophes, all-caps names, multi-column PDF merges.
+    """
+
+    def _fold_ascii(w: str) -> str:
+        return unicodedata.normalize("NFKD", w.lower()).encode("ascii", "ignore").decode("ascii")
+
+    def _is_name_word(w: str) -> bool:
+        """True if w looks like a proper name word, not a mixed-case abbreviation."""
+        if not w or not w[0].isupper():
+            return False
+        # All uppercase (CHILAVERT, N'DAH): valid name words
+        if all(c.isupper() or not c.isalpha() for c in w):
+            return True
+        # Initial uppercase + rest all lowercase (Thierry, Reynès, N'dah)
+        rest = w[1:].replace("'", "").replace("-", "")
+        return bool(rest) and rest == rest.lower()
+
+    def _collect_name_words(text: str) -> list[str]:
+        """Collect leading proper-name words (max 4), excluding stop words and abbreviations."""
+        collected: list[str] = []
+        for token in text.split():
+            clean = re.sub(r"[^A-Za-zÀ-ÿ'\-]", "", token)
+            if not clean or len(clean) < 2:
+                if collected:
+                    break
+                continue
+            if not _is_name_word(clean):
+                if collected:
+                    break
+                continue
+            if _fold_ascii(clean) in _NAME_STOP_WORDS:
+                break
+            collected.append(clean)
+            if len(collected) == 4:
+                break
+        return collected
+
+    def _try_segment(segment: str) -> str | None:
+        segment = segment.replace('\u2019', "'").replace('\u2018', "'").strip()
+        if not segment or len(segment) < 3:
+            return None
+        if _NAME_SECTION_RE.search(segment) or _NAME_YEAR_RE.search(segment):
+            return None
+        words = _collect_name_words(segment)
+        if len(words) >= 2:
+            return " ".join(words)
+        return None
+
+    # Pass 1: short clean lines (most CVs)
+    for line in lines[:40]:
         line = line.replace('\u2019', "'").replace('\u2018', "'").strip()
         if not line or len(line) < 3 or len(line) > 60:
             continue
-        if _NAME_CONTACT_RE.search(line):
-            continue
-        if _NAME_SECTION_RE.search(line):
-            continue
-        if _NAME_YEAR_RE.search(line):
+        if _NAME_CONTACT_RE.search(line) or _NAME_SECTION_RE.search(line) or _NAME_YEAR_RE.search(line):
             continue
         if re.search(r"\d{3,}", line):
             continue
-        words = [w for w in line.split() if re.match(r"^[A-Za-zÀ-ÿ'\-]+$", w)]
-        if 2 <= len(words) <= 4:
-            if all(w[0].isupper() for w in words if len(w) > 1):
-                return " ".join(words)
+        words = _collect_name_words(line)
+        if len(words) >= 2:
+            return " ".join(words)
+
+    # Pass 2: multi-column PDFs where header is one long merged line —
+    # strip contact tokens then scan each |-separated segment
+    for line in lines[:40]:
+        line = line.replace('\u2019', "'").replace('\u2018', "'").strip()
+        if not line or len(line) <= 60:
+            continue
+        stripped = re.sub(r'\S+@\S+', '', line)
+        stripped = re.sub(r'\+?\d[\d\s.\-()]{7,}', '', stripped)
+        stripped = re.sub(r'https?://\S+|www\.\S+', '', stripped)
+        stripped = re.sub(r'\s+', ' ', stripped).strip()
+        if not stripped:
+            continue
+        for seg in re.split(r'\|+', stripped):
+            result = _try_segment(seg.strip())
+            if result:
+                return result
+        result = _try_segment(stripped)
+        if result:
+            return result
+
     return None
 
 
