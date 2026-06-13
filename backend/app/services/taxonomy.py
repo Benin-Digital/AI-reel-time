@@ -72,7 +72,7 @@ _SKILLS: dict[str, list[str]] = {
     "Terraform": ["terraform", "iac", "infrastructure as code"],
     "Ansible": ["ansible"],
     "CI/CD": ["cicd", "ci/cd", "github actions", "gitlab ci", "jenkins", "devops pipeline", "circleci", "circle ci", "travis ci", "travis"],
-    "Git": ["git", "github", "gitlab", "bitbucket", "versioning", "svn"],
+    "Git": ["git", "github", "gitlab", "bitbucket", "bitbuckets", "versioning", "svn"],
     "Linux": ["linux", "ubuntu", "debian", "centos", "bash", "shell scripting", "unix"],
     "Machine Learning": ["machine learning", "ml", "apprentissage automatique", "apprentissage machine"],
     "Deep Learning": ["deep learning", "dl", "apprentissage profond", "reseau de neurones", "neural network"],
