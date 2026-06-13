@@ -63,7 +63,11 @@ from .schemas import (
     MatchRead,
     MatchFeedbackCreate,
     MatchFeedbackRead,
-    
+    FeedbackStatsRead,
+    FeedbackDecisionStats,
+    FeedbackComponentScores,
+    FeedbackDomainRow,
+    FeedbackWeightHint,
     SearchRequest,
     SearchHit,
     AuthLoginRequest,
@@ -3029,6 +3033,123 @@ def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: 
         return MatchFeedbackRead.model_validate(feedback)
 
 
+_COMP_LABELS = {
+    "score_skills":     "Compétences",
+    "score_semantic":   "Sémantique",
+    "score_experience": "Expérience",
+    "score_education":  "Formation",
+    "score_languages":  "Langues",
+    "score_contract":   "Contrat",
+}
+
+
+@app.get("/feedback/stats", response_model=FeedbackStatsRead)
+def get_feedback_stats(request: Request) -> FeedbackStatsRead:
+    _require_auth(request)
+    with SessionLocal() as session:
+        # 1. Distribution by decision
+        decision_rows = session.execute(
+            select(
+                MatchFeedback.decision,
+                func.count().label("cnt"),
+                func.avg(MatchFeedback.rating).label("avg_rating"),
+            ).group_by(MatchFeedback.decision)
+        ).all()
+
+        total = sum(r.cnt for r in decision_rows)
+        by_decision: dict[str, FeedbackDecisionStats] = {
+            r.decision: FeedbackDecisionStats(
+                count=r.cnt,
+                pct=round(r.cnt / total * 100, 1) if total > 0 else 0.0,
+                avg_rating=round(float(r.avg_rating), 2) if r.avg_rating is not None else None,
+            )
+            for r in decision_rows
+        }
+
+        # 2. Average component scores by decision
+        comp_rows = session.execute(
+            select(
+                MatchFeedback.decision,
+                func.avg(MatchResult.score_skills).label("score_skills"),
+                func.avg(MatchResult.score_semantic).label("score_semantic"),
+                func.avg(MatchResult.score_experience).label("score_experience"),
+                func.avg(MatchResult.score_education).label("score_education"),
+                func.avg(MatchResult.score_languages).label("score_languages"),
+                func.avg(MatchResult.score_contract).label("score_contract"),
+                func.avg(MatchResult.score).label("score_global"),
+            )
+            .join(MatchResult, MatchFeedback.match_id == MatchResult.id)
+            .group_by(MatchFeedback.decision)
+        ).all()
+
+        def _f(v: float | None) -> float | None:
+            return round(float(v), 3) if v is not None else None
+
+        avg_scores_by_decision: dict[str, FeedbackComponentScores] = {
+            r.decision: FeedbackComponentScores(
+                score_skills=_f(r.score_skills),
+                score_semantic=_f(r.score_semantic),
+                score_experience=_f(r.score_experience),
+                score_education=_f(r.score_education),
+                score_languages=_f(r.score_languages),
+                score_contract=_f(r.score_contract),
+                score_global=round(float(r.score_global), 1) if r.score_global is not None else None,
+            )
+            for r in comp_rows
+        }
+
+        # 3. By domain
+        domain_rows = session.execute(
+            select(
+                MatchResult.match_domain,
+                MatchFeedback.decision,
+                func.count().label("cnt"),
+                func.avg(MatchResult.score).label("avg_score"),
+            )
+            .join(MatchResult, MatchFeedback.match_id == MatchResult.id)
+            .where(MatchResult.match_domain.isnot(None))
+            .group_by(MatchResult.match_domain, MatchFeedback.decision)
+        ).all()
+
+        domain_map: dict[str, FeedbackDomainRow] = {}
+        for r in domain_rows:
+            if r.match_domain not in domain_map:
+                domain_map[r.match_domain] = FeedbackDomainRow(domain=r.match_domain, total=0)
+            row = domain_map[r.match_domain]
+            row.total += r.cnt
+            if r.decision == "accept":
+                row.accept = r.cnt
+                row.avg_score = round(float(r.avg_score), 1) if r.avg_score is not None else None
+            elif r.decision == "reject":
+                row.reject = r.cnt
+            elif r.decision == "review":
+                row.review = r.cnt
+
+        by_domain = sorted(domain_map.values(), key=lambda d: d.total, reverse=True)
+
+        # 4. Weight hints: delta = accept_mean − reject_mean per component
+        accept_s = avg_scores_by_decision.get("accept")
+        reject_s = avg_scores_by_decision.get("reject")
+        weight_hints: list[FeedbackWeightHint] = []
+        if accept_s and reject_s:
+            for comp, label in _COMP_LABELS.items():
+                a = getattr(accept_s, comp)
+                r = getattr(reject_s, comp)
+                if a is not None and r is not None:
+                    weight_hints.append(FeedbackWeightHint(
+                        component=comp,
+                        label=label,
+                        delta=round(a - r, 3),
+                    ))
+            weight_hints.sort(key=lambda h: h.delta, reverse=True)
+
+        return FeedbackStatsRead(
+            total=total,
+            by_decision=by_decision,
+            avg_scores_by_decision=avg_scores_by_decision,
+            by_domain=by_domain,
+            weight_hints=weight_hints,
+        )
 
 
 

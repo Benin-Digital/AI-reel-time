@@ -9,6 +9,7 @@ import { initPublishJob } from "./components/publish-job.js";
 import { initMatches } from "./components/matches.js";
 import { initArchives } from "./components/archives.js";
 import { initAdmin } from "./components/admin.js";
+import { initFeedbackStats } from "./components/feedback-stats.js";
 import { initDeleteConfirm, initGenericConfirm } from "./utils/upload.js";
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -25,6 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initMatches();
   initArchives();
   initAdmin();
+  initFeedbackStats();
 
   onPanelChange((panel) => {
     if (!store.authUser) return;
@@ -35,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (panel === "job-library") window.dispatchEvent(new CustomEvent("load-job-library"));
     if (panel === "matches")     window.dispatchEvent(new CustomEvent("load-matches"));
     if (panel === "archives")    window.dispatchEvent(new CustomEvent("load-archives"));
-    if (panel === "admin")       window.dispatchEvent(new CustomEvent("load-admin"));
+    if (panel === "admin")          window.dispatchEvent(new CustomEvent("load-admin"));
+    if (panel === "feedback-stats") window.dispatchEvent(new CustomEvent("load-feedback-stats"));
   });
 });

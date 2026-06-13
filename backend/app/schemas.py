@@ -397,3 +397,42 @@ class ScoringWeightsRead(BaseModel):
     scoring_skill_weight: float
     scoring_phrase_bonus: float
     scoring_max_bonus: float
+
+
+class FeedbackDecisionStats(BaseModel):
+    count: int
+    pct: float
+    avg_rating: float | None = None
+
+
+class FeedbackComponentScores(BaseModel):
+    score_skills: float | None = None
+    score_semantic: float | None = None
+    score_experience: float | None = None
+    score_education: float | None = None
+    score_languages: float | None = None
+    score_contract: float | None = None
+    score_global: float | None = None
+
+
+class FeedbackDomainRow(BaseModel):
+    domain: str
+    total: int
+    accept: int = 0
+    reject: int = 0
+    review: int = 0
+    avg_score: float | None = None
+
+
+class FeedbackWeightHint(BaseModel):
+    component: str
+    label: str
+    delta: float
+
+
+class FeedbackStatsRead(BaseModel):
+    total: int
+    by_decision: dict[str, FeedbackDecisionStats]
+    avg_scores_by_decision: dict[str, FeedbackComponentScores]
+    by_domain: list[FeedbackDomainRow]
+    weight_hints: list[FeedbackWeightHint]
