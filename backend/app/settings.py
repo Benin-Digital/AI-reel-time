@@ -43,10 +43,10 @@ class Settings(BaseSettings):
     retention_extraction_days: int = 30
     retention_score_days: int = 60
     scoring_skill_keywords: str = (
-        "python,sql,postgresql,fastapi,docker,kubernetes,aws,azure,linux,git," \
-        "communication,management,project management,analysis,teamwork,leadership," \
-        "customer service,sales,negotiation,reporting,training,logistics,operations," \
-        "marketing,accounting,finance,quality,procurement,support,administration,hr,recruitment,education"
+        "python,sql,postgresql,fastapi,docker,kubernetes,aws,azure,linux,git,"
+        "communication,project management,analysis,teamwork,leadership,"
+        "customer service,sales,negotiation,reporting,logistics,operations,"
+        "marketing,accounting,finance,procurement"
     )
     scoring_skill_weight: float = 1.5
     scoring_synonyms: str = "js=javascript,ts=typescript,nodejs=node,postgres=postgresql,py=python"
