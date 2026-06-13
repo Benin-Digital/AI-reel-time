@@ -476,7 +476,7 @@ def canonical_token_set(text: str) -> set[str]:
 def _extract_skill_terms(text: str) -> list[str]:
     if not text:
         return []
-    from .taxonomy import find_skills as _taxonomy_find
+    from .taxonomy import find_skills as _taxonomy_find, normalize_skill as _normalize_skill
 
     def _skill_whitelist() -> list[str]:
         raw = (settings.scoring_skill_keywords or "")
@@ -485,14 +485,18 @@ def _extract_skill_terms(text: str) -> list[str]:
 
     # Primary: taxonomy — only known canonical skills, no false positives
     found = _taxonomy_find(text)
-    found_set = set(found)
+    # Case-insensitive dedup set (taxonomy returns canonical casing, whitelist may differ)
+    found_lower: set[str] = {s.lower() for s in found}
 
     # Secondary: settings whitelist exact match
     for skill in _skill_whitelist():
-        if skill and skill not in found_set:
+        if not skill:
+            continue
+        canonical = _normalize_skill(skill) or skill
+        if canonical.lower() not in found_lower:
             if re.search(rf"\b{re.escape(skill)}\b", _apply_synonyms(text)):
-                found.append(skill)
-                found_set.add(skill)
+                found.append(canonical)
+                found_lower.add(canonical.lower())
 
     return found
 
@@ -775,7 +779,8 @@ _NAME_YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
 def _extract_name_rule_based(lines: list[str]) -> str | None:
     """Extract person name from first lines of a CV using heuristics only."""
     for line in lines[:12]:
-        line = line.strip()
+        # Normalize typographic apostrophes (U+2019 ' and U+2018 ') to standard apostrophe
+        line = line.replace('\u2019', "'").replace('\u2018', "'").strip()
         if not line or len(line) < 3 or len(line) > 60:
             continue
         if _NAME_CONTACT_RE.search(line):

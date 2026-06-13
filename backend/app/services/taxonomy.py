@@ -149,9 +149,9 @@ _SKILLS: dict[str, list[str]] = {
     "Droit du travail": ["droit du travail", "droit social", "droit du travail et de l emploi", "code du travail"],
     "Gestion des talents": ["gestion des talents", "talent management", "developpement des talents", "peoples review"],
     "Administration du personnel": ["administration du personnel", "administration rh", "gestion administrative rh"],
-    "Relations sociales": ["relations sociales", "negociation syndicale", "dialogue social", "cse", "irp", "ce"],
+    "Relations sociales": ["relations sociales", "negociation syndicale", "dialogue social", "cse", "irp"],
     "Formation professionnelle": ["formation professionnelle", "plan de formation", "cpf", "plan de developpement des competences"],
-    "Onboarding": ["onboarding", "integration", "accueil des nouveaux collaborateurs"],
+    "Onboarding": ["onboarding", "accueil des nouveaux collaborateurs"],
     "Qualité de vie au travail": ["qvt", "bien etre au travail", "qualite de vie au travail", "rse", "qualite de vie"],
     "Gestion des conflits": ["gestion des conflits", "mediation", "resolution de conflits"],
 
@@ -176,7 +176,7 @@ _SKILLS: dict[str, list[str]] = {
     "Planification logistique": ["planification logistique", "s&op", "sales and operations planning", "mrp"],
     "Distribution": ["distribution", "reseau de distribution", "livraison", "logistique du dernier km"],
     "Lean": ["lean", "lean management", "lean manufacturing", "amelioration continue", "kaizen"],
-    "Six Sigma": ["six sigma", "6 sigma", "black belt", "green belt", "dmaic"],
+    "Six Sigma": ["six sigma", "6 sigma", "6sigma", "black belt", "green belt", "dmaic"],
     "Qualité": ["qualite", "management de la qualite", "iso 9001", "iso", "certification qualite", "smed"],
 
     # ── SANTÉ & MÉDICAL ───────────────────────────────────────────────────
@@ -194,7 +194,7 @@ _SKILLS: dict[str, list[str]] = {
     # ── BTP & CONSTRUCTION ────────────────────────────────────────────────
     "AutoCAD": ["autocad", "cao", "dessin assiste par ordinateur", "dessin technique", "catia", "solidworks"],
     "BIM": ["bim", "building information modeling", "revit", "archicad", "bim manager"],
-    "Génie civil": ["genie civil", "civil engineering", "structures", "beton arme", "gros oeuvre"],
+    "Génie civil": ["genie civil", "civil engineering", "beton arme", "gros oeuvre"],
     "Conduite de travaux": ["conduite de travaux", "chef de chantier", "maitrise d oeuvre", "moe", "conducteur de travaux"],
     "Maîtrise d'ouvrage": ["maitrise d ouvrage", "moa", "maitre d ouvrage", "amoa"],
     "Électricité bâtiment": ["electricite", "electrotechnique", "courants forts", "courants faibles", "cfao"],
@@ -239,6 +239,11 @@ def _build_lookup() -> dict[str, str]:
             key = _fold(alias)
             if key:
                 lookup[key] = canonical
+                # index space-for-slash form so "ci cd" matches "CI/CD" after slash normalisation
+                if "/" in key:
+                    space_key = key.replace("/", " ")
+                    if space_key and space_key not in lookup:
+                        lookup[space_key] = canonical
         lookup[_fold(canonical)] = canonical
     return lookup
 
@@ -256,8 +261,9 @@ def find_skills(text: str) -> list[str]:
     if not text:
         return []
     lookup = _build_lookup()
-    folded = _fold(text)
-    words = re.findall(r"[a-z0-9#+/.]+", folded)
+    # Replace slashes with spaces so "php/laravel" → ["php","laravel"] and "ci/cd" → 2-gram "ci cd"
+    folded = _fold(text).replace("/", " ")
+    words = re.findall(r"[a-z0-9#+.]+", folded)
 
     found: dict[str, int] = {}  # canonical → first word-position
     # Longest match first (up to 5-gram)
