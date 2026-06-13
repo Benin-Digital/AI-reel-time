@@ -49,7 +49,8 @@ def clean_text(text: str) -> str:
         # Remove soft hyphens and bullet characters, collapse whitespace
         line = re.sub(r"\u00ad", "", raw)
         line = re.sub(r"\s+", " ", line.strip())
-        line = re.sub(r"^[\-*•·\u2022\u25e6]+\s*", "", line).strip()
+        # also strip Wingdings/Symbol bullet chars (ü→U+00FC, ð→U+00F0) used as list markers in some PDFs
+        line = re.sub(r"^[\-*•·\u2022\u25e6ü°ð►▪▫●○◦]+\s*", "", line).strip()
 
         if not line or len(line) < 2:
             prev = ""
