@@ -183,7 +183,7 @@ _SKILLS: dict[str, list[str]] = {
     "Approvisionnement": ["approvisionnement", "achats", "procurement", "purchasing", "acheteur"],
     "Planification logistique": ["planification logistique", "s&op", "sales and operations planning", "mrp"],
     "Distribution": ["reseau de distribution", "logistique du dernier km", "livraison last mile"],
-    "Lean": ["lean", "lean management", "lean manufacturing", "amelioration continue", "kaizen"],
+    "Lean": ["lean", "lean management", "lean manufacturing", "kaizen"],
     "Six Sigma": ["six sigma", "6 sigma", "6sigma", "black belt", "green belt", "dmaic"],
     "Qualité": ["management de la qualite", "iso 9001", "certification qualite", "demarche qualite", "smed"],
 

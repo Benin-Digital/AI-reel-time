@@ -986,6 +986,10 @@ def build_document_profile(text: str, kind: str | None = None, enable_ner: bool 
         if rule_name:
             person_name = rule_name
 
+    # Job offers never have a person_name (NER picks up "Fiche" from "Fiche de poste", etc.)
+    if kind == "job":
+        person_name = None
+
     if kind == "cv" and not skill_terms:
         fallback_sources = [skills_text, experience_text, education_text, certifications_text, summary_text]
         skill_terms = _extract_skill_terms("\n".join(part for part in fallback_sources if part))
