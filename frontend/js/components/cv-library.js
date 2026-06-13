@@ -150,6 +150,26 @@ async function _loadDetail(id) {
         }
       });
     }
+
+    // wire structured PDF button
+    const parsedPdfBtn = detail.querySelector("[data-action='preview-parsed-pdf']");
+    if (parsedPdfBtn) {
+      parsedPdfBtn.addEventListener("click", async () => {
+        parsedPdfBtn.disabled = true;
+        parsedPdfBtn.textContent = "Génération…";
+        try {
+          const blob = await fetchBlob(`/cv-documents/${id}/parsed-pdf`);
+          const url = URL.createObjectURL(blob);
+          window.open(url, "_blank");
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (err) {
+          setBanner($("#uploadCvStatus"), `PDF structuré : ${err.message}`, "error");
+        } finally {
+          parsedPdfBtn.disabled = false;
+          parsedPdfBtn.textContent = "PDF structuré";
+        }
+      });
+    }
   } catch (err) {
     if (err.name !== "AuthError") {
       detail.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${err.message}</div></div>`;
