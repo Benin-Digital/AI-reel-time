@@ -494,6 +494,7 @@ select:disabled {
   justify-content: space-between;
   padding: var(--space-5) var(--space-6);
   border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
 }
 
 .modal__title {
@@ -508,7 +509,7 @@ select:disabled {
   flex-direction: column;
   gap: var(--space-4);
   overflow-y: auto;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-height: 0;
 }
 
