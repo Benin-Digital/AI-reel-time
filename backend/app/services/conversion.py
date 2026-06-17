@@ -13,6 +13,7 @@ fails — so this layer is safe to enable incrementally.
 Install: pip install -r backend/requirements-poc.txt
 """
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,28 @@ _SECTION_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+# Docling injects HTML comments for non-text regions (e.g. `<!-- image -->`,
+# `<!-- formula -->`) and leaves unfilled form placeholders like `[Date]` or
+# `[image]` in the markdown export. They pollute downstream extraction —
+# strip them at the source.
+_DOCLING_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_DOCLING_PLACEHOLDER_RE = re.compile(
+    r"\[\s*(?:date|image|table|formula|figure|signature|logo)\s*\]",
+    re.IGNORECASE,
+)
+
+
+def _strip_docling_artifacts(text: str) -> str:
+    if not text:
+        return text
+    text = _DOCLING_HTML_COMMENT_RE.sub("", text)
+    text = _DOCLING_PLACEHOLDER_RE.sub("", text)
+    # Collapse runs of blank lines created by removals.
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 _DOCLING_SUPPORTED = {".pdf", ".docx", ".pptx", ".html", ".htm"}
 
 
@@ -67,14 +90,21 @@ def _convert_with_docling(path: Path) -> ConvertedDocument:
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.settings import settings as docling_settings
 
-    # Always unset DOCLING_ARTIFACTS_PATH: the Docker volume mounts an empty
-    # directory at /app/.cache/docling which shadows the baked-in models.
+    # The Dockerfile sets DOCLING_ARTIFACTS_PATH=/app/.cache/docling but
+    # download_models() actually writes to the HuggingFace Hub cache
+    # (/app/.cache/huggingface/...). Docling reads the env var at import
+    # time into a global settings singleton, and base_pipeline.py falls
+    # back to settings.artifacts_path even when pipeline_options.artifacts_path
+    # is None. We need to clear all three: env var, singleton, and explicit
+    # kwarg. Then Docling falls back to HF Hub lazy-loading.
     os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
+    docling_settings.artifacts_path = None
 
     # CVs and job offers are text-based PDFs — OCR is unnecessary and pulls in
     # heavy model dependencies (RapidOCR, EasyOCR) that are not installed.
-    pipeline_options = PdfPipelineOptions(do_ocr=False)
+    pipeline_options = PdfPipelineOptions(do_ocr=False, artifacts_path=None)
 
     converter = DocumentConverter(
         format_options={
@@ -84,14 +114,15 @@ def _convert_with_docling(path: Path) -> ConvertedDocument:
     result = converter.convert(str(path))
     doc = result.document
 
-    markdown = doc.export_to_markdown()
-    full_text = doc.export_to_text() if hasattr(doc, "export_to_text") else markdown
+    markdown = _strip_docling_artifacts(doc.export_to_markdown())
+    raw_text = doc.export_to_text() if hasattr(doc, "export_to_text") else markdown
+    full_text = _strip_docling_artifacts(raw_text)
     sections = _split_markdown_sections(markdown)
     tables = _extract_tables(doc)
 
     return ConvertedDocument(
         full_text=full_text,
-        markdown=markdown,
+        markdown=markdown,  # already stripped
         sections=sections,
         tables=tables,
         backend="docling",

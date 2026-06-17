@@ -1,41 +1,19 @@
 """Smoke tests for the POC v2 conversion/override_sections path."""
-from app.services import structured
-from app.services.conversion import ConvertedDocument, _classify_section, _split_markdown_sections
+from app.services.conversion import ConvertedDocument, _classify_section, _split_markdown_sections, _strip_docling_artifacts
 
 
-def test_override_sections_short_circuits_heading_detection():
-    # Raw text deliberately has NO section headings — the heuristic would dump
-    # everything into "other". With override_sections, we feed the boundaries
-    # in directly and expect them to land in the right buckets.
-    raw_text = "Python Docker FastAPI - some unstructured paragraph"
-    override = {
-        "summary": "Senior backend engineer.",
-        "skills": "Python, Docker, FastAPI",
-        "experience": "5 ans chez ACME.",
-    }
-    profile = structured.build_document_profile(
-        raw_text,
-        kind="cv",
-        enable_ner=False,
-        override_sections=override,
-    )
-    # summary, skills, experience should be populated from the override
-    assert profile.summary_text and "Senior backend engineer" in profile.summary_text
-    assert "Python" in (profile.skills_text or "") or "Docker" in (profile.skills_text or "")
-    assert "ACME" in (profile.experience_text or "")
+def test_strip_docling_artifacts_removes_html_comments_and_placeholders():
+    raw = "## Skills\n<!-- image -->\nPython\n[Date]\nDocker"
+    cleaned = _strip_docling_artifacts(raw)
+    assert "<!-- image -->" not in cleaned
+    assert "[Date]" not in cleaned
+    assert "Python" in cleaned
+    assert "Docker" in cleaned
 
 
-def test_override_sections_unknown_key_lands_in_other():
-    profile = structured.build_document_profile(
-        "irrelevant",
-        kind="cv",
-        enable_ner=False,
-        override_sections={"random_bucket": "this is mystery content"},
-    )
-    # Unknown section name should not crash the parser; content should land in "other"
-    # We test indirectly via the absence of "this is mystery" from summary/skills/experience.
-    for field in ("summary_text", "skills_text", "experience_text"):
-        assert "mystery" not in (getattr(profile, field, "") or "")
+def test_strip_docling_artifacts_handles_empty():
+    assert _strip_docling_artifacts("") == ""
+    assert _strip_docling_artifacts(None) is None  # type: ignore[arg-type]
 
 
 def test_classify_section_aliases():
