@@ -158,7 +158,7 @@ async function _loadDetail(id) {
         parsedPdfBtn.disabled = true;
         parsedPdfBtn.textContent = "Génération…";
         try {
-          const blob = await fetchBlob(`/job-documents/${id}/parsed-pdf`);
+          const blob = await fetchBlob(`/job-documents/${id}/parsed-pdf`, { timeout: 60000 });
           const url = URL.createObjectURL(blob);
           window.open(url, "_blank");
           setTimeout(() => URL.revokeObjectURL(url), 60000);

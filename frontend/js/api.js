@@ -2,16 +2,29 @@ import { API_BASE } from "./config.js";
 import { store, clearAuth } from "./store.js";
 import { openModal } from "./utils/dom.js";
 
-const REQUEST_TIMEOUT_MS = 12000;
+// Default timeout for short endpoints (list, details). Heavy endpoints
+// (/matches/{id}/explain, /matches/recompute, parsed-pdf) need more — pass
+// `timeout: 60000` explicitly on those calls.
+const REQUEST_TIMEOUT_MS = 30000;
 const MAX_RETRIES = 2;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const isAbortError = (err) =>
+  err && (err.name === "AbortError" || err.name === "TimeoutError");
 
 const withTimeout = async (url, options, ms) => {
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), ms);
   try {
     return await fetch(url, { ...options, signal: ctrl.signal });
+  } catch (err) {
+    if (isAbortError(err)) {
+      const timeoutErr = new Error(`Délai d'attente dépassé (${Math.round(ms / 1000)} s).`);
+      timeoutErr.name = "TimeoutError";
+      throw timeoutErr;
+    }
+    throw err;
   } finally {
     clearTimeout(tid);
   }
@@ -26,6 +39,7 @@ export const safeFetch = async (path, options = {}) => {
     skipAuth = false,
     retries = MAX_RETRIES,
     allowAuthErrors = false,
+    timeout = REQUEST_TIMEOUT_MS,
   } = options;
 
   const reqHeaders = new Headers(headers);
@@ -37,7 +51,7 @@ export const safeFetch = async (path, options = {}) => {
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await withTimeout(url, { method, headers: reqHeaders, body }, REQUEST_TIMEOUT_MS);
+      const res = await withTimeout(url, { method, headers: reqHeaders, body }, timeout);
 
       if (res.status === 401) {
         if (allowAuthErrors) {
@@ -63,6 +77,9 @@ export const safeFetch = async (path, options = {}) => {
     } catch (err) {
       lastError = err;
       if (err.name === "AuthError") throw err;
+      // Retrying a timeout would just compound the wait without fixing
+      // anything — surface it immediately so the caller can react.
+      if (err.name === "TimeoutError") throw err;
       if (attempt >= retries) throw err;
       await sleep(400 + attempt * 400);
     }
@@ -71,10 +88,11 @@ export const safeFetch = async (path, options = {}) => {
   throw lastError ?? new Error("Erreur inconnue");
 };
 
-export const fetchBlob = async (path) => {
+export const fetchBlob = async (path, options = {}) => {
+  const { timeout = REQUEST_TIMEOUT_MS } = options;
   const headers = new Headers();
   if (store.authToken) headers.set("Authorization", `Bearer ${store.authToken}`);
-  const res = await withTimeout(`${API_BASE}${path}`, { method: "GET", headers }, REQUEST_TIMEOUT_MS);
+  const res = await withTimeout(`${API_BASE}${path}`, { method: "GET", headers }, timeout);
   if (!res.ok) throw new Error(`Impossible de charger le fichier (${res.status})`);
   return res.blob();
 };

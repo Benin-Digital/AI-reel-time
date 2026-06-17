@@ -150,9 +150,11 @@ async function _loadExplain(matchId) {
   openModal(modal);
 
   try {
-    // Load explain data and existing feedback in parallel
+    // Load explain data and existing feedback in parallel.
+    // /explain rebuilds both StructuredDocuments and runs scoring — cold
+    // cache + Docling + NER can push this past 30s. Allow 90s here.
     const [data, existingFb] = await Promise.all([
-      safeFetch(`/matches/${matchId}/explain`),
+      safeFetch(`/matches/${matchId}/explain`, { timeout: 90000, retries: 0 }),
       safeFetch(`/matches/${matchId}/feedback`).catch(() => null),
     ]);
 
