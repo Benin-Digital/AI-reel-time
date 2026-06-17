@@ -22,6 +22,13 @@ services:
       - ../../storage/cv:/srv/ai-realtime/storage/cv
       - ../../storage/job:/srv/ai-realtime/storage/job
       - ../../storage/archive:/srv/ai-realtime/storage/archive
+      # ESCO taxonomy CSVs are baked into the image; the named volume
+      # preserves them across container rebuilds and lets you replace
+      # skills_fr.csv / skills_en.csv manually via docker cp if needed.
+      - airealtime_esco:/srv/ai-realtime/esco
+      # scoring_v2 GBM model artifacts (trained pickle persists here).
+      - airealtime_models:/srv/ai-realtime/models
+      - airealtime_hf_cache:/app/.cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,3 +81,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  airealtime_esco:
+  airealtime_models:
+  airealtime_hf_cache:
