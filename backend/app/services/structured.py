@@ -360,6 +360,7 @@ class StructuredDocument:
     skill_terms: list[str] = field(default_factory=list)
     required_skill_terms: list[str] = field(default_factory=list)
     nice_skill_terms: list[str] = field(default_factory=list)
+    soft_skill_terms: list[str] = field(default_factory=list)
     # POC v2: ESCO-normalized skill identifiers (stable across CV phrasings).
     # Populated only when AI_REALTIME_ESCO_ENRICH_SKILLS=true.
     esco_skill_uris: list[str] = field(default_factory=list)
@@ -1052,9 +1053,12 @@ def build_document_profile(
         # Some job offers put tech stack in the summary/intro ("I. Savoir") or in
         # uncategorised sections — include them so nothing is missed.
         skill_sources.extend([summary_text, other_text])
-    skill_terms = _extract_skill_terms("\n".join(part for part in skill_sources if part))
-    required_skill_terms = _extract_skill_terms(job_required_text)
-    nice_skill_terms = _extract_skill_terms(job_nice_text)
+    from .taxonomy import partition_skills as _partition_skills
+
+    raw_skill_terms = _extract_skill_terms("\n".join(part for part in skill_sources if part))
+    skill_terms, soft_skill_terms = _partition_skills(raw_skill_terms)
+    required_skill_terms, _ = _partition_skills(_extract_skill_terms(job_required_text))
+    nice_skill_terms, _ = _partition_skills(_extract_skill_terms(job_nice_text))
     esco_skill_uris: list[str] = _esco_enrich(skill_terms) if getattr(settings, "esco_enrich_skills", False) else []
     language_terms = _detect_languages("\n".join(part for part in (languages_text, cleaned_text) if part))
     if contract_text:
@@ -1091,7 +1095,10 @@ def build_document_profile(
 
     if kind == "cv" and not skill_terms:
         fallback_sources = [skills_text, experience_text, education_text, certifications_text, summary_text]
-        skill_terms = _extract_skill_terms("\n".join(part for part in fallback_sources if part))
+        fallback_terms = _extract_skill_terms("\n".join(part for part in fallback_sources if part))
+        skill_terms, fallback_soft = _partition_skills(fallback_terms)
+        if fallback_soft and not soft_skill_terms:
+            soft_skill_terms = fallback_soft
 
     if kind == "job" and not required_skill_terms:
         required_skill_terms = skill_terms
@@ -1150,6 +1157,7 @@ def build_document_profile(
         skill_terms=skill_terms,
         required_skill_terms=required_skill_terms,
         nice_skill_terms=nice_skill_terms,
+        soft_skill_terms=soft_skill_terms,
         esco_skill_uris=esco_skill_uris,
         language_terms=language_terms,
         contract_type=contract_type,

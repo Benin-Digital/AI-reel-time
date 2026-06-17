@@ -307,6 +307,35 @@ def find_skills(text: str) -> list[str]:
     return [k for k, _ in sorted(found.items(), key=lambda x: x[1])]
 
 
+# Canonicals from the "COMPÉTENCES TRANSVERSALES" block above. Listed in a
+# frozenset to partition technical skills from behavioural ones — soft skills
+# pollute the technical match signal when mixed into skill_terms.
+SOFT_SKILL_CANONICALS: frozenset[str] = frozenset({
+    "Travail en équipe",
+    "Autonomie",
+    "Rigueur",
+    "Adaptabilité",
+    "Créativité",
+    "Organisation",
+    "Sens du service",
+    "Esprit d'analyse",
+    "Force de proposition",
+    "Gestion du stress",
+    "Permis B",
+})
+
+
+def is_soft_skill(canonical: str) -> bool:
+    return canonical in SOFT_SKILL_CANONICALS
+
+
+def partition_skills(skills: list[str]) -> tuple[list[str], list[str]]:
+    """Split a list of canonical skills into (hard, soft), preserving order."""
+    hard = [s for s in skills if s not in SOFT_SKILL_CANONICALS]
+    soft = [s for s in skills if s in SOFT_SKILL_CANONICALS]
+    return hard, soft
+
+
 def load_esco_csv(csv_path: str | Path) -> int:
     """
     Extend the taxonomy from an ESCO skills CSV export.
