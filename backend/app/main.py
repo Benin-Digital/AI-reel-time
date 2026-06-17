@@ -677,6 +677,8 @@ def _render_parsed_document_text(profile, kind: str) -> str:
     header = ["DOCUMENT PARSE", f"Type: {kind.upper()}"]
 
     meta_lines: list[str] = []
+    if kind == "job" and getattr(profile, "job_title", None):
+        meta_lines.append(f"Titre du poste: {profile.job_title}")
     if profile.person_name:
         meta_lines.append(f"Nom: {profile.person_name}")
     if profile.contract_type:
@@ -717,6 +719,7 @@ def _render_parsed_document_text(profile, kind: str) -> str:
             sections.extend(["Competences souhaitees", profile.job_nice_text, ""])
 
     sections.extend(_render_list_section("Skills detectees", profile.skill_terms))
+    sections.extend(_render_list_section("Soft skills", profile.soft_skill_terms))
     if kind == "job":
         sections.extend(_render_list_section("Skills requis", profile.required_skill_terms))
         sections.extend(_render_list_section("Skills bonus", profile.nice_skill_terms))
