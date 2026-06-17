@@ -1148,7 +1148,7 @@ def _extract_and_persist(path: Path) -> ExtractedTextRead:
             from .services.conversion import convert_document
             converted = convert_document(path)
             extracted = converted.full_text
-            method = f"pdf-{converted.backend}"
+            method = "docling"
             if content_hash and converted.sections:
                 _stash_docling_sections(content_hash, converted.sections)
         else:

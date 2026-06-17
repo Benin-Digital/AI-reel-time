@@ -51,16 +51,14 @@ _DOCLING_SUPPORTED = {".pdf", ".docx", ".pptx", ".html", ".htm"}
 
 
 def convert_document(path: Path) -> ConvertedDocument:
-    """Convert a document to structured form. Tries Docling for all supported formats, falls back to extract_text."""
-    if path.suffix.lower() in _DOCLING_SUPPORTED:
-        try:
-            return _convert_with_docling(path)
-        except ImportError:
-            logger.debug("Docling not installed; falling back for %s", path.name)
-        except Exception as exc:
-            logger.warning("Docling failed for %s, fallback: %s", path.name, exc)
-    text = extract_text(path)
-    return ConvertedDocument(full_text=text, markdown=text, backend="fallback")
+    """Convert a document to structured form using Docling.
+
+    Raises RuntimeError if the format is unsupported or Docling is not installed.
+    No silent fallback — callers must handle the error explicitly.
+    """
+    if path.suffix.lower() not in _DOCLING_SUPPORTED:
+        raise RuntimeError(f"Unsupported format for Docling: {path.suffix}")
+    return _convert_with_docling(path)
 
 
 def _convert_with_docling(path: Path) -> ConvertedDocument:
