@@ -82,3 +82,22 @@ def embed_text(text: str) -> list[float]:
     if len(vectors) == 1:
         return vectors[0]
     return _average_vectors(vectors)
+
+
+def compute_domain_sim(cv_profile: dict, job_profile: dict) -> float:
+    """Cosine similarity between CV summary and job summary embeddings.
+
+    Embeddings are L2-normalized by embed_texts, so dot product = cosine sim.
+    Returns 0.0 when either summary is empty or the embedding model is unavailable.
+    """
+    cv_summary = (cv_profile.get("summary_text") or "").strip()
+    job_summary = (job_profile.get("summary_text") or "").strip()
+    if not cv_summary or not job_summary:
+        return 0.0
+    try:
+        vectors = embed_texts([cv_summary, job_summary])
+        if len(vectors) != 2:
+            return 0.0
+        return float(sum(a * b for a, b in zip(vectors[0], vectors[1])))
+    except Exception:
+        return 0.0
