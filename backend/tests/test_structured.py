@@ -21,6 +21,20 @@ def test_extract_skill_terms_fuzzy(monkeypatch):
     assert "postgresql" in terms
 
 
+def test_accessibility_taxonomy_recognises_wcag_rgaa():
+    from app.services.taxonomy import find_skills
+    cases = [
+        "Respecter WCAG/RGAA niveau AA",
+        "Connaissances WCAG 2.1",
+        "Maîtriser le RGAA 4.1",
+        "Accessibilité numérique",
+        # Slash-stripped form (Docling sometimes produces "WCAGRGAA"):
+        "Respecter WCAGRGAA",
+    ]
+    for text in cases:
+        assert "Accessibilité web" in find_skills(text), f"missed in: {text!r}"
+
+
 def test_job_title_from_docling_heading(monkeypatch):
     monkeypatch.setattr(structured.settings, "ner_enabled", False)
     profile = structured.build_document_profile(
