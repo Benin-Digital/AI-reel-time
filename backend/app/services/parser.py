@@ -447,9 +447,17 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
     if not summary_text and lines:
         summary_text = "\n".join(lines[:3])
 
-    # Skill extraction via taxonomy
+    # Skill extraction via taxonomy.
+    # For jobs, include "experience"/"certifications" too: Docling often
+    # classifies "Missions" / "Responsabilités" / "Compétences attendues" into
+    # those buckets, and they typically carry the actual tech requirements.
     if kind == "job":
-        skill_src = "\n".join(p for p in [job_required_text, job_nice_text, skills_text] if p)
+        skill_src = "\n".join(
+            p for p in [
+                job_required_text, job_nice_text, skills_text,
+                summary_text, other_text, experience_text, certifications_text,
+            ] if p
+        )
     else:
         skill_src = "\n".join(p for p in [skills_text, experience_text, other_text] if p)
 

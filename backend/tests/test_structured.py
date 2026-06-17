@@ -21,6 +21,24 @@ def test_extract_skill_terms_fuzzy(monkeypatch):
     assert "postgresql" in terms
 
 
+def test_job_skill_sources_include_missions_and_certifications(monkeypatch):
+    """Job offers often list tech stack inside 'Missions' / 'Responsabilités'
+    headings that Docling classifies as 'experience'. Those skills must end
+    up in skill_terms — otherwise React/Vue/PHP get dropped on the floor."""
+    monkeypatch.setattr(structured.settings, "ner_enabled", False)
+    profile = structured.build_document_profile(
+        "irrelevant raw text",
+        kind="job",
+        enable_ner=False,
+        override_sections={
+            "experience": "Maîtriser React, Vue.js et TypeScript",
+            "certifications": "Connaissance de PostgreSQL et Redis exigée",
+        },
+    )
+    for s in ("React", "Vue.js", "TypeScript", "PostgreSQL", "Redis"):
+        assert s in profile.skill_terms, f"missing {s}"
+
+
 def test_accessibility_taxonomy_recognises_wcag_rgaa():
     from app.services.taxonomy import find_skills
     cases = [

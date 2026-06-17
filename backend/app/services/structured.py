@@ -1113,7 +1113,13 @@ def build_document_profile(
     elif kind == "job":
         # Some job offers put tech stack in the summary/intro ("I. Savoir") or in
         # uncategorised sections — include them so nothing is missed.
-        skill_sources.extend([summary_text, other_text])
+        # Job offers scatter tech stack across many sections: intro/summary
+        # ("I. Savoir"), uncategorised blocks, and — critically — "Missions" /
+        # "Responsabilités" headings that Docling classifies as "experience".
+        # Without these the parser misses React/Vue/PHP etc. that appear only
+        # inside requirement bullets. "certifications" sometimes carries
+        # "Compétences attendues" content for the same reason.
+        skill_sources.extend([summary_text, other_text, experience_text, certifications_text])
     from .taxonomy import partition_skills as _partition_skills
 
     raw_skill_terms = _extract_skill_terms("\n".join(part for part in skill_sources if part))
