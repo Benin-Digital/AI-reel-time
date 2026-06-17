@@ -48,7 +48,7 @@ services:
       - airealtime_esco:/srv/ai-realtime/esco
       # scoring_v2 GBM model artifacts (trained pickle persists here).
       - airealtime_models:/srv/ai-realtime/models
-      - airealtime_hf_cache:/app/.cache
+      - airealtime_hf_cache:/app/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
