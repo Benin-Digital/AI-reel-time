@@ -71,6 +71,13 @@ from .schemas import (
     FeedbackWeightHint,
     LearnedWeightsRead,
     WeightComputeResult,
+    ScoringV2TrainResult,
+    ScoringV2ScoreRequest,
+    ScoringV2ScoreResult,
+    ScoringV2Status,
+    EscoLookupRequest,
+    EscoMatch,
+    EscoLookupResult,
     SearchRequest,
     SearchHit,
     AuthLoginRequest,
@@ -1083,6 +1090,31 @@ def _list_candidate_files(folder: Path) -> list[Path]:
     ]
 
 
+# Process-local cache of Docling section maps, keyed by content_hash.
+# Bounded to avoid unbounded growth in long-running processes. Sections are
+# regenerated for free on next ingest if the cache is cold (Docling re-runs).
+_DOCLING_SECTIONS_CACHE: dict[str, dict[str, str]] = {}
+_DOCLING_SECTIONS_CACHE_MAX = 512
+
+
+def _stash_docling_sections(content_hash: str, sections: dict[str, str]) -> None:
+    if not content_hash or not sections:
+        return
+    if len(_DOCLING_SECTIONS_CACHE) >= _DOCLING_SECTIONS_CACHE_MAX:
+        # FIFO eviction: drop oldest entry
+        try:
+            _DOCLING_SECTIONS_CACHE.pop(next(iter(_DOCLING_SECTIONS_CACHE)))
+        except StopIteration:
+            pass
+    _DOCLING_SECTIONS_CACHE[content_hash] = sections
+
+
+def _peek_docling_sections(content_hash: str | None) -> dict[str, str] | None:
+    if not content_hash:
+        return None
+    return _DOCLING_SECTIONS_CACHE.get(content_hash)
+
+
 def _extract_and_persist(path: Path) -> ExtractedTextRead:
     if not path.exists():
         logger.warning("File not found for extraction: %s", path)
@@ -1101,11 +1133,26 @@ def _extract_and_persist(path: Path) -> ExtractedTextRead:
             select(ExtractedText).where(ExtractedText.file_path == str(path))
         )
         if existing and existing.content_hash == content_hash and existing.extraction_success:
-            return ExtractedTextRead.model_validate(existing)
+            settings_local = get_settings()
+            docling_active = getattr(settings_local, "conversion_use_docling", False)
+            already_docling = (existing.extraction_method or "").startswith("pdf-docling") or \
+                              (existing.extraction_method or "").startswith("docling")
+            # Re-extract if Docling is now active but the cached extraction didn't use it
+            if not docling_active or already_docling:
+                return ExtractedTextRead.model_validate(existing)
 
     try:
-        extracted = extract_text(path)
+        settings_local = get_settings()
         method = path.suffix.lower().lstrip(".") or "unknown"
+        if getattr(settings_local, "conversion_use_docling", False):
+            from .services.conversion import convert_document
+            converted = convert_document(path)
+            extracted = converted.full_text
+            method = f"pdf-{converted.backend}"
+            if content_hash and converted.sections:
+                _stash_docling_sections(content_hash, converted.sections)
+        else:
+            extracted = extract_text(path)
         success = bool(extracted and extracted.strip())
 
         return _upsert_extraction_result(
@@ -1138,12 +1185,14 @@ def _cleanup_removed_file(path: Path, role: str) -> None:
         if role == "cv":
             doc = session.scalar(select(CvDocument).where(CvDocument.path == str(path)))
             if doc:
+                session.execute(delete(CvEmbedding).where(CvEmbedding.cv_id == doc.id))
                 session.execute(delete(MatchResult).where(MatchResult.cv_id == doc.id))
                 session.delete(doc)
             session.execute(delete(ScoreResult).where(ScoreResult.cv_path == str(path)))
         else:
             doc = session.scalar(select(JobDocument).where(JobDocument.path == str(path)))
             if doc:
+                session.execute(delete(JobEmbedding).where(JobEmbedding.job_id == doc.id))
                 session.execute(delete(MatchResult).where(MatchResult.job_id == doc.id))
                 session.delete(doc)
             session.execute(delete(ScoreResult).where(ScoreResult.job_path == str(path)))
@@ -1163,7 +1212,12 @@ def _get_or_build_profile(session: Session, extraction: ExtractedText, kind: str
         pass
 
     # build and persist
-    profile = build_document_profile(extraction.extracted_text or "", kind=kind)
+    override_sections = _peek_docling_sections(extraction.content_hash)
+    profile = build_document_profile(
+        extraction.extracted_text or "",
+        kind=kind,
+        override_sections=override_sections,
+    )
     try:
         extraction.parsed_profile = asdict(profile)
         extraction.parsed_profile_hash = extraction.content_hash
@@ -1668,6 +1722,26 @@ def simulate_watcher_event(payload: WatcherSimulateRequest) -> dict[str, str]:
     }
 
 
+@app.post("/admin/reextract")
+def admin_reextract(request: Request) -> dict[str, object]:
+    """Re-trigger extraction for all files in CV and job dirs.
+
+    Use this after enabling Docling to reprocess documents that were previously
+    extracted with PyMuPDF. Only accessible to admins.
+    """
+    _require_admin(request)
+    cv_files = _list_candidate_files(Path(settings.watch_cv_dir))
+    job_files = _list_candidate_files(Path(settings.watch_job_dir))
+    queued: list[str] = []
+    for path in cv_files + job_files:
+        try:
+            _on_watch_event(WatchEvent(path=path, event_type="created", observed_at=time()))
+            queued.append(str(path))
+        except Exception as exc:
+            logger.warning("reextract: failed to queue %s: %s", path, exc)
+    return {"queued": len(queued), "files": queued}
+
+
 @app.post("/ingest")
 def ingest_file(
     folder: str = Form(...),
@@ -2069,6 +2143,10 @@ def ingest_delete(payload: IngestDeleteRequest) -> dict[str, str]:
         target_path.unlink()
         status = "deleted"
 
+    # Clean up DB synchronously so the frontend sees the change immediately,
+    # without waiting for the async Redis worker to process the event.
+    _cleanup_removed_file(target_path, folder)
+
     delete_event = WatchEvent(
         path=target_path,
         event_type="deleted",
@@ -2108,6 +2186,8 @@ def ingest_delete_batch(payload: IngestDeleteBatchRequest) -> dict[str, list[dic
         if target_path.exists():
             target_path.unlink()
             status = "deleted"
+
+        _cleanup_removed_file(target_path, folder)
 
         delete_event = WatchEvent(
             path=target_path,
@@ -3252,6 +3332,112 @@ def apply_weights(request: Request) -> LearnedWeightsRead:
             "contract":   row.w_contract,
         })
         return LearnedWeightsRead.model_validate(row)
+
+
+def _scoring_v2_model_path() -> Path | None:
+    raw = getattr(settings, "scoring_v2_model_path", "") or ""
+    if not raw:
+        return None
+    p = Path(raw)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+@app.post("/scoring-v2/train", response_model=ScoringV2TrainResult)
+def scoring_v2_train(request: Request) -> ScoringV2TrainResult:
+    _require_admin(request)
+    from .services.scoring_v2 import train_aggregator
+    from .services.embeddings import compute_domain_sim
+    model_path = _scoring_v2_model_path()
+    with SessionLocal() as session:
+        try:
+            agg = train_aggregator(session, model_path=model_path, domain_sim_fn=compute_domain_sim)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        except Exception as exc:
+            logger.exception("scoring_v2 training failed: %s", exc)
+            raise HTTPException(status_code=500, detail=f"training failed: {exc}")
+    return ScoringV2TrainResult(
+        sample_count=agg.sample_count,
+        auc=agg.auc,
+        feature_importance={k: round(v, 4) for k, v in agg.feature_importance.items()},
+        saved_to=str(model_path) if model_path else None,
+    )
+
+
+@app.post("/scoring-v2/score", response_model=ScoringV2ScoreResult)
+def scoring_v2_score(payload: ScoringV2ScoreRequest, request: Request) -> ScoringV2ScoreResult:
+    _require_auth(request)
+    from .services.scoring_v2 import score_pair, compute_signals, SIGNAL_KEYS
+    from .services.embeddings import compute_domain_sim
+    with SessionLocal() as session:
+        cv_ext = session.scalar(select(ExtractedText).where(ExtractedText.file_path == payload.cv_path))
+        job_ext = session.scalar(select(ExtractedText).where(ExtractedText.file_path == payload.job_path))
+        if not cv_ext or not job_ext:
+            raise HTTPException(status_code=404, detail="cv_path or job_path not found in extractions")
+        cv_profile = cv_ext.parsed_profile or {}
+        job_profile = job_ext.parsed_profile or {}
+        # Pull cached semantic score from MatchResult if available
+        match = session.scalar(
+            select(MatchResult).where(
+                MatchResult.cv_path == payload.cv_path,
+                MatchResult.job_path == payload.job_path,
+            )
+        )
+        semantic_sim = float(match.score_semantic) if (match and match.score_semantic is not None) else 0.0
+
+    domain_sim = compute_domain_sim(cv_profile, job_profile)
+    result = score_pair(
+        cv_profile=cv_profile,
+        job_profile=job_profile,
+        semantic_sim=semantic_sim,
+        domain_sim=domain_sim,
+        model_path=_scoring_v2_model_path(),
+    )
+    return ScoringV2ScoreResult(
+        probability=result["probability"],
+        signals={k: round(float(result["signals"].get(k, 0.0)), 4) for k in SIGNAL_KEYS},
+        model_available=result["model_available"],
+    )
+
+
+@app.get("/scoring-v2/status", response_model=ScoringV2Status)
+def scoring_v2_status(request: Request) -> ScoringV2Status:
+    _require_auth(request)
+    from .services.scoring_v2 import get_aggregator
+    model_path = _scoring_v2_model_path()
+    agg = get_aggregator(model_path)
+    if agg is None:
+        return ScoringV2Status(
+            model_available=False,
+            model_path=str(model_path) if model_path else None,
+        )
+    return ScoringV2Status(
+        model_available=True,
+        model_path=str(model_path) if model_path else None,
+        sample_count=agg.sample_count,
+        auc=agg.auc,
+        feature_importance={k: round(v, 4) for k, v in agg.feature_importance.items()},
+    )
+
+
+@app.post("/esco/lookup", response_model=EscoLookupResult)
+def esco_lookup(payload: EscoLookupRequest, request: Request) -> EscoLookupResult:
+    _require_auth(request)
+    from .services.esco_taxonomy import find_skills_esco, get_esco_index
+    if not payload.text.strip():
+        raise HTTPException(status_code=400, detail="text required")
+    idx = get_esco_index()
+    if idx is None:
+        return EscoLookupResult(matches=[], available=False)
+    hits = find_skills_esco(payload.text, top_k=max(1, min(20, payload.top_k)))
+    return EscoLookupResult(
+        matches=[
+            EscoMatch(uri=s.uri, preferred_label=s.preferred_label, score=round(score, 4))
+            for s, score in hits
+        ],
+        available=True,
+    )
 
 
 @app.post("/search", response_model=list[SearchHit])
