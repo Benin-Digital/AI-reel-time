@@ -19,4 +19,3 @@ def test_extract_skill_terms_fuzzy(monkeypatch):
     # 'Pyhton' fuzzy matches 'python'
     assert "python" in terms
     assert "postgresql" in terms
-*** End Patch
