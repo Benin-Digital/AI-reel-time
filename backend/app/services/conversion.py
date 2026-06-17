@@ -66,13 +66,11 @@ def _convert_with_docling(path: Path) -> ConvertedDocument:
     import os
     from docling.document_converter import DocumentConverter
 
-    # If DOCLING_ARTIFACTS_PATH points to a non-existent directory (e.g. because
-    # the Docker volume shadowed the baked-in models), unset it so Docling
-    # downloads models to its default HuggingFace cache instead of crashing.
-    artifacts_env = os.environ.get("DOCLING_ARTIFACTS_PATH")
-    if artifacts_env and not Path(artifacts_env).exists():
-        os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
-        logger.info("DOCLING_ARTIFACTS_PATH %s not found; letting Docling download models", artifacts_env)
+    # Always unset DOCLING_ARTIFACTS_PATH: the Docker volume mounts an empty
+    # directory at /app/.cache/docling which shadows the baked-in models.
+    # Without this env var, Docling downloads models to its default HuggingFace
+    # cache (/app/.cache/huggingface) which IS persisted in the named volume.
+    os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
 
     converter = DocumentConverter()
     result = converter.convert(str(path))
