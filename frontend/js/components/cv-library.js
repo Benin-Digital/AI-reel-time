@@ -196,12 +196,36 @@ async function _handleUpload(files) {
       fd.append("upload", file, file.name);
       fd.append("filename", file.name);
       await safeFetch("/ingest", { method: "POST", body: fd });
-      setBanner(statusEl, `${file.name} importé avec succès`, "success");
+      setBanner(statusEl, `${file.name} — analyse en cours…`, "info");
+      await _load();
+      _pollUntilReady(statusEl, file.name);
     } catch (err) {
       setBanner(statusEl, `${file.name} — ${err.message}`, "error");
     }
   }
-  _load();
+}
+
+async function _pollUntilReady(statusEl, filename, maxWaitMs = 300000) {
+  const interval = 3000;
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, interval));
+    await _load();
+    const docs = (await safeFetch("/cv-documents").catch(() => []));
+    const basename = filename.replace(/\\/g, "/").split("/").pop();
+    const doc = docs.find((d) => (d.path || "").endsWith(basename));
+    if (!doc) continue;
+    if (doc.status === "ready") {
+      setBanner(statusEl, `${filename} prêt`, "success");
+      return;
+    }
+    if (doc.status === "failed") {
+      setBanner(statusEl, `${filename} — échec de l'analyse`, "error");
+      return;
+    }
+    setBanner(statusEl, `${filename} — analyse en cours…`, "info");
+  }
+  setBanner(statusEl, `${filename} — délai d'attente dépassé`, "error");
 }
 
 async function _handleDelete(filename) {

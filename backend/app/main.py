@@ -1782,6 +1782,19 @@ def ingest_file(
         if temp_path.exists():
             temp_path.unlink()
         raise
+
+    # Create a pending document record immediately so the frontend shows it
+    # without waiting for Docling/embedding processing to complete.
+    with SessionLocal() as session:
+        if folder == "cv":
+            if not session.scalar(select(CvDocument).where(CvDocument.path == str(target_path))):
+                session.add(CvDocument(path=str(target_path), status="pending"))
+                session.commit()
+        else:
+            if not session.scalar(select(JobDocument).where(JobDocument.path == str(target_path))):
+                session.add(JobDocument(path=str(target_path), status="pending"))
+                session.commit()
+
     _on_watch_event(
         WatchEvent(
             path=target_path,
