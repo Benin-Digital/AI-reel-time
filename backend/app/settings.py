@@ -95,6 +95,25 @@ class Settings(BaseSettings):
     # Cross-encoder model for semantic matching (matcher.py)
     crossencoder_model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     crossencoder_enabled: bool = True
+    # v2 architecture (non-LLM) — all layers ON by default. Each layer falls
+    # back gracefully (Docling→PyMuPDF, CamemBERT→spaCy, ESCO→noop, GBM→null)
+    # so the API stays up even if a model is missing.
+    # Layer 1: Docling structured PDF conversion.
+    conversion_use_docling: bool = True
+    # Layer 2: CamemBERT NER (Transformers). Override path via CAMEMBERT_NER_MODEL
+    # once the fine-tuned checkpoint is rsync'd into the models volume.
+    ner_backend: str = "camembert"
+    camembert_ner_model: str = "Jean-Baptiste/camembert-ner"
+    # Layer 3: ESCO taxonomy. Default points to the Docker volume mount.
+    esco_dir: str = "/srv/ai-realtime/esco"
+    esco_model_name: str = "intfloat/multilingual-e5-base"
+    # When true, build_document_profile populates StructuredDocument.esco_skill_uris
+    # by mapping each extracted skill term to its ESCO concept (top-1, score >= 0.55).
+    esco_enrich_skills: bool = True
+    esco_enrich_max_uris: int = 30
+    # Layer 4: scoring_v2 GBM aggregator. Path points at the models volume so the
+    # trained pickle survives container rebuilds.
+    scoring_v2_model_path: str = "/srv/ai-realtime/models/scoring_v2_gbm.pkl"
 
     model_config = SettingsConfigDict(env_prefix="AI_REALTIME_", extra="ignore")
 

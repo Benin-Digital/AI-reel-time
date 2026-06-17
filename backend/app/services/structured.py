@@ -360,6 +360,9 @@ class StructuredDocument:
     skill_terms: list[str] = field(default_factory=list)
     required_skill_terms: list[str] = field(default_factory=list)
     nice_skill_terms: list[str] = field(default_factory=list)
+    # POC v2: ESCO-normalized skill identifiers (stable across CV phrasings).
+    # Populated only when AI_REALTIME_ESCO_ENRICH_SKILLS=true.
+    esco_skill_uris: list[str] = field(default_factory=list)
     language_terms: list[str] = field(default_factory=list)
     contract_type: str | None = None
     experience_years: int = 0
@@ -625,6 +628,17 @@ def _extract_ner_entities(text: str) -> dict[str, object]:
             "location_terms": [],
             "date_terms": [],
         }
+
+    # POC v2: route to CamemBERT when configured. Falls back silently to spaCy
+    # if the model can't be loaded.
+    if (getattr(settings, "ner_backend", "spacy") or "spacy").lower() == "camembert":
+        try:
+            from .ner_camembert import extract_entities as _camembert_entities
+            result = _camembert_entities(text)
+            if result.get("person_name") or result.get("organization_terms") or result.get("location_terms"):
+                return result
+        except Exception as exc:
+            logger.warning("CamemBERT NER failed, falling back to spaCy: %s", exc)
 
     # choose model: try per-document language detection and map to model
     model_name = None
@@ -930,7 +944,37 @@ def _extract_name_rule_based(lines: list[str]) -> str | None:
     return None
 
 
-def build_document_profile(text: str, kind: str | None = None, enable_ner: bool | None = None) -> StructuredDocument:
+def _esco_enrich(skill_terms: list[str]) -> list[str]:
+    """Map skill terms to ESCO concept URIs (top-1 per term). Safe no-op if ESCO is offline."""
+    if not skill_terms:
+        return []
+    try:
+        from .esco_taxonomy import find_skills_esco
+    except Exception:
+        return []
+    max_uris = int(getattr(settings, "esco_enrich_max_uris", 30) or 30)
+    seen: set[str] = set()
+    uris: list[str] = []
+    for term in skill_terms:
+        try:
+            hits = find_skills_esco(term, top_k=1)
+        except Exception:
+            continue
+        for skill, _score in hits:
+            if skill.uri and skill.uri not in seen:
+                seen.add(skill.uri)
+                uris.append(skill.uri)
+                if len(uris) >= max_uris:
+                    return uris
+    return uris
+
+
+def build_document_profile(
+    text: str,
+    kind: str | None = None,
+    enable_ner: bool | None = None,
+    override_sections: dict[str, str] | None = None,
+) -> StructuredDocument:
     cleaned_text = clean_document_text(text)
     lines = _line_chunks(cleaned_text)
     sections: dict[str, list[str]] = defaultdict(list)
@@ -938,30 +982,42 @@ def build_document_profile(text: str, kind: str | None = None, enable_ner: bool 
 
     detected_headings: list[tuple[int, str, str, str]] = []  # (index, line, assigned_section, method)
 
-    for idx, line in enumerate(lines):
-        heading, payload = _split_heading_payload(line)
-        if heading:
-            current_section = heading
-            detected_headings.append((idx, line, current_section, "split"))
-            if payload:
-                sections[current_section].append(payload)
-            continue
-
-        # check if the line looks like a heading (using classifier)
-        next_line = lines[idx + 1] if idx + 1 < len(lines) else None
-        if _is_heading(line, next_line=next_line):
-            matched = _match_heading(fold_text(line))
-            if matched:
-                current_section = matched
-                detected_headings.append((idx, line, current_section, "classifier_matched"))
+    if override_sections:
+        # Trust upstream (Docling) section boundaries — skip heuristic heading detection.
+        # Unknown section names land in "other" so downstream lookups still see the content.
+        _known = {"summary", "skills", "experience", "education", "certifications",
+                  "languages", "contract", "location", "job_required", "job_nice", "strength"}
+        for name, content in override_sections.items():
+            if not content or not content.strip():
                 continue
-            guessed = _guess_section_from_heading(line)
-            if guessed:
-                current_section = guessed
-                detected_headings.append((idx, line, current_section, "classifier_guessed"))
+            key = name if name in _known else "other"
+            sections[key].append(content.strip())
+            detected_headings.append((-1, name, key, "override"))
+    else:
+        for idx, line in enumerate(lines):
+            heading, payload = _split_heading_payload(line)
+            if heading:
+                current_section = heading
+                detected_headings.append((idx, line, current_section, "split"))
+                if payload:
+                    sections[current_section].append(payload)
                 continue
 
-        sections[current_section].append(line)
+            # check if the line looks like a heading (using classifier)
+            next_line = lines[idx + 1] if idx + 1 < len(lines) else None
+            if _is_heading(line, next_line=next_line):
+                matched = _match_heading(fold_text(line))
+                if matched:
+                    current_section = matched
+                    detected_headings.append((idx, line, current_section, "classifier_matched"))
+                    continue
+                guessed = _guess_section_from_heading(line)
+                if guessed:
+                    current_section = guessed
+                    detected_headings.append((idx, line, current_section, "classifier_guessed"))
+                    continue
+
+            sections[current_section].append(line)
 
     section_texts = {name: "\n".join(values).strip() for name, values in sections.items() if values}
 
@@ -999,6 +1055,7 @@ def build_document_profile(text: str, kind: str | None = None, enable_ner: bool 
     skill_terms = _extract_skill_terms("\n".join(part for part in skill_sources if part))
     required_skill_terms = _extract_skill_terms(job_required_text)
     nice_skill_terms = _extract_skill_terms(job_nice_text)
+    esco_skill_uris: list[str] = _esco_enrich(skill_terms) if getattr(settings, "esco_enrich_skills", False) else []
     language_terms = _detect_languages("\n".join(part for part in (languages_text, cleaned_text) if part))
     if contract_text:
         contract_type = _detect_contract_type(contract_text)
@@ -1093,6 +1150,7 @@ def build_document_profile(text: str, kind: str | None = None, enable_ner: bool 
         skill_terms=skill_terms,
         required_skill_terms=required_skill_terms,
         nice_skill_terms=nice_skill_terms,
+        esco_skill_uris=esco_skill_uris,
         language_terms=language_terms,
         contract_type=contract_type,
         experience_years=experience_years,
