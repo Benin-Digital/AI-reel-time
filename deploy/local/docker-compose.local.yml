@@ -15,6 +15,7 @@ services:
       AI_REALTIME_DATABASE_AUTO_CREATE: "true"
       AI_REALTIME_CORS_ALLOW_ORIGINS: "*"
       AI_REALTIME_JWT_SECRET_KEY: "local-dev-secret-key-change-in-production"
+      DOCLING_ARTIFACTS_PATH: ""
     ports:
       - "8000:8000"
     volumes:
