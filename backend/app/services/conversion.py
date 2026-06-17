@@ -63,7 +63,16 @@ def convert_document(path: Path) -> ConvertedDocument:
 
 def _convert_with_docling(path: Path) -> ConvertedDocument:
     """Use Docling for layout-aware extraction. Requires `pip install docling`."""
+    import os
     from docling.document_converter import DocumentConverter
+
+    # If DOCLING_ARTIFACTS_PATH points to a non-existent directory (e.g. because
+    # the Docker volume shadowed the baked-in models), unset it so Docling
+    # downloads models to its default HuggingFace cache instead of crashing.
+    artifacts_env = os.environ.get("DOCLING_ARTIFACTS_PATH")
+    if artifacts_env and not Path(artifacts_env).exists():
+        os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
+        logger.info("DOCLING_ARTIFACTS_PATH %s not found; letting Docling download models", artifacts_env)
 
     converter = DocumentConverter()
     result = converter.convert(str(path))
