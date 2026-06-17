@@ -64,15 +64,23 @@ def convert_document(path: Path) -> ConvertedDocument:
 def _convert_with_docling(path: Path) -> ConvertedDocument:
     """Use Docling for layout-aware extraction. Requires `pip install docling`."""
     import os
-    from docling.document_converter import DocumentConverter
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
 
     # Always unset DOCLING_ARTIFACTS_PATH: the Docker volume mounts an empty
     # directory at /app/.cache/docling which shadows the baked-in models.
-    # Without this env var, Docling downloads models to its default HuggingFace
-    # cache (/app/.cache/huggingface) which IS persisted in the named volume.
     os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
 
-    converter = DocumentConverter()
+    # CVs and job offers are text-based PDFs — OCR is unnecessary and pulls in
+    # heavy model dependencies (RapidOCR, EasyOCR) that are not installed.
+    pipeline_options = PdfPipelineOptions(do_ocr=False)
+
+    converter = DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
+        }
+    )
     result = converter.convert(str(path))
     doc = result.document
 
