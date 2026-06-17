@@ -361,6 +361,7 @@ class StructuredDocument:
     required_skill_terms: list[str] = field(default_factory=list)
     nice_skill_terms: list[str] = field(default_factory=list)
     soft_skill_terms: list[str] = field(default_factory=list)
+    job_title: str | None = None
     # POC v2: ESCO-normalized skill identifiers (stable across CV phrasings).
     # Populated only when AI_REALTIME_ESCO_ENRICH_SKILLS=true.
     esco_skill_uris: list[str] = field(default_factory=list)
@@ -970,6 +971,58 @@ def _esco_enrich(skill_terms: list[str]) -> list[str]:
     return uris
 
 
+# Job-title heuristic constants. Action verbs appearing at the start of a line
+# in a job offer almost always introduce a requirement bullet ("Respecter WCAG/RGAA"),
+# never a job title. Title keywords mark a line as likely-title.
+_JOB_CONSTRAINT_VERBS = frozenset({
+    "respecter", "maitriser", "comprendre", "garantir", "assurer", "effectuer",
+    "participer", "realiser", "concevoir", "creer", "mettre", "gerer", "suivre",
+    "coordonner", "piloter", "animer", "definir", "optimiser", "evoluer",
+    "implementer", "deployer", "developper", "ecrire", "rediger", "tester",
+    "valider", "documenter", "former", "accompagner", "contribuer", "collaborer",
+    "savoir", "etre",
+})
+_JOB_TITLE_KEYWORDS = frozenset({
+    "developpeur", "developpeuse", "developer", "ingenieur", "ingenieure",
+    "engineer", "architecte", "architect", "manager", "lead", "consultant",
+    "consultante", "analyste", "analyst", "designer", "chef", "directeur",
+    "directrice", "responsable", "expert", "experte", "technicien",
+    "technicienne", "administrateur", "administratrice", "scrum", "product",
+    "owner", "devops", "sre", "fullstack", "frontend", "backend", "data",
+    "qa", "tester", "stagiaire", "alternant", "alternante", "apprenti",
+    "apprentie", "ux", "ui",
+})
+
+
+def _extract_job_title(text: str, lines: list[str]) -> str | None:
+    """Heuristic job-title extraction from the head of a job offer.
+
+    Scans the first ~25 non-empty lines, rejects requirement-style lines
+    (start with a constraint verb) and returns the first short line that
+    contains a known job-title keyword.
+    """
+    candidates = [ln.strip() for ln in lines[:25] if ln and ln.strip()]
+    for raw in candidates:
+        line = raw.strip(" .,:;-•·\u2022\u25e6")
+        if not line:
+            continue
+        words = line.split()
+        if not (2 <= len(words) <= 10):
+            continue
+        if _NAME_CONTACT_RE.search(line):
+            continue
+        if _NAME_YEAR_RE.search(line):
+            continue
+        first_word = fold_text(words[0])
+        if first_word in _JOB_CONSTRAINT_VERBS:
+            continue
+        folded_line = fold_text(line)
+        tokens = set(re.findall(r"[a-z]+", folded_line))
+        if tokens & _JOB_TITLE_KEYWORDS:
+            return line
+    return None
+
+
 def build_document_profile(
     text: str,
     kind: str | None = None,
@@ -983,6 +1036,8 @@ def build_document_profile(
 
     detected_headings: list[tuple[int, str, str, str]] = []  # (index, line, assigned_section, method)
 
+    doc_title_override: str | None = None
+
     if override_sections:
         # Trust upstream (Docling) section boundaries — skip heuristic heading detection.
         # Unknown section names land in "other" so downstream lookups still see the content.
@@ -990,6 +1045,12 @@ def build_document_profile(
                   "languages", "contract", "location", "job_required", "job_nice", "strength"}
         for name, content in override_sections.items():
             if not content or not content.strip():
+                continue
+            # Reserved key "_doc_title" carries the first H1/H2 from Docling and is not
+            # appended to any section bucket.
+            if name == "_doc_title":
+                if content and content.strip():
+                    doc_title_override = content.strip()
                 continue
             key = name if name in _known else "other"
             sections[key].append(content.strip())
@@ -1109,6 +1170,14 @@ def build_document_profile(
     if kind == "job" and not contract_type:
         contract_type = _detect_contract_type(cleaned_text)
 
+    # Job title: prefer Docling's first heading; fall back to heuristic line scan.
+    job_title: str | None = None
+    if kind == "job":
+        if doc_title_override:
+            job_title = doc_title_override
+        else:
+            job_title = _extract_job_title(cleaned_text, lines)
+
     embedding_chunks = [
         chunk
         for chunk in [
@@ -1158,6 +1227,7 @@ def build_document_profile(
         required_skill_terms=required_skill_terms,
         nice_skill_terms=nice_skill_terms,
         soft_skill_terms=soft_skill_terms,
+        job_title=job_title,
         esco_skill_uris=esco_skill_uris,
         language_terms=language_terms,
         contract_type=contract_type,
@@ -1241,7 +1311,9 @@ def normalize_job_offer_from_parsed(doc: StructuredDocument, source_path: str | 
     """
     from pathlib import Path
 
-    title = doc.summary_text.splitlines()[0].strip() if doc.summary_text else (Path(source_path).stem if source_path else "Offre")
+    title = doc.job_title or (
+        doc.summary_text.splitlines()[0].strip() if doc.summary_text else (Path(source_path).stem if source_path else "Offre")
+    )
     # category: try to extract from first line of summary or fallback
     category = "Non renseigné"
     if doc.sections.get("summary"):

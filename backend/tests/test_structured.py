@@ -21,6 +21,42 @@ def test_extract_skill_terms_fuzzy(monkeypatch):
     assert "postgresql" in terms
 
 
+def test_job_title_from_docling_heading(monkeypatch):
+    monkeypatch.setattr(structured.settings, "ner_enabled", False)
+    profile = structured.build_document_profile(
+        "Profil recherché\nRespecter WCAG/RGAA\nMaîtriser React",
+        kind="job",
+        enable_ner=False,
+        override_sections={
+            "_doc_title": "Développeur Full-Stack",
+            "job_required": "Respecter WCAG/RGAA\nMaîtriser React",
+        },
+    )
+    assert profile.job_title == "Développeur Full-Stack"
+
+
+def test_job_title_heuristic_skips_constraint_verbs(monkeypatch):
+    monkeypatch.setattr(structured.settings, "ner_enabled", False)
+    text = (
+        "Respecter WCAG/RGAA\n"
+        "Maîtriser les frameworks modernes\n"
+        "Ingénieur DevOps Senior\n"
+        "Lieu : Paris\n"
+    )
+    profile = structured.build_document_profile(text, kind="job", enable_ner=False)
+    assert profile.job_title == "Ingénieur DevOps Senior"
+
+
+def test_job_title_not_set_for_cv(monkeypatch):
+    monkeypatch.setattr(structured.settings, "ner_enabled", False)
+    profile = structured.build_document_profile(
+        "Développeur Full-Stack\nThierry Reynès",
+        kind="cv",
+        enable_ner=False,
+    )
+    assert profile.job_title is None
+
+
 def test_soft_skills_partitioned_out_of_skill_terms(monkeypatch):
     monkeypatch.setattr(structured.settings, "scoring_skill_keywords", "")
     monkeypatch.setattr(structured.settings, "ner_enabled", False)

@@ -1,4 +1,5 @@
 """Smoke tests for the POC v2 conversion/override_sections path."""
+from app.services import structured
 from app.services.conversion import ConvertedDocument, _classify_section, _split_markdown_sections, _strip_docling_artifacts
 
 
@@ -40,3 +41,53 @@ def test_converted_document_dataclass_defaults():
     assert doc.sections == {}
     assert doc.tables == []
     assert doc.backend == "fallback"
+
+
+def test_split_markdown_sections_captures_doc_title():
+    md = "# Développeur Full-Stack\n\n## Profil recherché\nRespecter WCAG"
+    sections = _split_markdown_sections(md)
+    assert sections.get("_doc_title") == "Développeur Full-Stack"
+    assert "job_required" in sections
+
+
+def test_split_markdown_sections_ignores_section_alias_as_title():
+    md = "# Compétences techniques\nPython\n\n## Expérience\nACME"
+    sections = _split_markdown_sections(md)
+    # "Compétences techniques" is a known alias → skills, not _doc_title
+    assert "_doc_title" not in sections
+    assert "skills" in sections
+
+
+def test_override_sections_short_circuits_heading_detection():
+    # Raw text deliberately has NO section headings — the heuristic would dump
+    # everything into "other". With override_sections, we feed the boundaries
+    # in directly and expect them to land in the right buckets.
+    raw_text = "Python Docker FastAPI - some unstructured paragraph"
+    override = {
+        "summary": "Senior backend engineer.",
+        "skills": "Python, Docker, FastAPI",
+        "experience": "5 ans chez ACME.",
+    }
+    profile = structured.build_document_profile(
+        raw_text,
+        kind="cv",
+        enable_ner=False,
+        override_sections=override,
+    )
+    # summary, skills, experience should be populated from the override
+    assert profile.summary_text and "Senior backend engineer" in profile.summary_text
+    assert "Python" in (profile.skills_text or "") or "Docker" in (profile.skills_text or "")
+    assert "ACME" in (profile.experience_text or "")
+
+
+def test_override_sections_unknown_key_lands_in_other():
+    profile = structured.build_document_profile(
+        "irrelevant",
+        kind="cv",
+        enable_ner=False,
+        override_sections={"random_bucket": "this is mystery content"},
+    )
+    # Unknown section name should not crash the parser; content should land in "other"
+    # We test indirectly via the absence of "this is mystery" from summary/skills/experience.
+    for field in ("summary_text", "skills_text", "experience_text"):
+        assert "mystery" not in (getattr(profile, field, "") or "")

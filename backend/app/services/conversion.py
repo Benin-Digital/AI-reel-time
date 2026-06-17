@@ -139,10 +139,16 @@ def _classify_section(title: str) -> str:
 
 
 def _split_markdown_sections(md: str) -> dict[str, str]:
-    """Split Markdown by # / ## / ### headers into canonical sections."""
+    """Split Markdown by # / ## / ### headers into canonical sections.
+
+    Also captures the first H1/H2 heading as a reserved "_doc_title" key so
+    downstream consumers can recover the document title (e.g. the job offer
+    title that would otherwise be classified as "other" and lost).
+    """
     sections: dict[str, list[str]] = {}
     current = "header"
     buffer: list[str] = []
+    doc_title: str | None = None
     for line in md.splitlines():
         s = line.strip()
         if s.startswith("#"):
@@ -150,12 +156,21 @@ def _split_markdown_sections(md: str) -> dict[str, str]:
                 sections.setdefault(current, []).append("\n".join(buffer).strip())
                 buffer = []
             title = s.lstrip("#").strip()
-            current = _classify_section(title)
+            level = len(s) - len(s.lstrip("#"))
+            classified = _classify_section(title)
+            # Only the first H1/H2 that is NOT itself a known section header
+            # ("Profil recherché", "Compétences", …) qualifies as document title.
+            if doc_title is None and level <= 2 and title and classified == "other":
+                doc_title = title
+            current = classified
         else:
             buffer.append(line)
     if buffer:
         sections.setdefault(current, []).append("\n".join(buffer).strip())
-    return {k: "\n\n".join(v).strip() for k, v in sections.items() if any(x.strip() for x in v)}
+    result = {k: "\n\n".join(v).strip() for k, v in sections.items() if any(x.strip() for x in v)}
+    if doc_title:
+        result["_doc_title"] = doc_title
+    return result
 
 
 def _extract_tables(doc: Any) -> list[list[list[str]]]:
