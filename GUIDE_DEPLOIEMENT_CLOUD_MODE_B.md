@@ -74,21 +74,11 @@ graph TD
 ### 1.2 Flux de déploiement manuel
 
 ```mermaid
-flowchart TD
-    DEV([Opérateur\nmachine locale])
-    PULL["git pull\nmise à jour du code local"]
-    RSYNC["rsync → VPS\nenvoi du code sur le serveur"]
-    SSH["SSH vers VPS OVH"]
-    S1["1 — docker compose up --build\n⏱ 20-40 min première fois"]
-    S2["2 — alembic upgrade head"]
-    S3["3 — curl /health"]
-    OK(["✅ Déploiement réussi"])
-    FAIL(["❌ Erreur\nvérifier les logs docker"])
-
-    DEV --> PULL --> RSYNC --> SSH
-    SSH --> S1 --> S2 --> S3
-    S3 -- "status: ok" --> OK
-    S3 -- "timeout / erreur" --> FAIL
+flowchart LR
+    DEV([local]) --> SYNC[rsync → VPS]
+    SYNC --> BUILD[SSH\nbuild · migrate]
+    BUILD -->|health ok| OK([production])
+    BUILD -->|health KO| ERR([rollback])
 ```
 
 ### 1.3 Ports et pare-feu

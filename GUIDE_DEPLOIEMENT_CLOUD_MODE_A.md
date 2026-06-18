@@ -76,25 +76,12 @@ graph TD
 ### 1.2 Flux CI/CD
 
 ```mermaid
-flowchart TD
-    DEV([Développeur])
-    PUSH[git push → main]
-    CI["ci.yml\nruff + pytest"]
-    FAIL_CI(["❌ CI échouée\nbloque le déploiement"])
-    DEPLOY["deploy.yml\nSSH vers VPS OVH"]
-    S1["1 — git pull"]
-    S2["2 — docker compose up --build\n⏱ 20-40 min première fois"]
-    S3["3 — alembic upgrade head"]
-    S4["4 — curl /health"]
-    OK(["✅ Déploiement réussi"])
-    FAIL_DEPLOY(["❌ Déploiement échoué\nlogs docker affichés"])
-
-    DEV --> PUSH --> CI
-    CI -- "KO" --> FAIL_CI
-    CI -- "OK" --> DEPLOY
-    DEPLOY --> S1 --> S2 --> S3 --> S4
-    S4 -- "status: ok" --> OK
-    S4 -- "timeout / erreur" --> FAIL_DEPLOY
+flowchart LR
+    PUSH([push main]) --> CI[CI\nruff · pytest]
+    CI -->|OK| DEPLOY[SSH · git pull\nbuild · migrate]
+    CI -->|KO| STOP([bloqué])
+    DEPLOY -->|health ok| OK([production])
+    DEPLOY -->|health KO| ERR([rollback])
 ```
 
 ### 1.3 Ports et pare-feu
