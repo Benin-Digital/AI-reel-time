@@ -51,9 +51,9 @@ graph TD
     BROWSER -->|HTTPS| TK
 
     subgraph STORAGE[Volumes persistants]
-        SCV[/srv/ai-realtime/storage/cv]
-        SJOB[/srv/ai-realtime/storage/job]
-        SARC[/srv/ai-realtime/storage/archive]
+        SCV["/srv/ai-realtime/storage/cv"]
+        SJOB["/srv/ai-realtime/storage/job"]
+        SARC["/srv/ai-realtime/storage/archive"]
         VPG[(postgres_data)]
         VRD[(redis_data)]
         VESCO[(airealtime_esco)]
