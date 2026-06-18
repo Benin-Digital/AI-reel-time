@@ -1,8 +1,8 @@
-# Guide de déploiement Cloud — Mode A : CI/CD via GitHub Actions
+# Guide de déploiement Cloud — Mode A : CI/CD via pipeline (GitHub Actions ou GitLab CI)
 
 **Projet** : AI Real-Time — Plateforme de matching CV ↔ Offres d'emploi  
 **Cible** : VPS OVH, Ubuntu 24.04  
-**Mode** : Pipeline automatisé (GitHub Actions → SSH vers serveur → build Docker in situ)  
+**Mode** : Pipeline automatisé (CI/CD → SSH vers serveur → build Docker in situ)  
 **Audience** : Développeur junior / stagiaire  
 **Dernière mise à jour** : Juin 2026
 
@@ -15,8 +15,10 @@
 3. [Variables à collecter avant de commencer](#3-variables-à-collecter-avant-de-commencer)
 4. [Catalogue complet des variables d'environnement](#4-catalogue-complet-des-variables-denvironnement)
 5. [Préparation du serveur OVH](#5-préparation-du-serveur-ovh)
-6. [Préparation du dépôt GitHub](#6-préparation-du-dépôt-github)
-7. [Configuration des workflows GitHub Actions](#7-configuration-des-workflows-github-actions)
+6. [Préparation du dépôt (GitHub ou GitLab)](#6-préparation-du-dépôt-github-ou-gitlab)
+7. [Configuration du pipeline CI/CD](#7-configuration-du-pipeline-cicd)
+   - [7.1 Option A — GitHub Actions](#71-option-a--github-actions)
+   - [7.2 Option B — GitLab CI/CD](#72-option-b--gitlab-cicd)
 8. [Premier déploiement](#8-premier-déploiement)
 9. [Vérification go-live](#9-vérification-go-live)
 10. [Sauvegardes et restauration](#10-sauvegardes-et-restauration)
@@ -235,36 +237,43 @@ Dans l'espace client OVH → section "Pare-feu réseau" ou "Security Groups", s'
 
 ---
 
-## 6. Préparation du dépôt GitHub
+## 6. Préparation du dépôt (GitHub ou GitLab)
 
-### 6.1 Secrets GitHub à configurer
+### 6.1 Secrets à configurer — GitHub Actions
 
 Dans GitHub → Settings → Secrets and variables → Actions → New repository secret :
 
 | Nom du secret | Valeur |
-|---------------|--------|
+|---|---|
 | `SSH_PRIVATE_KEY` | Contenu de `~/.ssh/id_ed25519_airealtime_deploy` (clé privée complète) |
 | `SSH_HOST` | IP publique du VPS (ex : `51.178.42.10`) |
 | `SSH_USER` | Nom de l'utilisateur sur le serveur (ex : `deploy`) |
 | `SSH_PORT` | `22` (ou le port SSH personnalisé si modifié) |
 
-### 6.2 Variables GitHub (optionnel)
+### 6.2 Secrets à configurer — GitLab CI/CD
 
-Dans GitHub → Settings → Secrets and variables → Actions → Variables :
+Dans GitLab → Settings → CI/CD → Variables → Add variable (cocher **Protected** + **Masked**) :
 
-| Nom | Valeur suggérée |
-|-----|-----------------|
-| `DEPLOY_PATH` | `/srv/ai-realtime/app` |
-| `COMPOSE_FILE` | `deploy/cloud/docker-compose.cloud.yml` |
-| `ENV_FILE` | `deploy/cloud/.env.cloud` |
+| Nom de la variable | Valeur |
+|---|---|
+| `SSH_PRIVATE_KEY` | Contenu de `~/.ssh/id_ed25519_airealtime_deploy` (clé privée complète) |
+| `SSH_HOST` | IP publique du VPS (ex : `51.178.42.10`) |
+| `SSH_USER` | Nom de l'utilisateur sur le serveur (ex : `deploy`) |
+| `SSH_PORT` | `22` (ou le port SSH personnalisé si modifié) |
+
+> Les noms de variables sont identiques entre GitHub et GitLab — seul l'endroit où vous les saisissez change.
 
 ---
 
-## 7. Configuration des workflows GitHub Actions
+## 7. Configuration du pipeline CI/CD
+
+> Choisissez l'option qui correspond à votre hébergeur de code. Les deux options aboutissent au même résultat : un push sur `main` déclenche les tests puis déploie sur le serveur via SSH.
+
+### 7.1 Option A — GitHub Actions
 
 Créer le répertoire `.github/workflows/` à la racine du dépôt, puis créer les deux fichiers suivants.
 
-### 7.1 Workflow CI — `ci.yml`
+#### Workflow CI — `.github/workflows/ci.yml`
 
 ```yaml
 # .github/workflows/ci.yml
@@ -344,7 +353,7 @@ jobs:
           pytest tests -v --tb=short
 ```
 
-### 7.2 Workflow déploiement — `deploy.yml`
+#### Workflow déploiement — `.github/workflows/deploy.yml`
 
 > **Important** : L'image Docker (~2-3 Go avec les modèles ML) est construite **sur le serveur**, pas dans GitHub Actions. Le workflow se contente d'ouvrir une session SSH et d'exécuter les commandes de build directement sur la machine de production. La première exécution peut prendre 20 à 40 minutes.
 
@@ -427,7 +436,7 @@ jobs:
             echo "==> Déploiement terminé avec succès"
 ```
 
-### 7.3 Enchaînement des workflows (recommandé)
+#### Enchaînement des workflows (recommandé)
 
 Pour garantir que le déploiement n'a lieu qu'après un CI vert, vous pouvez enchaîner les workflows via `workflow_run` :
 
@@ -444,6 +453,149 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     # ... reste du job identique
 ```
+
+---
+
+### 7.2 Option B — GitLab CI/CD
+
+Un seul fichier `.gitlab-ci.yml` à la racine du dépôt remplace les deux workflows GitHub Actions.
+
+#### Variables à configurer dans GitLab
+
+`Settings > CI/CD > Variables` — cocher **Protected** et **Masked** pour chaque secret :
+
+| Variable GitLab | Description | Exemple |
+|---|---|---|
+| `SSH_HOST` | IP ou FQDN du VPS OVH | `51.xxx.xxx.xxx` |
+| `SSH_USER` | Utilisateur SSH sur le serveur | `ubuntu` |
+| `SSH_PORT` | Port SSH (22 par défaut) | `22` |
+| `SSH_PRIVATE_KEY` | Contenu complet de la clé privée (multi-ligne) | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+
+> **Différences avec GitHub** : les secrets GitLab n'ont pas de notion d'"Environment" par défaut. Si vous voulez restreindre le déploiement à la branche `main`, utiliser des **Protected variables** + une **branche protégée** `main` dans `Settings > Repository`.
+
+#### Fichier `.gitlab-ci.yml`
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - test
+  - deploy
+
+# ── Stage 1 : lint + tests ─────────────────────────────────────────────────
+lint-and-test:
+  stage: test
+  image: python:3.11-slim
+  services:
+    - name: pgvector/pgvector:pg16
+      alias: postgres
+    - name: redis:8-alpine
+      alias: redis
+  variables:
+    POSTGRES_DB: airealtime_test
+    POSTGRES_USER: airealtime
+    POSTGRES_PASSWORD: testpassword
+    POSTGRES_HOST_AUTH_METHOD: trust
+    AI_REALTIME_DATABASE_URL: "postgresql+psycopg://airealtime:testpassword@postgres:5432/airealtime_test"
+    AI_REALTIME_REDIS_URL: "redis://redis:6379/0"
+    AI_REALTIME_QUEUE_BACKEND: stream
+    AI_REALTIME_DATABASE_AUTO_CREATE: "true"
+    AI_REALTIME_RATE_LIMIT_ENABLED: "false"
+    AI_REALTIME_JWT_SECRET_KEY: ci-test-secret-key
+    AI_REALTIME_REQUIRE_API_KEY: "false"
+  before_script:
+    - apt-get update -qq && apt-get install -y --no-install-recommends git
+    - pip install --no-cache-dir -r backend/requirements.txt -r backend/requirements-dev.txt
+    - python -m spacy download fr_core_news_sm
+    - python -m spacy download en_core_web_sm
+  script:
+    - cd backend
+    - ruff check app tests
+    - pytest tests -v --tb=short
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+# ── Stage 2 : déploiement via SSH ─────────────────────────────────────────
+deploy-production:
+  stage: deploy
+  image: alpine:3.19
+  # Ne déployer que sur la branche main, après un test vert
+  needs:
+    - lint-and-test
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
+  script:
+    # Timeout étendu : le build Docker peut prendre 20-40 min la première fois
+    - |
+      ssh -o ConnectTimeout=30 -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" 'bash -s' <<'ENDSSH'
+        set -euo pipefail
+
+        DEPLOY_PATH="/srv/ai-realtime/app"
+        COMPOSE_FILE="deploy/cloud/docker-compose.cloud.yml"
+        ENV_FILE="deploy/cloud/.env.cloud"
+
+        echo "==> [1/5] Git pull"
+        cd "${DEPLOY_PATH}"
+        git fetch origin main
+        git reset --hard origin/main
+
+        echo "==> [2/5] Build et démarrage des conteneurs"
+        echo "    ATTENTION : la première exécution peut prendre 20 à 40 minutes"
+        docker compose \
+          --env-file "${ENV_FILE}" \
+          -f "${COMPOSE_FILE}" \
+          up --build -d \
+          --remove-orphans
+
+        echo "==> [3/5] Migrations Alembic"
+        docker compose \
+          --env-file "${ENV_FILE}" \
+          -f "${COMPOSE_FILE}" \
+          run --rm api \
+          alembic -c /app/alembic.ini upgrade head
+
+        echo "==> [4/5] Attente du healthcheck API (max 120s)"
+        attempt=0
+        until curl -sf "http://localhost:8000/health" > /dev/null 2>&1 || [ $attempt -ge 24 ]; do
+          attempt=$((attempt + 1))
+          echo "    Tentative ${attempt}/24 — en attente..."
+          sleep 5
+        done
+
+        echo "==> [5/5] Vérification finale"
+        STATUS=$(curl -sf "http://localhost:8000/health" \
+          | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" \
+          2>/dev/null || echo "unreachable")
+        if [ "${STATUS}" = "ok" ]; then
+          echo "    Déploiement réussi — /health répond : ok"
+        else
+          echo "    ERREUR : /health ne répond pas correctement (status=${STATUS})"
+          exit 1
+        fi
+
+        echo "==> Déploiement terminé avec succès"
+      ENDSSH
+  timeout: 75 minutes
+```
+
+#### Différences clés GitHub Actions vs GitLab CI/CD
+
+| Point | GitHub Actions | GitLab CI/CD |
+|---|---|---|
+| Fichiers | `.github/workflows/ci.yml` + `deploy.yml` | `.gitlab-ci.yml` unique |
+| Secrets | Settings > Environments > Secrets | Settings > CI/CD > Variables |
+| Services (CI) | `services:` dans le job | `services:` identique |
+| Timeout | `command_timeout: 60m` (dans ssh-action) | `timeout: 75 minutes` (au niveau du job) |
+| Déclencheur branche | `on: push: branches: [main]` | `rules: if: $CI_COMMIT_BRANCH == "main"` |
+| Enchaîner les jobs | `needs:` ou `workflow_run:` | `needs:` identique |
+
+> Toutes les sections suivantes (8 à 14) sont identiques quelle que soit l'option choisie.
 
 ---
 
