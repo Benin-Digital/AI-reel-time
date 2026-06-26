@@ -29,6 +29,8 @@ Ce dossier contient une proposition d'architecture complete pour un nouveau proj
 
 ```bash
 pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+# Telecharge les modeles NER spaCy requis (fr_core_news_sm + en_core_web_sm)
+./scripts/local/download_models.sh
 pytest backend/tests
 ```
 
