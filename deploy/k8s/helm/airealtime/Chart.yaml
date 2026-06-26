@@ -1,0 +1,12 @@
+apiVersion: v2
+name: airealtime
+description: AI Real-Time CV/Job matching platform — Helm chart skeleton
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - cv-matching
+  - fastapi
+  - pgvector
+maintainers:
+  - name: AI Real-Time

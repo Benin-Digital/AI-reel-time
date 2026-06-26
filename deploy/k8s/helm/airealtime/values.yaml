@@ -1,0 +1,80 @@
+# Valeurs par defaut pour le chart AI Real-Time.
+# Ce chart est un SKELETON : revoir les ressources, secrets et ingress avant prod.
+
+image:
+  repository: airealtime/api
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+api:
+  port: 8000
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+  env:
+    AI_REALTIME_ENVIRONMENT: "production"
+    AI_REALTIME_LOG_LEVEL: "INFO"
+    AI_REALTIME_LOG_JSON: "true"
+    AI_REALTIME_DATABASE_AUTO_CREATE: "false"
+    AI_REALTIME_QUEUE_BACKEND: "stream"
+    AI_REALTIME_REQUIRE_API_KEY: "true"
+
+# Secrets attendus dans `airealtime-secrets` (a creer hors chart) :
+#   AI_REALTIME_DATABASE_URL
+#   AI_REALTIME_REDIS_URL
+#   AI_REALTIME_JWT_SECRET_KEY
+#   AI_REALTIME_API_KEYS
+#   AI_REALTIME_BOOTSTRAP_SUPERADMIN_PASSWORD
+existingSecret: "airealtime-secrets"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: airealtime.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+storage:
+  # PersistentVolumeClaim pour le dossier /srv/ai-realtime/storage (CV/JOB partages
+  # entre replicas). Necessite un StorageClass ReadWriteMany (NFS, CephFS, EFS, etc.).
+  cvJob:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteMany
+    size: 20Gi
+  # Volume pour les caches HuggingFace + ESCO + scoring_v2 model artifacts.
+  models:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 5Gi
+
+# Postgres : utiliser un operateur ou un service manage (CloudSQL, RDS, Crunchy).
+# Le chart NE deploie PAS Postgres — fournir AI_REALTIME_DATABASE_URL via le secret.
+postgres:
+  external: true
+
+# Redis : meme principe. Recommande : ElastiCache, MemoryStore, ou redis-operator.
+redis:
+  external: true
+
+# HorizontalPodAutoscaler facultatif
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70

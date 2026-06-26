@@ -1,0 +1,35 @@
+{{- if .Values.storage.cvJob.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-storage
+  labels:
+    {{- include "airealtime.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.storage.cvJob.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.cvJob.size }}
+  {{- if .Values.storage.cvJob.storageClass }}
+  storageClassName: {{ .Values.storage.cvJob.storageClass }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.storage.models.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-models
+  labels:
+    {{- include "airealtime.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.storage.models.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.models.size }}
+  {{- if .Values.storage.models.storageClass }}
+  storageClassName: {{ .Values.storage.models.storageClass }}
+  {{- end }}
+{{- end }}
