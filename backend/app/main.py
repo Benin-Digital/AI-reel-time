@@ -103,6 +103,7 @@ from .services import (
     serialize_keywords,
     deserialize_keywords,
     get_queue_status,
+    warn_if_unsafe_backend,
 )
 from .services.scoring import analyze_match
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
@@ -1401,6 +1402,7 @@ def _on_watch_event(event: WatchEvent) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_security_settings()
+    warn_if_unsafe_backend()
     init_db()
     with SessionLocal() as session:
         ensure_bootstrap_user(session)

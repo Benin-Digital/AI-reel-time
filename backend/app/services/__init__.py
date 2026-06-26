@@ -6,7 +6,7 @@ from .matcher import score_texts
 from .scoring import serialize_keywords, deserialize_keywords
 from .watcher import LocalFolderWatcher, WatchEvent
 from .worker import EventWorker
-from .event_queue import get_queue_status
+from .event_queue import get_queue_status, warn_if_unsafe_backend
 
 __all__ = [
     "extract_text",
@@ -22,4 +22,5 @@ __all__ = [
     "serialize_keywords",
     "deserialize_keywords",
     "get_queue_status",
+    "warn_if_unsafe_backend",
 ]

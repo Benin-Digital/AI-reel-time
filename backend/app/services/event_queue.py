@@ -90,6 +90,26 @@ def _stream_queue_depth(client: redis.Redis) -> int:
     return 0
 
 
+def warn_if_unsafe_backend() -> None:
+    """Emet un warning si on tourne en backend `memory` hors environnement de dev.
+
+    Le backend memory est NON-PERSISTANT et NON-DISTRIBUE :
+    - les evenements en file sont perdus au redemarrage
+    - plusieurs workers ne partagent pas la file
+    A reserver strictement au dev/CI. En staging/prod, basculer sur `stream` + Redis.
+    """
+    backend = (settings.queue_backend or "").lower()
+    env = (getattr(settings, "environment", "local") or "local").lower()
+    safe_envs = {"local", "dev", "development", "test", "ci"}
+    if backend == "memory" and env not in safe_envs:
+        logger.warning(
+            "AI_REALTIME_QUEUE_BACKEND=memory detected in environment=%r. "
+            "The in-memory queue is non-persistent and not shared across workers. "
+            "Switch to AI_REALTIME_QUEUE_BACKEND=stream with Redis for staging/production.",
+            env,
+        )
+
+
 def get_queue_status() -> dict[str, int | bool]:
     memory_count = len(_memory_queue)
     redis_count = 0
