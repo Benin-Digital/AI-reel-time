@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: airealtime
+          POSTGRES_PASSWORD: airealtime
+          POSTGRES_DB: airealtime
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U airealtime"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      AI_REALTIME_DATABASE_URL: postgresql+psycopg://airealtime:airealtime@localhost:5432/airealtime
+      AI_REALTIME_QUEUE_BACKEND: memory
+      AI_REALTIME_RATE_LIMIT_ENABLED: "false"
+      AI_REALTIME_NER_ENABLED: "false"
+      AI_REALTIME_EMBEDDING_ENABLED: "false"
+      AI_REALTIME_CONVERSION_USE_DOCLING: "false"
+      AI_REALTIME_CROSSENCODER_ENABLED: "false"
+      AI_REALTIME_JWT_SECRET_KEY: ci-test-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr libgl1 libglib2.0-0
+
+      - name: Install Python deps (CPU torch)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --default-timeout=600 \
+            --index-url https://download.pytorch.org/whl/cpu \
+            torch==2.5.1 torchvision==0.20.1
+          pip install --default-timeout=600 -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Run pytest
+        working-directory: backend
+        run: pytest tests -q
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff==0.6.9
+
+      - name: Ruff check (non-blocking)
+        run: ruff check backend/app backend/tests agent || true
+
+      - name: Ruff format check (non-blocking)
+        run: ruff format --check backend/app backend/tests agent || true
