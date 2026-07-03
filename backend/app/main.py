@@ -1431,6 +1431,12 @@ async def lifespan(app: FastAPI):
 _configure_logging()
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
 
+from .routers.health import router as _health_router  # noqa: E402
+from .routers.auth import router as _auth_router  # noqa: E402
+
+app.include_router(_health_router)
+app.include_router(_auth_router)
+
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
@@ -1494,182 +1500,6 @@ async def security_middleware(request: Request, call_next):
 # Ainsi CORS s'exécute avant security_middleware et ajoute ses headers même sur les 401.
 _configure_cors(app)
 
-
-@app.get("/health")
-def healthcheck() -> dict[str, str]:
-    return {
-        "status": "ok",
-        "environment": settings.environment,
-        "version": settings.app_version,
-    }
-
-
-@app.get("/ready")
-def readiness() -> dict[str, str]:
-    try:
-        with SessionLocal() as session:
-            session.execute(text("SELECT 1"))
-    except Exception as exc:  # pragma: no cover
-        logger.error("db readiness failed: %s", exc)
-        raise HTTPException(status_code=503, detail="database unavailable")
-
-    try:
-        client = _get_redis_client()
-        client.ping()
-    except Exception as exc:  # pragma: no cover
-        logger.error("redis readiness failed: %s", exc)
-        raise HTTPException(status_code=503, detail="redis unavailable")
-
-    return {"status": "ready"}
-
-
-@app.get("/metrics")
-def metrics() -> dict[str, float | int | bool | str | None]:
-    uptime = int(time() - app.state.started_at)
-    queue_status = get_queue_status()
-    worker = getattr(app.state, "worker", None)
-    with SessionLocal() as session:
-        events = session.scalar(select(func.count()).select_from(EventLog))
-        extractions = session.scalar(select(func.count()).select_from(ExtractedText))
-        scores = session.scalar(select(func.count()).select_from(ScoreResult))
-    return {
-        "uptime_seconds": uptime,
-        "event_count": int(events or 0),
-        "extraction_count": int(extractions or 0),
-        "score_count": int(scores or 0),
-        "redis_available": bool(queue_status.get("redis_available", False)),
-        "redis_queue_length": int(queue_status.get("redis_queue_length", 0)),
-        "memory_queue_length": int(queue_status.get("memory_queue_length", 0)),
-        "worker_alive": bool(worker.is_running) if worker is not None else False,
-        "worker_last_error": worker.last_error if worker is not None else None,
-    }
-
-
-@app.get("/metrics/prometheus")
-def metrics_prometheus() -> Response:
-    queue_status = get_queue_status()
-    worker = getattr(app.state, "worker", None)
-    with SessionLocal() as session:
-        events = session.scalar(select(func.count()).select_from(EventLog))
-        extractions = session.scalar(select(func.count()).select_from(ExtractedText))
-        scores = session.scalar(select(func.count()).select_from(ScoreResult))
-        matches = session.scalar(select(func.count()).select_from(MatchResult))
-        cv_documents = session.scalar(select(func.count()).select_from(CvDocument))
-        job_documents = session.scalar(select(func.count()).select_from(JobDocument))
-        cv_embeddings = session.scalar(select(func.count()).select_from(CvEmbedding))
-        job_embeddings = session.scalar(select(func.count()).select_from(JobEmbedding))
-
-    update_runtime_metrics(
-        queue_status,
-        bool(worker.is_running) if worker is not None else False,
-        {
-            "events": int(events or 0),
-            "extractions": int(extractions or 0),
-            "scores": int(scores or 0),
-            "matches": int(matches or 0),
-            "cv_documents": int(cv_documents or 0),
-            "job_documents": int(job_documents or 0),
-            "cv_embeddings": int(cv_embeddings or 0),
-            "job_embeddings": int(job_embeddings or 0),
-        },
-        settings.embedding_enabled,
-    )
-    return Response(content=render_metrics(), media_type=CONTENT_TYPE_LATEST)
-
-
-@app.get("/queue-status")
-def queue_status() -> dict[str, int | bool]:
-    return get_queue_status()
-
-
-@app.get("/worker-status")
-def worker_status() -> dict[str, bool | str | None]:
-    worker = getattr(app.state, "worker", None)
-    if worker is None:
-        raise HTTPException(status_code=503, detail="worker unavailable")
-    return {
-        "alive": worker.is_running,
-        "last_error": worker.last_error,
-    }
-
-
-@app.post("/auth/login", response_model=AuthLoginResponse)
-def login(payload: AuthLoginRequest) -> AuthLoginResponse:
-    with SessionLocal() as session:
-        user = authenticate_user(session, payload.email, payload.password)
-        if user is None:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        token = create_access_token(user)
-        return AuthLoginResponse(
-            access_token=token,
-            user=UserRead.model_validate(user),
-        )
-
-
-@app.get("/auth/me", response_model=UserRead)
-def get_me(request: Request) -> UserRead:
-    user = getattr(request.state, "user", None)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return UserRead.model_validate(user)
-
-
-@app.get("/auth/users", response_model=list[UserRead])
-def list_users(request: Request) -> list[UserRead]:
-    _require_admin(request)
-    with SessionLocal() as session:
-        rows = session.scalars(select(User).order_by(User.id.asc())).all()
-        return [UserRead.model_validate(row) for row in rows]
-
-
-@app.post("/auth/users", response_model=UserRead)
-def create_user(payload: UserCreate, request: Request) -> UserRead:
-    current_user = _require_admin(request)
-    if current_user.role == "admin" and payload.role != "member":
-        raise HTTPException(status_code=403, detail="Admin can only create member accounts")
-    with SessionLocal() as session:
-        existing = session.scalar(select(User).where(User.email == payload.email))
-        if existing is not None:
-            raise HTTPException(status_code=409, detail="User already exists")
-        user = User(
-            email=payload.email,
-            password_hash=hash_password(payload.password),
-            first_name=payload.first_name,
-            last_name=payload.last_name,
-            role=payload.role,
-            is_active=True,
-        )
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        return UserRead.model_validate(user)
-
-
-@app.patch("/auth/users/{user_id}", response_model=UserRead)
-def update_user(user_id: int, payload: UserUpdate, request: Request) -> UserRead:
-    current_user = _require_admin(request)
-    with SessionLocal() as session:
-        user = session.get(User, user_id)
-        if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
-        if user.role == "superadmin":
-            raise HTTPException(status_code=403, detail="Superadmin account is protected")
-
-        if current_user.role == "admin":
-            if user.role != "member":
-                raise HTTPException(status_code=403, detail="Admin can only manage member accounts")
-            if payload.role is not None and payload.role != "member":
-                raise HTTPException(status_code=403, detail="Admin can only keep member role")
-
-        if payload.role is not None:
-            user.role = payload.role
-        if payload.is_active is not None:
-            user.is_active = payload.is_active
-
-        session.add(user)
-        session.commit()
-        session.refresh(user)
-        return UserRead.model_validate(user)
 
 
 @app.post("/events", response_model=EventRead)
