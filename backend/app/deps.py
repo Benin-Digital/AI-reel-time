@@ -1,14 +1,27 @@
 """Dependencies et helpers reutilisables pour les routers.
 
-Centralise les guards d'autorisation (admin/superadmin) et l'acces a
-Redis pour eviter la duplication entre `main.py` et les sous-routers.
+Centralise les guards d'autorisation (admin/superadmin), l'acces a Redis,
+et les operations de cleanup DB partagees entre plusieurs routers/workers.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import HTTPException, Request
 import redis
+from sqlalchemy import delete, select
 
-from .models import User
+from .db import SessionLocal
+from .models import (
+    CvDocument,
+    CvEmbedding,
+    ExtractedText,
+    JobDocument,
+    JobEmbedding,
+    MatchResult,
+    ScoreResult,
+    User,
+)
 from .settings import get_settings
 
 settings = get_settings()
@@ -37,3 +50,26 @@ def require_superadmin(request: Request) -> User:
     if user.role != "superadmin":
         raise HTTPException(status_code=403, detail="Superadmin role required")
     return user
+
+
+def cleanup_removed_file(path: Path, role: str) -> None:
+    """Purge DB rows referencing a removed CV or Job file (path-based)."""
+    with SessionLocal() as session:
+        session.execute(
+            delete(ExtractedText).where(ExtractedText.file_path == str(path))
+        )
+        if role == "cv":
+            doc = session.scalar(select(CvDocument).where(CvDocument.path == str(path)))
+            if doc:
+                session.execute(delete(CvEmbedding).where(CvEmbedding.cv_id == doc.id))
+                session.execute(delete(MatchResult).where(MatchResult.cv_id == doc.id))
+                session.delete(doc)
+            session.execute(delete(ScoreResult).where(ScoreResult.cv_path == str(path)))
+        else:
+            doc = session.scalar(select(JobDocument).where(JobDocument.path == str(path)))
+            if doc:
+                session.execute(delete(JobEmbedding).where(JobEmbedding.job_id == doc.id))
+                session.execute(delete(MatchResult).where(MatchResult.job_id == doc.id))
+                session.delete(doc)
+            session.execute(delete(ScoreResult).where(ScoreResult.job_path == str(path)))
+        session.commit()
