@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 import logging
+import difflib
 import re
 import unicodedata
 from ..settings import get_settings
@@ -175,22 +176,37 @@ def _extract_skill_terms(text: str) -> list[str]:
         parts = [p.strip() for p in re.split(r"[,;]+", raw) if p.strip()]
         return [_apply_synonyms(p) for p in parts]
 
+    folded_text = _apply_synonyms(text)
+    whitelist = _skill_whitelist()
+
     # Primary: taxonomy — only known canonical skills, no false positives
     found = _taxonomy_find(text)
-    # Case-insensitive dedup set (taxonomy returns canonical casing, whitelist may differ)
     found_lower: set[str] = {s.lower() for s in found}
 
     # Secondary: settings whitelist exact match
-    for skill in _skill_whitelist():
+    for skill in whitelist:
         if not skill:
             continue
         canonical = _normalize_skill(skill) or skill
-        if canonical.lower() not in found_lower:
-            if re.search(rf"\b{re.escape(skill)}\b", _apply_synonyms(text)):
-                found.append(canonical)
-                found_lower.add(canonical.lower())
+        if canonical.lower() not in found_lower and re.search(rf"\b{re.escape(skill)}\b", folded_text):
+            found.append(canonical)
+            found_lower.add(canonical.lower())
 
-    return found
+    # Tertiary: fuzzy match — tolère les fautes de frappe courantes (ex.
+    # "Pyhton" -> "python") pour les compétences de la liste blanche qui
+    # n'ont pas matché exactement ci-dessus.
+    words = re.findall(r"[a-z0-9+.#]+", folded_text)
+    for skill in whitelist:
+        if not skill:
+            continue
+        canonical = _normalize_skill(skill) or skill
+        if canonical.lower() in found_lower:
+            continue
+        if difflib.get_close_matches(skill.lower(), words, n=1, cutoff=0.8):
+            found.append(canonical)
+            found_lower.add(canonical.lower())
+
+    return [term.lower() for term in found]
 
 
 def _detect_contract_type(text: str) -> str | None:
