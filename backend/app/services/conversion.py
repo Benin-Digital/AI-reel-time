@@ -136,13 +136,22 @@ def _classify_section(title: str) -> str:
     dict entry that matches — sinon un alias court comme "profil" (summary)
     l'emporte sur le plus spécifique "profil recherché" (job_required)
     simplement parce que "summary" est listé en premier dans _SECTION_ALIASES.
+
+    Un alias d'un seul mot doit correspondre à un token entier (délimité par
+    des espaces), pas à une simple sous-chaîne — sinon "stack" matche à
+    l'intérieur du mot composé "Full-Stack" et un titre de poste comme
+    "Développeur Full-Stack" est classifié à tort comme section "skills".
+    Les alias à plusieurs mots ("profil recherché") restent testés en
+    sous-chaîne car ils ne peuvent pas correspondre à un unique token.
     """
     t = title.lower().strip()
+    words = {w.strip(":,.;()[]") for w in t.split()}
     best_canonical = "other"
     best_len = 0
     for canonical, aliases in _SECTION_ALIASES.items():
         for alias in aliases:
-            if alias in t and len(alias) > best_len:
+            matched = alias in t if " " in alias else alias in words
+            if matched and len(alias) > best_len:
                 best_canonical = canonical
                 best_len = len(alias)
     return best_canonical
