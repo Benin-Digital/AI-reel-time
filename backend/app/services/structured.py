@@ -206,7 +206,7 @@ def _extract_skill_terms(text: str) -> list[str]:
             found.append(canonical)
             found_lower.add(canonical.lower())
 
-    return [term.lower() for term in found]
+    return found
 
 
 def _detect_contract_type(text: str) -> str | None:
