@@ -5,12 +5,12 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -25,7 +25,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     env:
       AI_REALTIME_DATABASE_URL: postgresql+psycopg://airealtime:airealtime@localhost:5432/airealtime
       AI_REALTIME_QUEUE_BACKEND: memory
@@ -35,10 +34,8 @@ jobs:
       AI_REALTIME_CONVERSION_USE_DOCLING: "false"
       AI_REALTIME_CROSSENCODER_ENABLED: "false"
       AI_REALTIME_JWT_SECRET_KEY: ci-test-secret
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -47,12 +44,10 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
-
       - name: Install system deps
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends tesseract-ocr libgl1 libglib2.0-0
-
       - name: Install Python deps (CPU torch)
         run: |
           python -m pip install --upgrade pip
@@ -60,7 +55,6 @@ jobs:
             --index-url https://download.pytorch.org/whl/cpu \
             torch==2.5.1 torchvision==0.20.1
           pip install --default-timeout=600 -r backend/requirements.txt -r backend/requirements-dev.txt
-
       - name: Run pytest
         working-directory: backend
         run: pytest tests -q
@@ -70,17 +64,26 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install ruff
         run: pip install ruff==0.6.9
-
       - name: Ruff check (non-blocking)
         run: ruff check backend/app backend/tests agent || true
-
       - name: Ruff format check (non-blocking)
         run: ruff format --check backend/app backend/tests agent || true
+
+  deploy:
+    needs: backend-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déployer sur le serveur
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: echo "déclenchement du déploiement"
