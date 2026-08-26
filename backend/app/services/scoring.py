@@ -339,6 +339,8 @@ def analyze_match(cv_text: str, job_text: str) -> dict[str, object]:
 
 
 def score_texts(cv_text: str, job_text: str) -> tuple[float, list[str]]:
+    if not (cv_text or "").strip() or not (job_text or "").strip():
+        return 0.0, []
     analysis = analyze_match(cv_text, job_text)
     return float(analysis["score"]), list(analysis["common_keywords"])
 
