@@ -175,7 +175,7 @@ def _split_markdown_sections(md: str) -> dict[str, str]:
             # libellé contient un alias court par accident (ex. "stack" dans
             # "Full-Stack"). Un H2 doit toujours échouer la classification
             # pour qualifier, car H2 sert aussi de vrai en-tête de section.
-            if doc_title is None and title and (level == 1 or (level == 2 and classified == "other")):
+            if doc_title is None and title and classified == "other":
                 doc_title = title
             current = classified
         else:
