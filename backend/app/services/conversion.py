@@ -130,12 +130,22 @@ def _convert_with_docling(path: Path) -> ConvertedDocument:
 
 
 def _classify_section(title: str) -> str:
-    """Map a section header to a canonical section name."""
+    """Map a section header to a canonical section name.
+
+    Matches the LONGEST alias found across all categories, not the first
+    dict entry that matches — sinon un alias court comme "profil" (summary)
+    l'emporte sur le plus spécifique "profil recherché" (job_required)
+    simplement parce que "summary" est listé en premier dans _SECTION_ALIASES.
+    """
     t = title.lower().strip()
+    best_canonical = "other"
+    best_len = 0
     for canonical, aliases in _SECTION_ALIASES.items():
-        if any(alias in t for alias in aliases):
-            return canonical
-    return "other"
+        for alias in aliases:
+            if alias in t and len(alias) > best_len:
+                best_canonical = canonical
+                best_len = len(alias)
+    return best_canonical
 
 
 def _split_markdown_sections(md: str) -> dict[str, str]:
@@ -160,7 +170,12 @@ def _split_markdown_sections(md: str) -> dict[str, str]:
             classified = _classify_section(title)
             # Only the first H1/H2 that is NOT itself a known section header
             # ("Profil recherché", "Compétences", …) qualifies as document title.
-            if doc_title is None and level <= 2 and title and classified == "other":
+            # Un H1 est sans ambiguïté le titre du document dans ce schéma —
+            # jamais un marqueur de section — donc il qualifie même si son
+            # libellé contient un alias court par accident (ex. "stack" dans
+            # "Full-Stack"). Un H2 doit toujours échouer la classification
+            # pour qualifier, car H2 sert aussi de vrai en-tête de section.
+            if doc_title is None and title and (level == 1 or (level == 2 and classified == "other")):
                 doc_title = title
             current = classified
         else:
