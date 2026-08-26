@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 _QUEUE_NAME = settings.queue_stream_name
 _STREAM_NAME = settings.queue_stream_name
 _STREAM_GROUP = settings.queue_consumer_group
-_QUEUE_MAX_MEMORY_SIZE = settings.queue_memory_max_size
 _QUEUE_WARN_THRESHOLD = settings.queue_memory_warn_threshold
 _client: redis.Redis | None = None
 _memory_queue: Deque[str] = deque()
@@ -229,11 +228,11 @@ def enqueue_event(event: WatchEvent) -> bool:
         logger.warning("redis enqueue failed, falling back to memory: %s", exc)
         try:
             with _lock:
-                if len(_memory_queue) >= _QUEUE_MAX_MEMORY_SIZE:
+                if len(_memory_queue) >= settings.queue_memory_max_size:
                     _memory_queue.popleft()
                     logger.warning(
                         "memory queue exceeded max size %d, dropping oldest event",
-                        _QUEUE_MAX_MEMORY_SIZE,
+                        settings.queue_memory_max_size,
                     )
                 _memory_queue.append(payload)
                 if len(_memory_queue) >= _QUEUE_WARN_THRESHOLD:
