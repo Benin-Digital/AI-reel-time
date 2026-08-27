@@ -1,29 +1,14 @@
+name: app3
 services:
-  traefik:
-    image: traefik:v3.3
-    container_name: airealtime-traefik
-    command:
-      - --api.dashboard=false
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.le.acme.tlschallenge=true
-      - --certificatesresolvers.le.acme.email=${TRAEFIK_EMAIL}
-      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./letsencrypt:/letsencrypt
-
   api:
     build:
       context: ../../backend
       dockerfile: Dockerfile
     container_name: airealtime-api
+    ports:
+      - "127.0.0.1:8010:8000"
     environment:
+      AI_REALTIME_JWT_SECRET_KEY: ${AI_REALTIME_JWT_SECRET_KEY}
       AI_REALTIME_ENVIRONMENT: cloud
       AI_REALTIME_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AI_REALTIME_REDIS_URL: redis://redis:6379/0
@@ -35,18 +20,9 @@ services:
       AI_REALTIME_REQUIRE_API_KEY: "true"
       AI_REALTIME_API_KEYS: ${AIREALTIME_API_KEYS}
       AI_REALTIME_CORS_ALLOW_ORIGINS: ${AIREALTIME_CORS_ALLOW_ORIGINS}
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.airealtime.rule=Host(`${AIREALTIME_DOMAIN}`)
-      - traefik.http.routers.airealtime.entrypoints=websecure
-      - traefik.http.routers.airealtime.tls.certresolver=le
-      - traefik.http.services.airealtime.loadbalancer.server.port=8000
     volumes:
       - /srv/ai-realtime/storage:/srv/ai-realtime/storage
-      # ESCO taxonomy CSVs are baked into the image; the named volume
-      # preserves them across rebuilds and lets you override them.
       - airealtime_esco:/srv/ai-realtime/esco
-      # scoring_v2 GBM model artifacts (trained pickle persists here).
       - airealtime_models:/srv/ai-realtime/models
       - airealtime_hf_cache:/app/.cache/huggingface
     depends_on:
@@ -62,41 +38,75 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    mem_limit: 768m
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\").read()'" ]
       interval: 10s
       timeout: 3s
       retries: 10
-
   postgres:
     image: pgvector/pgvector:pg16
     container_name: airealtime-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    mem_limit: 512m
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 20
-
   redis:
     image: redis:8-alpine
     container_name: airealtime-redis
+    restart: unless-stopped
     volumes:
       - redis_data:/data
+    mem_limit: 256m
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+      - CHOWN
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
-
 volumes:
   postgres_data:
+    external: true
+    name: cloud_postgres_data
   redis_data:
+    external: true
+    name: cloud_redis_data
   airealtime_esco:
+    external: true
+    name: cloud_airealtime_esco
   airealtime_models:
+    external: true
+    name: cloud_airealtime_models
   airealtime_hf_cache:
+    external: true
+    name: cloud_airealtime_hf_cache

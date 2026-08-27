@@ -256,7 +256,7 @@ def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
         )
 
 
-@router.delete("/sessions/{session_id}", status_code=204)
+@router.delete("/sessions/{session_id}", status_code=204, response_model=None)
 def delete_analysis_session(session_id: int, delete_documents: bool = False) -> None:
     with SessionLocal() as session:
         session_obj = session.get(AnalysisSession, session_id)
