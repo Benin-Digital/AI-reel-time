@@ -18,7 +18,7 @@ from ..schemas import (
     MatchFeedbackRead,
     WeightComputeResult,
 )
-from ..services.matcher import get_active_weights, set_learned_weights
+from ..services.matcher import get_active_weights
 from ..services.weight_learner import compute_learned_weights
 
 router = APIRouter(tags=["feedback"])
@@ -195,6 +195,17 @@ def get_learned_weights(request: Request) -> LearnedWeightsRead | None:
 
 @router.post("/feedback/compute-weights", response_model=WeightComputeResult)
 def compute_weights(request: Request) -> WeightComputeResult:
+    """Preview-only: computes suggested weights from feedback via logistic
+    regression, for a human (the developer) to review before deciding
+    whether/how to adjust matcher._DOMAIN_W accordingly.
+
+    Deliberately does not activate anything: the feedback pool isn't
+    segmented by domain, so blindly applying a single learned weight set
+    to every domain would undo the domain-specific calibration in
+    matcher._DOMAIN_W (e.g. education mattering more in health/legal than
+    in tech). See git history for the /feedback/apply-weights endpoint
+    that used to auto-activate this and was removed for that reason.
+    """
     require_admin(request)
     with SessionLocal() as session:
         try:
@@ -213,47 +224,3 @@ def compute_weights(request: Request) -> WeightComputeResult:
         accuracy=result["accuracy"],
         current_weights={k: round(v, 4) for k, v in current.items()},
     )
-
-
-@router.post("/feedback/apply-weights", response_model=LearnedWeightsRead)
-def apply_weights(request: Request) -> LearnedWeightsRead:
-    user = require_admin(request)
-    with SessionLocal() as session:
-        try:
-            result = compute_learned_weights(session)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-
-        session.execute(
-            select(LearnedWeights).where(LearnedWeights.is_active == True)  # noqa: E712
-        )
-        for old in session.scalars(
-            select(LearnedWeights).where(LearnedWeights.is_active == True)  # noqa: E712
-        ):
-            old.is_active = False
-
-        row = LearnedWeights(
-            w_semantic=result["semantic"],
-            w_skills=result["skills"],
-            w_experience=result["experience"],
-            w_education=result["education"],
-            w_languages=result["languages"],
-            w_contract=result["contract"],
-            sample_count=result["sample_count"],
-            accuracy=result["accuracy"],
-            is_active=True,
-            created_by=user.id,
-        )
-        session.add(row)
-        session.commit()
-        session.refresh(row)
-
-        set_learned_weights({
-            "semantic":   row.w_semantic,
-            "skills":     row.w_skills,
-            "experience": row.w_experience,
-            "education":  row.w_education,
-            "languages":  row.w_languages,
-            "contract":   row.w_contract,
-        })
-        return LearnedWeightsRead.model_validate(row)

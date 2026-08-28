@@ -36,7 +36,6 @@ from .models import (
     MatchFeedback,
     User,
     AnalysisSession,
-    LearnedWeights,
 )
 from .schemas import (
     EventCreate,
@@ -106,8 +105,7 @@ from .services import (
     warn_if_unsafe_backend,
 )
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
-from .services.matcher import match_cv_to_job, set_learned_weights, get_active_weights
-from .services.weight_learner import compute_learned_weights
+from .services.matcher import match_cv_to_job
 from .services.explain import build_match_explanation
 from dataclasses import asdict
 from .security import enforce_security, validate_security_settings
@@ -1386,7 +1384,6 @@ async def lifespan(app: FastAPI):
     init_db()
     with SessionLocal() as session:
         ensure_bootstrap_user(session)
-        _load_active_weights(session)
     app.state.started_at = time()
     watched_folders = [Path(settings.watch_cv_dir), Path(settings.watch_job_dir)]
     watcher = LocalFolderWatcher(folders=watched_folders, callback=_on_watch_event)
@@ -2475,21 +2472,6 @@ def get_extraction_by_path(path: str) -> ExtractedTextRead:
 
 
 
-def _load_active_weights(session) -> None:
-    row = session.scalar(
-        select(LearnedWeights)
-        .where(LearnedWeights.is_active == True)  # noqa: E712
-        .order_by(LearnedWeights.created_at.desc())
-    )
-    if row:
-        set_learned_weights({
-            "semantic":   row.w_semantic,
-            "skills":     row.w_skills,
-            "experience": row.w_experience,
-            "education":  row.w_education,
-            "languages":  row.w_languages,
-            "contract":   row.w_contract,
-        })
 
 
 
