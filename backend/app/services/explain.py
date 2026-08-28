@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from ..settings import get_settings
-from .scoring import analyze_match
+from .parser import parse_document
 from .structured import fold_text
 
 settings = get_settings()
@@ -55,15 +55,20 @@ def build_match_explanation(
     score: float,
     keywords: list[str],
 ) -> dict[str, object]:
-    analysis = analyze_match(cv_text, job_text)
-    metrics = dict(analysis["metrics"])
-    cv_profile = analysis["profiles"]["cv"]
-    job_profile = analysis["profiles"]["job"]
+    # Use the exact same parsing pipeline as matcher.py (the engine that
+    # actually computed and persisted `score`), so the narrative below is
+    # never built from a different set of extracted skills/sections than
+    # the number it's explaining.
+    cv_profile = parse_document(cv_text or "", kind="cv")
+    job_profile = parse_document(job_text or "", kind="job")
+
+    cv_skill_terms = set(cv_profile.skill_terms)
+    required_terms = set(job_profile.required_skill_terms or job_profile.skill_terms)
 
     keyword_hits = [kw for kw in keywords if kw]
-    matched_required = [term for term in job_profile.required_skill_terms if term in cv_profile.skill_terms]
-    matched_nice = [term for term in job_profile.nice_skill_terms if term in cv_profile.skill_terms]
-    missing_required = list(metrics.get("missing_required", []))
+    matched_required = [term for term in job_profile.required_skill_terms if term in cv_skill_terms]
+    matched_nice = [term for term in job_profile.nice_skill_terms if term in cv_skill_terms]
+    missing_required = sorted(required_terms - cv_skill_terms)
 
     summary = (
         f"Score {round(score, 2)}% construit sur des sections structurees: "
@@ -94,9 +99,9 @@ def build_match_explanation(
         else:
             vigilance.append(f"Langues attendues: {_language_label(job_profile.language_terms)}.")
 
-    if metrics.get("job_years", 0):
-        cv_years = int(metrics.get("cv_years", 0))
-        job_years = int(metrics.get("job_years", 0))
+    if job_profile.experience_years:
+        cv_years = cv_profile.experience_years
+        job_years = job_profile.experience_years
         if cv_years >= job_years:
             why_match.append(f"Experience detectee: {cv_years} ans pour {job_years} requis.")
         else:
