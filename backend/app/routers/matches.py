@@ -14,15 +14,29 @@ from ..schemas import (
 )
 from ..services import deserialize_keywords
 from ..services.explain import build_match_explanation
-from ..services.scoring import analyze_match
+from ..services.matcher import match_cv_to_job
 
 router = APIRouter(tags=["matches"])
 
 
 @router.post("/matches/analyze")
 def analyze_texts(payload: AnalyzeRequest) -> JSONResponse:
-    analysis = analyze_match(payload.cv_text or "", payload.job_text or "")
-    return JSONResponse(content=analysis)
+    result = match_cv_to_job(payload.cv_text or "", payload.job_text or "")
+    return JSONResponse(
+        content={
+            "score": result.score,
+            "score_semantic": result.score_semantic,
+            "score_skills": result.score_skills,
+            "score_experience": result.score_experience,
+            "score_education": result.score_education,
+            "score_languages": result.score_languages,
+            "score_contract": result.score_contract,
+            "domain": result.domain,
+            "common_skills": result.common_skills,
+            "missing_skills": result.missing_skills,
+            "weights": result.weights,
+        }
+    )
 
 
 @router.get("/cv-documents/{doc_id}/matches", response_model=list[MatchRead])

@@ -105,7 +105,6 @@ from .services import (
     get_queue_status,
     warn_if_unsafe_backend,
 )
-from .services.scoring import analyze_match
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
 from .services.matcher import match_cv_to_job, set_learned_weights, get_active_weights
 from .services.weight_learner import compute_learned_weights
