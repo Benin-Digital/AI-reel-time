@@ -448,18 +448,22 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
         summary_text = "\n".join(lines[:3])
 
     # Skill extraction via taxonomy.
-    # For jobs, include "experience"/"certifications" too: Docling often
-    # classifies "Missions" / "Responsabilités" / "Compétences attendues" into
-    # those buckets, and they typically carry the actual tech requirements.
-    if kind == "job":
-        skill_src = "\n".join(
-            p for p in [
-                job_required_text, job_nice_text, skills_text,
-                summary_text, other_text, experience_text, certifications_text,
-            ] if p
-        )
-    else:
-        skill_src = "\n".join(p for p in [skills_text, experience_text, other_text] if p)
+    # Section classification (_match_section) is driven by heading keywords
+    # found in the text, not by `kind` — a CV can legitimately have content
+    # classified as 'job_required' (e.g. a "Missions" or "Responsabilites"
+    # subsection describing a past role), and a job offer can have content
+    # classified as 'skills' or 'experience'. Restricting cv-mode to a
+    # narrower set of sections than job-mode meant identical text could
+    # yield completely different skill_terms depending on which folder it
+    # was dropped in — including a self-match (same document as both CV and
+    # job) collapsing to ~0% skill coverage. Aggregate the same full set of
+    # sections regardless of kind so extraction only depends on content.
+    skill_src = "\n".join(
+        p for p in [
+            job_required_text, job_nice_text, skills_text,
+            summary_text, other_text, experience_text, certifications_text,
+        ] if p
+    )
 
     skill_terms = find_skills(skill_src or cleaned)
     required_skill_terms = find_skills(job_required_text) if job_required_text else list(skill_terms)
