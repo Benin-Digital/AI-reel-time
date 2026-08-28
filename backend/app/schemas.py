@@ -254,6 +254,23 @@ class MatchFeedbackRead(BaseModel):
     updated_at: datetime
 
 
+class MatchFeedbackExportRead(BaseModel):
+    """Full feedback record for periodic manual review, including the
+    CV/job text and score breakdown as they were at feedback time — see
+    MatchFeedback.cv_text_snapshot/job_text_snapshot/scores_snapshot."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    match_id: int
+    decision: Literal["accept", "reject", "review"]
+    rating: int | None
+    comment: str | None
+    cv_text_snapshot: str | None
+    job_text_snapshot: str | None
+    scores_snapshot: dict | None
+    created_at: datetime
+
+
 class SearchRequest(BaseModel):
     kind: Literal["cv", "job"] = "cv"
     query: str

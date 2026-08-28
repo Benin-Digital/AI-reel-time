@@ -257,6 +257,13 @@ class MatchFeedback(Base):
     decision: Mapped[str] = mapped_column(String(32))
     rating: Mapped[int | None] = mapped_column(nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Snapshot of what was actually compared/scored at feedback time. Needed
+    # because deleting a CV or job file cascades to delete its MatchResult
+    # rows (see deps.cleanup_removed_file), which would otherwise orphan
+    # this feedback with no way to recover what CV/job/score it was about.
+    cv_text_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    job_text_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    scores_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
