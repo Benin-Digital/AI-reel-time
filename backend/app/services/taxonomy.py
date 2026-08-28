@@ -296,7 +296,15 @@ def find_skills(text: str) -> list[str]:
     lookup = _build_lookup()
     # Replace slashes with spaces so "php/laravel" → ["php","laravel"] and "ci/cd" → 2-gram "ci cd"
     folded = _fold(text).replace("/", " ")
-    words = re.findall(r"[a-z0-9#+.]+", folded)
+    # Tokens keep internal '.', '#', '+' (needed for "node.js", "c#", "c++"),
+    # but leading/trailing punctuation is stripped so a sentence-final period
+    # doesn't fuse into the token ("qliksense." → "qliksense", "python." →
+    # "python"). Without this, any skill ending a sentence or list item was
+    # silently missed. A bare "." (e.g. from "5.") collapses to an empty
+    # token and is dropped.
+    raw_words = re.findall(r"[a-z0-9#+.]+", folded)
+    words = [w.strip(".") for w in raw_words]
+    words = [w for w in words if w]
 
     found: dict[str, int] = {}  # canonical → first word-position
     # Longest match first (up to 5-gram)
