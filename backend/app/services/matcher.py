@@ -297,6 +297,18 @@ class MatchScore:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def _semantic_repr(doc: ParsedDocument) -> str:
+    """Most relevant text excerpt for semantic comparison.
+
+    Same fallback order regardless of doc.kind, since section
+    classification is content-driven rather than kind-driven — see the
+    comment in match_cv_to_job() for why this must not differ between
+    the CV and the job side.
+    """
+    text = doc.job_required_text or doc.skills_text or doc.summary_text or doc.cleaned_text
+    return text[:2000]
+
+
 def match_cv_to_job(cv_text: str, job_text: str) -> MatchScore:
     """
     Full CV↔Job match using cross-encoder + structured scoring.
@@ -315,9 +327,19 @@ def match_cv_to_job(cv_text: str, job_text: str) -> MatchScore:
     domain = job.domain if job.domain != "general" else cv.domain
     w = _weights(domain)
 
-    # Semantic: feed the most relevant section of each document
-    cv_repr = (cv.skills_text or cv.summary_text or cv.cleaned_text)[:2000]
-    job_repr = (job.job_required_text or job.summary_text or job.cleaned_text)[:2000]
+    # Semantic: feed the most relevant section of each document. Section
+    # classification (_match_section) is content-driven, not kind-driven
+    # (see parser.py) — a document can have its substantive content land in
+    # job_required_text regardless of whether it was parsed as kind='cv' or
+    # kind='job'. Using a different field priority per side here meant a
+    # self-match (or any pair sharing similar structure) could feed the
+    # cross-encoder two genuinely different excerpts of the same document
+    # (e.g. job_repr = the rich "Competences requises" section while
+    # cv_repr fell back to a mostly-empty generic "skills" section),
+    # scoring them as semantically dissimilar even though nothing else
+    # differs. Both sides now use the same fallback order.
+    cv_repr = _semantic_repr(cv)
+    job_repr = _semantic_repr(job)
     semantic = _cross_encode(job_repr, cv_repr)
 
     skills = _skill_score(cv, job)

@@ -18,7 +18,7 @@ et echouent tant que ce bug n'est pas corrige.
 """
 from __future__ import annotations
 
-from app.services import matcher
+from app.services import matcher, parser
 from app.services.matcher import match_cv_to_job
 from app.services.parser import _DOMAIN_SIGNALS
 
@@ -139,4 +139,41 @@ def test_self_match_overall_score_is_high(monkeypatch):
     assert result.score >= 80, (
         f"score self-match attendu >= 80 (semantique neutralisee a 100%), "
         f"obtenu {result.score}"
+    )
+
+
+def test_semantic_representation_is_symmetric_on_self_match():
+    """cv_repr et job_repr doivent etre identiques sur un self-match.
+
+    Trouve en production : meme apres correction de skill_src (parser.py),
+    match_cv_to_job() choisissait encore un champ different par cote pour
+    la comparaison semantique (cv_repr priorisait skills_text, job_repr
+    priorisait job_required_text). Sur un document dont le contenu utile
+    est classe en job_required (voir JOB_SHAPED_TEXT), ca revenait a
+    comparer deux extraits differents du meme document au cross-encoder,
+    qui les jugeait peu similaires — un score self-match de 15% (bug
+    original) devenu 61% (apres le fix skill_src, avant celui-ci) au lieu
+    d'un score proche de 100%.
+    """
+    cv = parser.parse_document(JOB_SHAPED_TEXT, kind="cv")
+    job = parser.parse_document(JOB_SHAPED_TEXT, kind="job")
+    assert matcher._semantic_repr(cv) == matcher._semantic_repr(job), (
+        "la representation semantique doit etre identique des deux cotes "
+        "quand cv_text et job_text sont un texte identique"
+    )
+
+
+def test_self_match_scores_near_perfect_with_realistic_semantic(monkeypatch):
+    """Simule un cross-encoder realiste (texte identique = similarite
+    parfaite, texte different = similarite nulle) plutot que de neutraliser
+    betement le score semantique a 1.0 — pour verifier que le fix de
+    symetrie ci-dessus se traduit bien par un score final quasi parfait,
+    pas seulement par une egalite de representations en interne."""
+    monkeypatch.setattr(
+        matcher, "_cross_encode",
+        lambda query, document: 1.0 if query == document else 0.0,
+    )
+    result = match_cv_to_job(JOB_SHAPED_TEXT, JOB_SHAPED_TEXT)
+    assert result.score >= 80, (
+        f"self-match avec cross-encoder realiste attendu >= 80, obtenu {result.score}"
     )
