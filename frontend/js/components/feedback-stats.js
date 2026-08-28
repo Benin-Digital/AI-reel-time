@@ -6,10 +6,9 @@ export function initFeedbackStats() {
   $("#refreshFeedbackStats")?.addEventListener("click", _load);
   window.addEventListener("load-feedback-stats", _load);
 
-  // Weight learning actions (delegated — buttons rendered dynamically)
+  // Weight preview action (delegated — button rendered dynamically)
   document.addEventListener("click", async (e) => {
     if (e.target.closest("#btnComputeWeights"))  _computeWeights();
-    if (e.target.closest("#btnApplyWeights"))    _applyWeights();
   });
 }
 
@@ -246,8 +245,9 @@ const _W_LABELS = {
 function _renderWeightLearning(active) {
   const activeSection = active ? `
     <div class="banner banner--success" style="margin-bottom:var(--space-3)">
-      Poids actifs depuis le ${new Date(active.created_at).toLocaleDateString("fr-FR")}
-      — ${active.sample_count} feedbacks — précision ${Math.round(active.accuracy * 100)}%
+      Poids précédemment calculés le ${new Date(active.created_at).toLocaleDateString("fr-FR")}
+      — ${active.sample_count} feedbacks — précision ${Math.round(active.accuracy * 100)}%.
+      Non appliqués au moteur (voir note ci-dessous).
     </div>
     <div class="score-breakdown" style="flex-direction:column;gap:var(--space-1);margin-bottom:var(--space-3)">
       ${Object.entries(_W_LABELS).map(([k, label]) => {
@@ -263,19 +263,20 @@ function _renderWeightLearning(active) {
 
   return `<div class="card">
     <div class="card__header">
-      <div class="card__title">Ajustement automatique des poids</div>
+      <div class="card__title">Poids suggérés (aperçu)</div>
     </div>
     <div style="padding:var(--space-4)">
       ${activeSection}
       <div id="weightComputeResult" style="margin-bottom:var(--space-3)"></div>
       <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center">
         <button class="btn btn--primary btn--sm" id="btnComputeWeights">Calculer les poids suggérés</button>
-        <button class="btn btn--ghost btn--sm" id="btnApplyWeights" disabled>Appliquer ces poids</button>
         <span id="weightMsg" class="text-xs text-muted"></span>
       </div>
       <p class="text-xs text-muted" style="margin-top:var(--space-2)">
-        Calcule les poids optimaux par régression logistique sur vos évaluations.
-        Cliquez "Calculer" pour prévisualiser, puis "Appliquer" pour activer.
+        Calcule des poids suggérés par régression logistique sur vos évaluations, à titre
+        indicatif uniquement. Ces retours ne sont pas encore segmentés par secteur d'activité :
+        les appliquer automatiquement à toutes les offres écraserait les pondérations propres
+        à chaque secteur. Utilisez cet aperçu pour orienter les ajustements manuels du moteur.
       </p>
     </div>
   </div>`;
@@ -283,7 +284,6 @@ function _renderWeightLearning(active) {
 
 async function _computeWeights() {
   const btn  = $("#btnComputeWeights");
-  const applyBtn = $("#btnApplyWeights");
   const result = $("#weightComputeResult");
   const msg  = $("#weightMsg");
   if (!btn) return;
@@ -296,31 +296,11 @@ async function _computeWeights() {
   try {
     const data = await safeFetch("/feedback/compute-weights", { method: "POST" });
     if (result) result.innerHTML = _renderWeightComparison(data);
-    if (applyBtn) applyBtn.disabled = false;
     if (msg) { msg.textContent = `Calculé sur ${data.sample_count} feedbacks — précision ${Math.round(data.accuracy * 100)}%`; }
   } catch (err) {
     if (msg) { msg.textContent = err.message; msg.style.color = "var(--color-error)"; }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Calculer les poids suggérés"; }
-  }
-}
-
-async function _applyWeights() {
-  const applyBtn = $("#btnApplyWeights");
-  const msg = $("#weightMsg");
-  if (!applyBtn) return;
-
-  applyBtn.disabled = true;
-  applyBtn.textContent = "Application…";
-
-  try {
-    await safeFetch("/feedback/apply-weights", { method: "POST" });
-    if (msg) { msg.textContent = "✓ Poids appliqués — le moteur les utilise maintenant."; msg.style.color = "var(--color-success)"; }
-    // Reload the whole panel to show updated active weights
-    setTimeout(() => window.dispatchEvent(new CustomEvent("load-feedback-stats")), 800);
-  } catch (err) {
-    if (msg) { msg.textContent = err.message; msg.style.color = "var(--color-error)"; }
-    if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = "Appliquer ces poids"; }
   }
 }
 

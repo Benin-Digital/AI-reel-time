@@ -6,7 +6,14 @@ from sqlalchemy import func, select
 
 from ..db import SessionLocal
 from ..deps import require_admin, require_user
-from ..models import LearnedWeights, MatchFeedback, MatchResult
+from ..models import (
+    CvDocument,
+    ExtractedText,
+    JobDocument,
+    LearnedWeights,
+    MatchFeedback,
+    MatchResult,
+)
 from ..schemas import (
     FeedbackComponentScores,
     FeedbackDecisionStats,
@@ -15,10 +22,11 @@ from ..schemas import (
     FeedbackWeightHint,
     LearnedWeightsRead,
     MatchFeedbackCreate,
+    MatchFeedbackExportRead,
     MatchFeedbackRead,
     WeightComputeResult,
 )
-from ..services.matcher import get_active_weights, set_learned_weights
+from ..services.matcher import get_active_weights
 from ..services.weight_learner import compute_learned_weights
 
 router = APIRouter(tags=["feedback"])
@@ -64,16 +72,65 @@ def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: 
         if not match:
             raise HTTPException(status_code=404, detail="Match not found")
 
+        # Snapshot what was actually compared/scored right now, since the
+        # underlying CV/job/MatchResult rows can later be deleted (e.g. the
+        # source file is replaced) — see deps.cleanup_removed_file, which
+        # cascades to delete MatchResult rows on file deletion. Without this
+        # snapshot, that would silently orphan this feedback with no way to
+        # recover what it was actually about.
+        cv_doc = session.get(CvDocument, match.cv_id)
+        job_doc = session.get(JobDocument, match.job_id)
+        cv_text_snapshot = None
+        job_text_snapshot = None
+        if cv_doc:
+            extract = session.scalar(select(ExtractedText).where(ExtractedText.file_path == cv_doc.path))
+            cv_text_snapshot = extract.extracted_text if extract else None
+        if job_doc:
+            extract = session.scalar(select(ExtractedText).where(ExtractedText.file_path == job_doc.path))
+            job_text_snapshot = extract.extracted_text if extract else None
+
+        scores_snapshot = {
+            "score": match.score,
+            "score_semantic": match.score_semantic,
+            "score_skills": match.score_skills,
+            "score_experience": match.score_experience,
+            "score_education": match.score_education,
+            "score_languages": match.score_languages,
+            "score_contract": match.score_contract,
+            "domain": match.match_domain,
+        }
+
         feedback = MatchFeedback(
             match_id=match.id,
             decision=payload.decision,
             rating=rating,
             comment=comment,
+            cv_text_snapshot=cv_text_snapshot,
+            job_text_snapshot=job_text_snapshot,
+            scores_snapshot=scores_snapshot,
         )
         session.add(feedback)
         session.commit()
         session.refresh(feedback)
         return MatchFeedbackRead.model_validate(feedback)
+
+
+@router.get("/feedback/export", response_model=list[MatchFeedbackExportRead])
+def export_feedback(request: Request, limit: int = 200, offset: int = 0) -> list[MatchFeedbackExportRead]:
+    """Full feedback history (decision, comment, CV/job text and score
+    breakdown as they were at feedback time) for periodic manual review —
+    intended to be pulled down from time to time to guide corrections to
+    the matching engine, not consumed automatically by anything."""
+    require_admin(request)
+    safe_limit = max(1, min(limit, 500))
+    with SessionLocal() as session:
+        rows = session.scalars(
+            select(MatchFeedback)
+            .order_by(MatchFeedback.created_at.desc())
+            .offset(max(0, offset))
+            .limit(safe_limit)
+        ).all()
+        return [MatchFeedbackExportRead.model_validate(row) for row in rows]
 
 
 @router.get("/feedback/stats", response_model=FeedbackStatsRead)
@@ -187,7 +244,7 @@ def get_learned_weights(request: Request) -> LearnedWeightsRead | None:
     with SessionLocal() as session:
         row = session.scalar(
             select(LearnedWeights)
-            .where(LearnedWeights.is_active == True)  # noqa: E712
+            .where(LearnedWeights.is_active == True)
             .order_by(LearnedWeights.created_at.desc())
         )
         return LearnedWeightsRead.model_validate(row) if row else None
@@ -195,6 +252,17 @@ def get_learned_weights(request: Request) -> LearnedWeightsRead | None:
 
 @router.post("/feedback/compute-weights", response_model=WeightComputeResult)
 def compute_weights(request: Request) -> WeightComputeResult:
+    """Preview-only: computes suggested weights from feedback via logistic
+    regression, for a human (the developer) to review before deciding
+    whether/how to adjust matcher._DOMAIN_W accordingly.
+
+    Deliberately does not activate anything: the feedback pool isn't
+    segmented by domain, so blindly applying a single learned weight set
+    to every domain would undo the domain-specific calibration in
+    matcher._DOMAIN_W (e.g. education mattering more in health/legal than
+    in tech). See git history for the /feedback/apply-weights endpoint
+    that used to auto-activate this and was removed for that reason.
+    """
     require_admin(request)
     with SessionLocal() as session:
         try:
@@ -213,47 +281,3 @@ def compute_weights(request: Request) -> WeightComputeResult:
         accuracy=result["accuracy"],
         current_weights={k: round(v, 4) for k, v in current.items()},
     )
-
-
-@router.post("/feedback/apply-weights", response_model=LearnedWeightsRead)
-def apply_weights(request: Request) -> LearnedWeightsRead:
-    user = require_admin(request)
-    with SessionLocal() as session:
-        try:
-            result = compute_learned_weights(session)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-
-        session.execute(
-            select(LearnedWeights).where(LearnedWeights.is_active == True)  # noqa: E712
-        )
-        for old in session.scalars(
-            select(LearnedWeights).where(LearnedWeights.is_active == True)  # noqa: E712
-        ):
-            old.is_active = False
-
-        row = LearnedWeights(
-            w_semantic=result["semantic"],
-            w_skills=result["skills"],
-            w_experience=result["experience"],
-            w_education=result["education"],
-            w_languages=result["languages"],
-            w_contract=result["contract"],
-            sample_count=result["sample_count"],
-            accuracy=result["accuracy"],
-            is_active=True,
-            created_by=user.id,
-        )
-        session.add(row)
-        session.commit()
-        session.refresh(row)
-
-        set_learned_weights({
-            "semantic":   row.w_semantic,
-            "skills":     row.w_skills,
-            "experience": row.w_experience,
-            "education":  row.w_education,
-            "languages":  row.w_languages,
-            "contract":   row.w_contract,
-        })
-        return LearnedWeightsRead.model_validate(row)

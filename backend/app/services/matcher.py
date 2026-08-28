@@ -146,6 +146,22 @@ _DOMAIN_W: dict[str, dict[str, float]] = {
         "languages": 0.07,
         "contract": 0.03,
     },
+    "management": {
+        "semantic": 0.40,
+        "skills": 0.20,
+        "experience": 0.25,  # seniority/track record weigh heavily for leadership roles
+        "education": 0.08,
+        "languages": 0.04,
+        "contract": 0.03,
+    },
+    "marketing": {
+        "semantic": 0.40,
+        "skills": 0.30,
+        "experience": 0.15,
+        "education": 0.06,
+        "languages": 0.06,
+        "contract": 0.03,
+    },
 }
 
 
@@ -169,6 +185,17 @@ def _weights(domain: str) -> dict[str, float]:
     with _learned_weights_lock:
         if _learned_weights is not None:
             return _learned_weights.copy()
+    if domain not in _DOMAIN_W and domain != "general":
+        # A document was classified into a domain that parser.py knows how to
+        # detect but that has no calibrated weight profile here. Falling back
+        # to _DEFAULT_W silently would repeat the 'management'/'marketing' gap
+        # (score computed with generic weights while the UI still shows a
+        # specific domain badge) — surface it instead of hiding it.
+        logger.warning(
+            "No calibrated weight profile for domain '%s' — falling back to "
+            "_DEFAULT_W. Add an entry to _DOMAIN_W to calibrate this domain.",
+            domain,
+        )
     raw = _DOMAIN_W.get(domain, _DEFAULT_W).copy()
     total = sum(raw.values())
     return {k: v / total for k, v in raw.items()} if total else raw
