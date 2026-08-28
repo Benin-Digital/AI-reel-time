@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     embedding_dim: int = 384
     embedding_top_k: int = 10
     embedding_batch_size: int = 16
+    # Hybrid skill scoring (F6): when a required skill isn't found literally in
+    # the CV, award partial credit based on max embedding cosine similarity to
+    # the CV's skills. Disabled -> pure lexical (previous behaviour).
+    skill_embedding_enabled: bool = True
+    skill_embedding_threshold: float = 0.6   # min cosine sim to grant any credit
+    skill_embedding_max_credit: float = 0.8  # cap: a semantic match never beats exact (1.0)
     structured_lexical_weight: float = 0.18
     structured_skill_weight: float = 0.28
     structured_must_have_weight: float = 0.22

@@ -212,20 +212,80 @@ def _weights(domain: str) -> dict[str, float]:
 # 0.5 that just means "we couldn't read this".
 
 def _skill_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
-    """Coverage of required job skills by CV skills."""
+    """Coverage of required job skills by CV skills.
+
+    Hybrid (F6): exact lexical matches always count as full credit. For each
+    required skill NOT matched literally, we optionally add *partial* credit
+    based on the max embedding cosine similarity to the CV's skills (so
+    "Vue.js" required vs "React" in the CV scores some credit instead of 0),
+    capped so a semantic match never beats an exact one. This can only ever
+    RAISE the score vs pure lexical, never lower it, and falls back to exact
+    lexical behaviour when embeddings are disabled or unavailable.
+    """
     required = set(job.required_skill_terms or job.skill_terms)
     if not required:
         return 0.5, False  # job lists no extractable required skills
     cv_skills = set(cv.skill_terms)
     if not cv_skills:
         return 0.0, False  # nothing extracted from the CV to compare
-    coverage = len(cv_skills & required) / len(required)
-    # Nice-to-have bonus (15 % weight)
+
+    matched = cv_skills & required
+    unmatched = required - matched
+
+    # Base credit: one point per exactly-matched required skill.
+    credit = float(len(matched))
+
+    # Semantic top-up for the unmatched required skills (best-effort).
+    credit += _semantic_skill_credit(unmatched, cv_skills)
+
+    coverage = credit / len(required)
+
+    # Nice-to-have bonus (15 % weight) — kept lexical, unchanged.
     nice = set(job.nice_skill_terms)
     if nice:
         nice_coverage = len(cv_skills & nice) / len(nice)
         coverage = coverage * 0.85 + nice_coverage * 0.15
     return min(1.0, coverage), True
+
+
+def _semantic_skill_credit(unmatched: set[str], cv_skills: set[str]) -> float:
+    """Sum of partial credits (each in [0, max_credit]) for required skills not
+    matched literally, using embedding similarity to the CV's skills.
+
+    Returns 0.0 — i.e. no change vs pure lexical — whenever the feature is
+    disabled, the model is unavailable, or nothing clears the threshold.
+    """
+    if not unmatched or not cv_skills:
+        return 0.0
+    try:
+        from ..settings import get_settings
+
+        settings = get_settings()
+        if not getattr(settings, "skill_embedding_enabled", False):
+            return 0.0
+        threshold = settings.skill_embedding_threshold
+        max_credit = settings.skill_embedding_max_credit
+
+        from .embeddings import best_skill_similarities
+
+        sims = best_skill_similarities(tuple(sorted(unmatched)), tuple(sorted(cv_skills)))
+    except Exception as exc:  # pragma: no cover - defensive: any failure -> lexical
+        logger.warning("Semantic skill credit unavailable (%s) — lexical only", exc)
+        return 0.0
+
+    if not sims:
+        return 0.0
+
+    total = 0.0
+    for sim in sims.values():
+        if sim >= threshold:
+            # Scale similarity above threshold into [0, max_credit] so that a
+            # borderline match earns little and a near-exact match earns close
+            # to (but never more than) max_credit.
+            span = 1.0 - threshold
+            frac = (sim - threshold) / span if span > 0 else 1.0
+            total += max_credit * min(1.0, frac)
+    return total
 
 
 def _experience_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
@@ -313,15 +373,42 @@ class MatchScore:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def _semantic_repr(doc: ParsedDocument) -> str:
-    """Most relevant text excerpt for semantic comparison.
+    """Text excerpt fed to the cross-encoder for semantic comparison.
 
-    Same fallback order regardless of doc.kind, since section
-    classification is content-driven rather than kind-driven — see the
-    comment in match_cv_to_job() for why this must not differ between
-    the CV and the job side.
+    F4: rather than betting on a single section (which fails when section
+    classification misfires), combine the informative sections in a fixed
+    order — required/skills first (most discriminating), then summary, then
+    a cleaned-text tail to fill any gap — de-duplicated and truncated to the
+    cross-encoder's window (~512 tokens ≈ 2000 chars). Same order regardless
+    of doc.kind, so the CV and job sides stay symmetric (see the comment in
+    match_cv_to_job for why symmetry matters).
+
+    Falls back to cleaned_text when the structured sections are empty, so a
+    document whose sections were all mis-parsed still gets a representation.
     """
-    text = doc.job_required_text or doc.skills_text or doc.summary_text or doc.cleaned_text
-    return text[:2000]
+    parts: list[str] = []
+    seen: set[str] = set()
+    for section in (
+        doc.job_required_text,
+        doc.skills_text,
+        doc.summary_text,
+    ):
+        s = (section or "").strip()
+        if s and s not in seen:
+            seen.add(s)
+            parts.append(s)
+
+    combined = "\n".join(parts).strip()
+    if not combined:
+        combined = (doc.cleaned_text or "").strip()
+    elif len(combined) < 400:
+        # Sections were thin — top up with cleaned text so a mis-parse doesn't
+        # starve the comparison, without duplicating what we already have.
+        tail = (doc.cleaned_text or "").strip()
+        if tail and tail not in seen:
+            combined = (combined + "\n" + tail).strip()
+
+    return combined[:2000]
 
 
 def match_cv_to_job(cv_text: str, job_text: str) -> MatchScore:

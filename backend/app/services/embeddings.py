@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from functools import lru_cache
 from math import sqrt
 from typing import Iterable
 
@@ -101,3 +102,49 @@ def compute_domain_sim(cv_profile: dict, job_profile: dict) -> float:
         return float(sum(a * b for a, b in zip(vectors[0], vectors[1])))
     except Exception:
         return 0.0
+
+
+@lru_cache(maxsize=4096)
+def _embed_one(label: str) -> tuple[float, ...] | None:
+    """Embed a single skill label, cached. Returns None if unavailable."""
+    vectors = embed_texts([label])
+    if not vectors:
+        return None
+    return tuple(vectors[0])
+
+
+def best_skill_similarities(
+    missing: tuple[str, ...],
+    cv_skills: tuple[str, ...],
+) -> dict[str, float]:
+    """For each skill in `missing`, the max cosine similarity to any skill in
+    `cv_skills`.
+
+    Both inputs are canonical skill labels. Returns {skill: best_sim in [0,1]}.
+    Returns an empty dict when the embedding model is unavailable or either
+    side is empty — callers must treat "no data" as "fall back to lexical",
+    never as "similarity 0". Inputs are tuples so results can be memoised by
+    the caller if desired.
+    """
+    if not missing or not cv_skills:
+        return {}
+    cv_vecs: list[tuple[str, tuple[float, ...]]] = []
+    for s in cv_skills:
+        v = _embed_one(s)
+        if v is not None:
+            cv_vecs.append((s, v))
+    if not cv_vecs:
+        return {}
+
+    result: dict[str, float] = {}
+    for m in missing:
+        mv = _embed_one(m)
+        if mv is None:
+            continue
+        best = 0.0
+        for _, cvv in cv_vecs:
+            # vectors are L2-normalized -> dot product == cosine similarity
+            sim = sum(a * b for a, b in zip(mv, cvv))
+            best = max(best, sim)
+        result[m] = float(best)
+    return result
