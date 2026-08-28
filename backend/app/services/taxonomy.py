@@ -135,7 +135,7 @@ _SKILLS: dict[str, list[str]] = {
     "Fidélisation": ["fidelisation", "retention", "retention client", "programme fidelite"],
     "Appel d'offres": ["appel d offres", "reponse a appel d offres", "ao", "rfp", "appel d offre"],
     "Vente B2B": ["vente b2b", "b2b", "business to business", "vente entreprise"],
-    "Vente B2C": ["vente b2c", "b2c", "business to consumer", "grande distribution", "retail"],
+    "Vente B2C": ["vente b2c", "b2c", "business to consumer", "vente au detail", "vente en magasin"],
     "Trade marketing": ["trade marketing", "animation reseau", "sell-out", "merchandising"],
     "Force de vente": ["force de vente", "animation equipe commerciale", "coaching commercial"],
 
@@ -196,7 +196,7 @@ _SKILLS: dict[str, list[str]] = {
     # ── LOGISTIQUE & SUPPLY CHAIN ──────────────────────────────────────────
     "Supply Chain": ["supply chain", "chaine d approvisionnement", "chaine logistique", "supply chain management"],
     "Gestion des stocks": ["gestion des stocks", "stock management", "inventaire", "gestion d entrepot", "gestion de stocks"],
-    "Transport": ["transport", "logistique transport", "gestion du transport", "affretement", "expedition"],
+    "Transport": ["logistique transport", "gestion du transport", "affretement", "expedition", "gestion des transports"],
     "Douane": ["douane", "transit douanier", "dedouanement", "incoterms", "transit"],
     "WMS": ["wms", "warehouse management system", "gestion entrepot", "manhattan", "reflex"],
     "ERP Logistique": ["sap mm", "sap sd", "oracle scm", "erp logistique", "sap wm"],
