@@ -35,6 +35,7 @@ def analyze_texts(payload: AnalyzeRequest) -> JSONResponse:
             "common_skills": result.common_skills,
             "missing_skills": result.missing_skills,
             "weights": result.weights,
+            "low_confidence_components": result.low_confidence_components,
         }
     )
 

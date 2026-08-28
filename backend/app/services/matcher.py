@@ -16,7 +16,7 @@ import math
 import re
 import threading
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .parser import ParsedDocument, parse_document
 
@@ -202,38 +202,46 @@ def _weights(domain: str) -> dict[str, float]:
 
 
 # ── Component scoring ─────────────────────────────────────────────────────────
+#
+# Each component returns (score, has_signal). `has_signal` is False when the
+# neutral/penalty score is due to MISSING information rather than a real
+# comparison — e.g. the job specifies no language requirement, or an education
+# section couldn't be extracted from either side. The scores themselves are
+# unchanged; has_signal is surfaced separately (see MatchScore.low_confidence_
+# components) so a recruiter can tell a legitimately-neutral 0.5 apart from a
+# 0.5 that just means "we couldn't read this".
 
-def _skill_score(cv: ParsedDocument, job: ParsedDocument) -> float:
+def _skill_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     """Coverage of required job skills by CV skills."""
     required = set(job.required_skill_terms or job.skill_terms)
     if not required:
-        return 0.5
+        return 0.5, False  # job lists no extractable required skills
     cv_skills = set(cv.skill_terms)
     if not cv_skills:
-        return 0.0
+        return 0.0, False  # nothing extracted from the CV to compare
     coverage = len(cv_skills & required) / len(required)
     # Nice-to-have bonus (15 % weight)
     nice = set(job.nice_skill_terms)
     if nice:
         nice_coverage = len(cv_skills & nice) / len(nice)
         coverage = coverage * 0.85 + nice_coverage * 0.15
-    return min(1.0, coverage)
+    return min(1.0, coverage), True
 
 
-def _experience_score(cv: ParsedDocument, job: ParsedDocument) -> float:
+def _experience_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     """Years-of-experience match."""
     cv_y, job_y = cv.experience_years, job.experience_years
     if job_y <= 0 and cv_y <= 0:
-        return 0.5
+        return 0.5, False  # no years extracted on either side
     if job_y <= 0:
-        return 0.75
+        return 0.75, False  # job states no requirement to compare against
     if cv_y <= 0:
-        return 0.2
+        return 0.2, False  # couldn't extract CV experience to compare
     if cv_y >= job_y:
         # Over-qualified: slight penalty if 3× over-qualified
-        return 0.85 if cv_y / job_y > 3 else 1.0
+        return (0.85 if cv_y / job_y > 3 else 1.0), True
     shortfall = (job_y - cv_y) / job_y
-    return max(0.0, 1.0 - shortfall)
+    return max(0.0, 1.0 - shortfall), True
 
 
 def _fold(text: str) -> str:
@@ -241,10 +249,10 @@ def _fold(text: str) -> str:
     return nfkd.encode("ascii", "ignore").decode("ascii").lower()
 
 
-def _education_score(cv: ParsedDocument, job: ParsedDocument) -> float:
+def _education_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     """Token-level Jaccard on education sections."""
     if not cv.education_text or not job.education_text:
-        return 0.5
+        return 0.5, False  # education section missing on at least one side
     stopwords = {"les", "des", "une", "the", "and", "for", "with", "dans", "de", "du"}
 
     def tokens(text: str) -> set[str]:
@@ -254,28 +262,28 @@ def _education_score(cv: ParsedDocument, job: ParsedDocument) -> float:
     cv_t = tokens(cv.education_text)
     job_t = tokens(job.education_text)
     if not cv_t or not job_t:
-        return 0.5
+        return 0.5, False
     union = cv_t | job_t
-    return len(cv_t & job_t) / len(union)
+    return len(cv_t & job_t) / len(union), True
 
 
-def _language_score(cv: ParsedDocument, job: ParsedDocument) -> float:
+def _language_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     """Coverage of required languages."""
     job_langs = set(job.language_terms)
     if not job_langs:
-        return 0.5
+        return 0.5, False  # job requires no specific language
     cv_langs = set(cv.language_terms)
     if not cv_langs:
-        return 0.3
-    return len(cv_langs & job_langs) / len(job_langs)
+        return 0.3, False  # couldn't extract CV languages to compare
+    return len(cv_langs & job_langs) / len(job_langs), True
 
 
-def _contract_score(cv: ParsedDocument, job: ParsedDocument) -> float:
+def _contract_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     if not job.contract_type:
-        return 0.5
+        return 0.5, False  # job specifies no contract type
     if not cv.contract_type:
-        return 0.4
-    return 1.0 if cv.contract_type == job.contract_type else 0.0
+        return 0.4, False  # couldn't extract CV contract preference
+    return (1.0 if cv.contract_type == job.contract_type else 0.0), True
 
 
 # ── Result dataclass ──────────────────────────────────────────────────────────
@@ -293,6 +301,13 @@ class MatchScore:
     common_skills: list[str]   # Skills in both CV and job
     missing_skills: list[str]  # Required skills absent from CV
     weights: dict[str, float]  # Weights used for this match
+    # Components whose score is a neutral/default value driven by MISSING
+    # information rather than a real comparison (e.g. no language requirement
+    # in the job, or an education section that couldn't be extracted). Lets a
+    # recruiter tell "legitimately neutral" apart from "we couldn't read this"
+    # instead of both looking like an identical 0.5. Never includes 'semantic'
+    # (the cross-encoder always produces a real comparison when available).
+    low_confidence_components: list[str] = field(default_factory=list)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -342,11 +357,23 @@ def match_cv_to_job(cv_text: str, job_text: str) -> MatchScore:
     job_repr = _semantic_repr(job)
     semantic = _cross_encode(job_repr, cv_repr)
 
-    skills = _skill_score(cv, job)
-    experience = _experience_score(cv, job)
-    education = _education_score(cv, job)
-    languages = _language_score(cv, job)
-    contract = _contract_score(cv, job)
+    skills, skills_ok = _skill_score(cv, job)
+    experience, experience_ok = _experience_score(cv, job)
+    education, education_ok = _education_score(cv, job)
+    languages, languages_ok = _language_score(cv, job)
+    contract, contract_ok = _contract_score(cv, job)
+
+    low_confidence = [
+        name
+        for name, ok in (
+            ("skills", skills_ok),
+            ("experience", experience_ok),
+            ("education", education_ok),
+            ("languages", languages_ok),
+            ("contract", contract_ok),
+        )
+        if not ok
+    ]
 
     final = (
         w["semantic"] * semantic
@@ -373,6 +400,7 @@ def match_cv_to_job(cv_text: str, job_text: str) -> MatchScore:
         common_skills=sorted(cv_skills & job_required),
         missing_skills=sorted(job_required - cv_skills),
         weights=w,
+        low_confidence_components=low_confidence,
     )
 
 
