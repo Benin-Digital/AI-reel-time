@@ -32,57 +32,104 @@ _DOMAIN_SIGNALS: dict[str, list[str]] = {
         "backend", "frontend", "full stack", "fullstack", "data scientist", "devops",
         "python", "javascript", "kubernetes", "docker", "sql", "api rest",
         "programmation", "coding", "code", "informatique", "systemes",
+        "data engineer", "ingenieur bi", "business intelligence", "etl",
+        "administrateur systeme", "architecte logiciel", "architecte technique",
     ],
     "commercial": [
         "commercial", "sales", "vente", "vendeur", "account manager",
         "developpement commercial", "business developer", "charge d affaires",
         "prospection", "crm", "portefeuille client", "chiffre d affaires",
+        "attache commercial", "ingenieur commercial",
     ],
     "finance": [
         "comptable", "comptabilite", "accounting", "auditeur", "controleur de gestion",
-        "finance", "tresorier", "fiscalite", "bilan", "resultat", "ifrs",
+        "tresorier", "fiscalite", "bilan comptable", "ifrs",
         "sage", "cegid", "paie", "consolidation", "analyse financiere",
+        "expert comptable", "controle de gestion", "daf",
     ],
     "hr": [
-        "ressources humaines", "rh", "recruteur", "recrutement", "charge rh",
-        "talent", "sirh", "gpec", "droit du travail", "onboarding",
+        "ressources humaines", "recruteur", "recrutement", "charge rh",
+        "talent acquisition", "sirh", "gpec", "droit du travail", "onboarding",
         "gestionnaire rh", "administration du personnel", "chargee rh",
+        "responsable rh", "drh", "gestionnaire de paie",
     ],
     "marketing": [
         "marketing", "chef de produit", "product manager", "brand manager",
         "seo", "sea", "community manager", "marketing digital", "emailing",
-        "communication", "chef de marque", "chargee de communication",
+        "chef de marque", "chargee de communication", "charge de communication",
+        "content manager", "traffic manager", "growth",
     ],
     "legal": [
         "juriste", "avocat", "droit", "compliance", "juridique",
-        "contrat", "contentieux", "propriete intellectuelle", "reglementation",
-        "notaire", "huissier", "conseil juridique",
+        "contentieux", "propriete intellectuelle", "reglementation",
+        "notaire", "huissier", "conseil juridique", "droit des affaires",
+        "droit social", "droit des contrats",
     ],
     "logistics": [
-        "logistique", "supply chain", "transport", "entrepot", "stock",
-        "approvisionnement", "achats", "douane", "wms", "erp",
-        "livraison", "distribution", "gestionnaire de stock",
+        "logistique", "supply chain", "entrepot",
+        "approvisionnement", "douane", "wms",
+        "livraison", "gestionnaire de stock", "responsable logistique",
+        "affretement", "cariste", "magasinier", "planification logistique",
     ],
     "health": [
         "infirmier", "medecin", "pharmacien", "aide soignant", "soins",
-        "sante", "hopital", "clinique", "kinesitherapeute", "urgences",
-        "bloc", "chirurgie", "patient", "nursing", "medical",
+        "hopital", "clinique", "kinesitherapeute", "urgences",
+        "bloc operatoire", "chirurgie", "patient", "nursing", "medical",
+        "sage femme", "radiologue", "ide",
     ],
     "construction": [
         "btp", "chantier", "genie civil", "conducteur de travaux",
-        "architecte", "bim", "autocad", "rehabilitation", "electricite",
+        "architecte", "bim", "autocad", "rehabilitation",
         "plomberie", "maconnerie", "metreur", "maitre d oeuvre",
+        "gros oeuvre", "second oeuvre", "economiste de la construction",
     ],
     "education": [
-        "enseignant", "professeur", "formateur", "pedagogie", "education",
-        "ecole", "lycee", "universite", "e-learning", "tutorat", "formation",
-        "moniteur", "instructeur", "enseignante",
+        "enseignant", "professeur", "formateur", "pedagogie",
+        "ecole", "lycee", "universite", "e-learning", "tutorat",
+        "moniteur", "instructeur", "enseignante", "ingenierie pedagogique",
     ],
     "management": [
         "directeur", "responsable", "chef de service", "direction",
         "encadrement", "pilotage", "gouvernance", "strategie",
-        "direction generale", "dg", "drh", "daf", "dsi",
+        "direction generale", "dg", "dsi",
+        # Gestion de projet = coeur du management de projet, souvent le vrai
+        # metier de profils transverses (chef de projet IT en banque, etc.)
+        "chef de projet", "cheffe de projet", "chef de projets", "gestion de projet",
+        "project manager", "pilotage de projet", "pmo", "moa", "moe", "amoa", "amoe",
+        "maitrise d ouvrage", "maitrise d oeuvre", "conduite du changement",
+        "cadrage", "comitologie", "chef de programme",
     ],
+}
+
+# Signaux "forts" : titres de poste / metiers sans ambiguite. Comptent
+# double dans le depart de domaine, car un titre de poste est bien plus
+# discriminant qu'un simple outil ou mot-cle isole (ex: "sql" apparait dans
+# des CV de tous domaines, "chef de projet" designe un metier precis).
+_STRONG_SIGNALS: dict[str, set[str]] = {
+    "tech": {"developpeur", "developer", "ingenieur logiciel", "software engineer",
+             "data scientist", "devops", "data engineer", "ingenieur bi",
+             "administrateur systeme", "architecte logiciel", "architecte technique"},
+    "commercial": {"commercial", "account manager", "business developer",
+                   "charge d affaires", "attache commercial", "ingenieur commercial"},
+    "finance": {"comptable", "auditeur", "controleur de gestion", "tresorier",
+                "expert comptable", "daf"},
+    "hr": {"recruteur", "charge rh", "gestionnaire rh", "chargee rh",
+           "responsable rh", "drh", "gestionnaire de paie"},
+    "marketing": {"chef de produit", "product manager", "brand manager",
+                  "community manager", "chef de marque", "content manager",
+                  "traffic manager"},
+    "legal": {"juriste", "avocat", "notaire", "huissier"},
+    "logistics": {"responsable logistique", "gestionnaire de stock", "cariste",
+                  "magasinier"},
+    "health": {"infirmier", "medecin", "pharmacien", "aide soignant",
+               "kinesitherapeute", "sage femme", "radiologue", "ide"},
+    "construction": {"conducteur de travaux", "metreur", "maitre d oeuvre",
+                     "economiste de la construction"},
+    "education": {"enseignant", "professeur", "formateur", "moniteur",
+                  "instructeur", "enseignante"},
+    "management": {"directeur", "chef de service", "direction generale", "dg",
+                   "dsi", "chef de projet", "cheffe de projet", "chef de projets",
+                   "project manager", "pmo", "chef de programme"},
 }
 
 
@@ -90,17 +137,53 @@ def detect_domain(text: str) -> str:
     """
     Detect the primary professional domain of a document.
     Returns one of the domain keys in _DOMAIN_SIGNALS, or 'general'.
-    Only examines the first 3000 chars to stay fast.
+
+    Weighting: a "strong" signal (a job title / occupation) counts double,
+    since it is far more discriminating than a lone tool or keyword ("sql"
+    appears in CVs of every domain; "chef de projet" names a specific job).
+    Only the first 3000 chars are examined for speed.
+
+    Ties are broken deterministically by _TIE_PRIORITY (occupation-defining
+    domains first) rather than by dict insertion order, so a transverse
+    profile (e.g. an IT project manager working in banking) doesn't fall
+    into an arbitrary domain on a 1-1 keyword tie.
     """
     folded = _fold(text[:3000])
     scores: dict[str, int] = {}
     for domain, signals in _DOMAIN_SIGNALS.items():
-        count = sum(1 for s in signals if _fold(s) in folded)
-        if count > 0:
-            scores[domain] = count
+        strong = _STRONG_SIGNALS.get(domain, set())
+        score = 0
+        for s in signals:
+            if _fold(s) in folded:
+                score += 2 if s in strong else 1
+        if score > 0:
+            scores[domain] = score
     if not scores:
         return "general"
-    return max(scores, key=lambda d: scores[d])
+    best = max(scores.values())
+    top = [d for d, v in scores.items() if v == best]
+    if len(top) == 1:
+        return top[0]
+    # Tie: prefer the domain whose *role* is most specific.
+    return min(top, key=lambda d: _TIE_PRIORITY.get(d, 99))
+
+
+# Lower = wins ties. Occupation-defining, less ambiguous domains rank first;
+# "management" outranks "tech" so a project-manager profile that also mentions
+# a couple of tools lands in management rather than tech on a tie.
+_TIE_PRIORITY: dict[str, int] = {
+    "health": 0,
+    "legal": 1,
+    "finance": 2,
+    "construction": 3,
+    "hr": 4,
+    "education": 5,
+    "logistics": 6,
+    "management": 7,
+    "marketing": 8,
+    "commercial": 9,
+    "tech": 10,
+}
 
 
 # ── Section heading detection ─────────────────────────────────────────────────
