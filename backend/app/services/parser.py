@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import datetime
 from functools import lru_cache
 
 from .taxonomy import find_skills
@@ -238,13 +239,74 @@ _YEAR_PLAIN_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)", r
 _AGE_CTX_RE = re.compile(r"\bne\b.{0,20}\d{4}|\bnaissance\b|\bage\s*[:\-]?\s*\d{1,2}\b", re.IGNORECASE)
 _EXP_CTX_RE = re.compile(r"exp[eé]rience|exp\b|pratique", re.IGNORECASE)
 
+# Date-range patterns, e.g. "2018 - 2023", "2020 – à ce jour", "depuis 2018".
+# NOTE: this runs on the ORIGINAL text, not the _fold()ed one, because _fold
+# strips en-dash/em-dash (and accents), which would destroy the range
+# separator. We therefore accept accented "ongoing" tokens here, and make the
+# dash separator tolerant (hyphen/en-dash/em-dash, or just whitespace).
+_DASH = r"[-–—]"
+_ONGOING = r"(?:à ce jour|a ce jour|aujourd'?hui|pr[ée]sent|actuel(?:le)?|en cours|now)"
+_YEAR_RANGE_RE = re.compile(
+    rf"\b(19[7-9]\d|20\d\d)\s*(?:{_DASH}|au|to|\bà\b)\s*(19[7-9]\d|20\d\d|{_ONGOING})",
+    re.IGNORECASE,
+)
+_SINCE_RE = re.compile(r"\bdepuis\s+(19[7-9]\d|20\d\d)\b", re.IGNORECASE)
+_ONGOING_RE = re.compile(_ONGOING, re.IGNORECASE)
+
+
+def _merge_intervals(intervals: list[tuple[int, int]]) -> int:
+    """Total number of years covered by a set of [start, end] year intervals,
+    merging overlaps so parallel jobs are not double-counted."""
+    if not intervals:
+        return 0
+    ordered = sorted(intervals)
+    merged: list[list[int]] = [list(ordered[0])]
+    for start, end in ordered[1:]:
+        last = merged[-1]
+        if start <= last[1]:          # overlap or contiguous
+            last[1] = max(last[1], end)
+        else:
+            merged.append([start, end])
+    return sum(end - start for start, end in merged)
+
+
+def _years_from_date_ranges(text: str) -> int:
+    """Estimate total experience from dated job periods.
+
+    Handles "2018 - 2023", "2020 – à ce jour", "depuis 2018". Overlapping
+    periods are merged (parallel jobs don't inflate the total). Runs on the
+    original (non-folded) text so typographic dashes survive. Returns 0 when
+    no date range is found.
+    """
+    current_year = datetime.now().year
+    intervals: list[tuple[int, int]] = []
+
+    for m in _YEAR_RANGE_RE.finditer(text):
+        start = int(m.group(1))
+        end_raw = m.group(2).strip()
+        if _ONGOING_RE.fullmatch(end_raw):
+            end = current_year
+        else:
+            end = int(end_raw)
+        if end < start or start > current_year or end > current_year:
+            continue
+        intervals.append((start, end))
+
+    for m in _SINCE_RE.finditer(text):
+        start = int(m.group(1))
+        if start <= current_year:
+            intervals.append((start, current_year))
+
+    total = _merge_intervals(intervals)
+    return total if 1 <= total <= 40 else 0
+
 
 def _extract_years(text: str) -> int:
     if not text:
         return 0
     folded = _fold(text)
 
-    # Priority: explicit experience context patterns
+    # Priority 1: explicit "N ans d'expérience" phrasing (most reliable).
     for m in _YEAR_CTX_RE.finditer(folded):
         groups = [g for g in m.groups() if g and g.isdigit()]
         if groups:
@@ -252,7 +314,14 @@ def _extract_years(text: str) -> int:
             if 1 <= v <= 40:
                 return v
 
-    # Fallback: skip standalone age lines and age-context lines without experience
+    # Priority 2: dated job periods (many CVs never write "N ans" and instead
+    # list positions with date ranges — those previously returned 0). Runs on
+    # the ORIGINAL text so typographic dashes/accents survive.
+    from_dates = _years_from_date_ranges(text)
+    if from_dates:
+        return from_dates
+
+    # Priority 3 (fallback): a bare "N ans" somewhere, skipping age lines.
     safe_lines = []
     for line in folded.split("\n"):
         if re.fullmatch(r"\d{1,2}\s+ans?\.?", line.strip()):
