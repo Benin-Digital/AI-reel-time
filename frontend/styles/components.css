@@ -790,7 +790,7 @@ select:disabled {
 }
 
 .dashboard-logo {
-  max-width: 340px;
+  max-width: 700px;
   width: 100%;
   object-fit: contain;
 }
