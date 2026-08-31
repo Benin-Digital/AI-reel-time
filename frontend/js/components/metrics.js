@@ -10,7 +10,14 @@ let _timer = null;
 
 export function renderMetrics(data) {
   const set = (id, val) => { const el = $(id); if (el) el.textContent = val ?? "—"; };
-  set("#metricUptime",       data.uptime_seconds != null ? Math.round(data.uptime_seconds) : "—");
+  const uptimeEl = $("#metricUptime");
+  if (uptimeEl) {
+    const dot   = uptimeEl.querySelector(".uptime-dot");
+    const label = uptimeEl.querySelector(".uptime-label");
+    const up    = data.uptime_seconds != null && data.uptime_seconds >= 0;
+    if (dot)   { dot.classList.toggle("uptime-dot--down",   !up); }
+    if (label) { label.classList.toggle("uptime-label--down", !up); label.textContent = up ? "Système opérationnel" : "Système hors ligne"; }
+  }
   set("#metricEvents",       data.event_count);
   set("#metricExtractions",  data.extraction_count);
   set("#metricScores",       data.score_count);
