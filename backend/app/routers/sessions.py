@@ -8,8 +8,10 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
+from fastapi import Request
+
 from ..db import SessionLocal
-from ..deps import cleanup_removed_file
+from ..deps import cleanup_removed_file, require_user
 from ..models import AnalysisSession, CvDocument, JobDocument, MatchResult
 from ..schemas import (
     AnalysisSessionCreate,
@@ -42,14 +44,18 @@ def _calculate_session_counts(session: Session, session_id: int) -> tuple[int, i
 
 @router.get("/sessions", response_model=list[AnalysisSessionRead])
 def list_analysis_sessions(
+    request: Request,
     page: int = 1,
     page_size: int = 25,
     status: str | None = None,
     search: str | None = None,
 ) -> list[AnalysisSessionRead]:
+    current_user = require_user(request)
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(AnalysisSession)
+    if current_user.role not in {"admin", "superadmin"}:
+        stmt = stmt.where(AnalysisSession.user_id == current_user.id)
     if status:
         stmt = stmt.where(AnalysisSession.status == status)
     if search:
@@ -84,13 +90,15 @@ def list_analysis_sessions(
 
 
 @router.post("/sessions", response_model=AnalysisSessionRead)
-def create_analysis_session(payload: AnalysisSessionCreate) -> AnalysisSessionRead:
+def create_analysis_session(request: Request, payload: AnalysisSessionCreate) -> AnalysisSessionRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         new_session = AnalysisSession(
             name=payload.name.strip(),
             description=payload.description.strip() if payload.description else None,
             status=payload.status,
             closed_at=datetime.utcnow() if payload.status == "closed" else None,
+            user_id=current_user.id,
         )
         session.add(new_session)
         session.commit()
@@ -111,10 +119,13 @@ def create_analysis_session(payload: AnalysisSessionCreate) -> AnalysisSessionRe
 
 
 @router.get("/sessions/{session_id}", response_model=AnalysisSessionDetailRead)
-def get_analysis_session(session_id: int) -> AnalysisSessionDetailRead:
+def get_analysis_session(request: Request, session_id: int) -> AnalysisSessionDetailRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         session_obj = session.get(AnalysisSession, session_id)
         if not session_obj:
+            raise HTTPException(status_code=404, detail="Analyse session not found")
+        if current_user.role not in {"admin", "superadmin"} and session_obj.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Analyse session not found")
 
         cv_docs = session.scalars(
@@ -145,10 +156,13 @@ def get_analysis_session(session_id: int) -> AnalysisSessionDetailRead:
 
 
 @router.patch("/sessions/{session_id}", response_model=AnalysisSessionRead)
-def update_analysis_session(session_id: int, payload: AnalysisSessionUpdate) -> AnalysisSessionRead:
+def update_analysis_session(request: Request, session_id: int, payload: AnalysisSessionUpdate) -> AnalysisSessionRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         session_obj = session.get(AnalysisSession, session_id)
         if not session_obj:
+            raise HTTPException(status_code=404, detail="Analyse session not found")
+        if current_user.role not in {"admin", "superadmin"} and session_obj.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Analyse session not found")
 
         if payload.name is not None:
@@ -179,10 +193,13 @@ def update_analysis_session(session_id: int, payload: AnalysisSessionUpdate) -> 
 
 
 @router.post("/sessions/{session_id}/assign", response_model=AnalysisSessionDetailRead)
-def assign_documents_to_session(session_id: int, payload: SessionAssignRequest) -> AnalysisSessionDetailRead:
+def assign_documents_to_session(request: Request, session_id: int, payload: SessionAssignRequest) -> AnalysisSessionDetailRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         session_obj = session.get(AnalysisSession, session_id)
         if not session_obj:
+            raise HTTPException(status_code=404, detail="Analyse session not found")
+        if current_user.role not in {"admin", "superadmin"} and session_obj.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Analyse session not found")
 
         if payload.cv_ids:
@@ -225,10 +242,13 @@ def assign_documents_to_session(session_id: int, payload: SessionAssignRequest) 
 
 
 @router.post("/sessions/{session_id}/unassign", response_model=AnalysisSessionDetailRead)
-def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
+def unassign_session_documents(request: Request, session_id: int) -> AnalysisSessionDetailRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         session_obj = session.get(AnalysisSession, session_id)
         if not session_obj:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if current_user.role not in {"admin", "superadmin"} and session_obj.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Session not found")
         session.execute(
             update(CvDocument).where(CvDocument.session_id == session_id).values(session_id=None)
@@ -257,10 +277,13 @@ def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
 
 
 @router.delete("/sessions/{session_id}", status_code=204, response_model=None)
-def delete_analysis_session(session_id: int, delete_documents: bool = False) -> None:
+def delete_analysis_session(request: Request, session_id: int, delete_documents: bool = False) -> None:
+    current_user = require_user(request)
     with SessionLocal() as session:
         session_obj = session.get(AnalysisSession, session_id)
         if not session_obj:
+            raise HTTPException(status_code=404, detail="Session not found")
+        if current_user.role not in {"admin", "superadmin"} and session_obj.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Session not found")
 
         if delete_documents:

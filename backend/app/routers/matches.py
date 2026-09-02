@@ -1,11 +1,12 @@
 """Endpoints /matches/* et sous-routes /cv-documents/{id}/matches, /job-documents/{id}/matches."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import or_, select
 
 from ..db import SessionLocal
+from ..deps import require_user
 from ..models import CvDocument, ExtractedText, JobDocument, MatchResult
 from ..schemas import (
     AnalyzeRequest,
@@ -41,9 +42,15 @@ def analyze_texts(payload: AnalyzeRequest) -> JSONResponse:
 
 
 @router.get("/cv-documents/{doc_id}/matches", response_model=list[MatchRead])
-def list_matches_for_cv(doc_id: int, limit: int = 50) -> list[MatchRead]:
+def list_matches_for_cv(request: Request, doc_id: int, limit: int = 50) -> list[MatchRead]:
+    current_user = require_user(request)
     safe_limit = max(1, min(limit, 200))
     with SessionLocal() as session:
+        cv_doc = session.get(CvDocument, doc_id)
+        if not cv_doc:
+            raise HTTPException(status_code=404, detail="CV document not found")
+        if current_user.role not in {"admin", "superadmin"} and cv_doc.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="CV document not found")
         rows = session.scalars(
             select(MatchResult)
             .where(MatchResult.cv_id == doc_id)
@@ -65,9 +72,15 @@ def list_matches_for_cv(doc_id: int, limit: int = 50) -> list[MatchRead]:
 
 
 @router.get("/job-documents/{doc_id}/matches", response_model=list[MatchRead])
-def list_matches_for_job(doc_id: int, limit: int = 50) -> list[MatchRead]:
+def list_matches_for_job(request: Request, doc_id: int, limit: int = 50) -> list[MatchRead]:
+    current_user = require_user(request)
     safe_limit = max(1, min(limit, 200))
     with SessionLocal() as session:
+        job_doc = session.get(JobDocument, doc_id)
+        if not job_doc:
+            raise HTTPException(status_code=404, detail="Job document not found")
+        if current_user.role not in {"admin", "superadmin"} and job_doc.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Job document not found")
         rows = session.scalars(
             select(MatchResult)
             .where(MatchResult.job_id == doc_id)
@@ -90,6 +103,7 @@ def list_matches_for_job(doc_id: int, limit: int = 50) -> list[MatchRead]:
 
 @router.get("/matches", response_model=list[MatchRead])
 def list_matches(
+    request: Request,
     page: int = 1,
     page_size: int = 25,
     cv_id: int | None = None,
@@ -101,12 +115,16 @@ def list_matches(
     sort_by: str = "score_desc",
     search: str | None = None,
 ) -> list[MatchRead]:
+    current_user = require_user(request)
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(MatchResult)
-    if session_id is not None or unassigned_only or search:
+    needs_join = session_id is not None or unassigned_only or search or current_user.role not in {"admin", "superadmin"}
+    if needs_join:
         stmt = stmt.join(CvDocument, MatchResult.cv_id == CvDocument.id)
         stmt = stmt.join(JobDocument, MatchResult.job_id == JobDocument.id)
+    if current_user.role not in {"admin", "superadmin"}:
+        stmt = stmt.where(CvDocument.user_id == current_user.id)
     if cv_id is not None:
         stmt = stmt.where(MatchResult.cv_id == cv_id)
     if job_id is not None:
@@ -161,11 +179,16 @@ def list_matches(
 
 
 @router.get("/matches/{match_id}", response_model=MatchRead)
-def get_match(match_id: int) -> MatchRead:
+def get_match(request: Request, match_id: int) -> MatchRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         match = session.get(MatchResult, match_id)
         if not match:
             raise HTTPException(status_code=404, detail="Match not found")
+        if current_user.role not in {"admin", "superadmin"}:
+            cv_doc = session.get(CvDocument, match.cv_id)
+            if not cv_doc or cv_doc.user_id != current_user.id:
+                raise HTTPException(status_code=404, detail="Match not found")
         return MatchRead(
             id=match.id,
             cv_id=match.cv_id,
@@ -178,7 +201,8 @@ def get_match(match_id: int) -> MatchRead:
 
 
 @router.get("/matches/{match_id}/explain", response_model=MatchExplainRead)
-def explain_match(match_id: int) -> MatchExplainRead:
+def explain_match(request: Request, match_id: int) -> MatchExplainRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         match = session.get(MatchResult, match_id)
         if not match:
@@ -188,6 +212,8 @@ def explain_match(match_id: int) -> MatchExplainRead:
         job_doc = session.get(JobDocument, match.job_id)
         if not cv_doc or not job_doc:
             raise HTTPException(status_code=404, detail="Document not found")
+        if current_user.role not in {"admin", "superadmin"} and cv_doc.user_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Match not found")
 
         cv_extract = session.scalar(
             select(ExtractedText).where(ExtractedText.file_path == cv_doc.path)
