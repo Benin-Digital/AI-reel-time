@@ -668,7 +668,14 @@ def build_document_profile(
 
     skill_sources = [skills_text, job_required_text, job_nice_text]
     if kind == "cv":
-        skill_sources.extend([experience_text, certifications_text])
+        # Include cleaned_text as a safety net: some CVs list tools only in
+        # per-job "Environnement technique:" lines with no dedicated skills
+        # section, and section classification (esp. Docling) may file those
+        # under summary/education — outside the sections above. Scanning the
+        # full cleaned text as well ensures those skills (Git, SQL, ServiceNow…)
+        # are still found. _extract_skill_terms de-duplicates, so this only
+        # adds coverage.
+        skill_sources.extend([experience_text, certifications_text, cleaned_text])
     elif kind == "job":
         # Some job offers put tech stack in the summary/intro ("I. Savoir") or in
         # uncategorised sections — include them so nothing is missed.
