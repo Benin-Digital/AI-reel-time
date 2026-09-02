@@ -310,7 +310,7 @@ def _document_status(result: ExtractedTextRead) -> tuple[str, str | None]:
     return "failed", result.error_message or "extraction failed"
 
 
-def _upsert_cv_document(path: Path, extraction: ExtractedTextRead, user_id: int | None = None) -> CvDocumentRead:
+def _upsert_cv_document(path: Path, extraction: ExtractedTextRead) -> CvDocumentRead:
     status, last_error = _document_status(extraction)
     with SessionLocal() as session:
         existing = session.scalar(
@@ -329,7 +329,6 @@ def _upsert_cv_document(path: Path, extraction: ExtractedTextRead, user_id: int 
             content_hash=extraction.content_hash,
             status=status,
             last_error=last_error,
-            user_id=user_id,
         )
         session.add(doc)
         session.commit()
@@ -337,7 +336,7 @@ def _upsert_cv_document(path: Path, extraction: ExtractedTextRead, user_id: int 
         return CvDocumentRead.model_validate(doc)
 
 
-def _upsert_job_document(path: Path, extraction: ExtractedTextRead, user_id: int | None = None) -> JobDocumentRead:
+def _upsert_job_document(path: Path, extraction: ExtractedTextRead) -> JobDocumentRead:
     status, last_error = _document_status(extraction)
     with SessionLocal() as session:
         existing = session.scalar(
@@ -356,7 +355,6 @@ def _upsert_job_document(path: Path, extraction: ExtractedTextRead, user_id: int
             content_hash=extraction.content_hash,
             status=status,
             last_error=last_error,
-            user_id=user_id,
         )
         session.add(doc)
         session.commit()
@@ -1566,7 +1564,6 @@ def admin_reextract(request: Request) -> dict[str, object]:
 
 @app.post("/ingest")
 def ingest_file(
-    request: Request,
     folder: str = Form(...),
     upload: UploadFile = File(...),
     filename: str | None = Form(None),
@@ -1606,19 +1603,16 @@ def ingest_file(
             temp_path.unlink()
         raise
 
-    current_user = getattr(request.state, "user", None)
-    upload_user_id: int | None = current_user.id if current_user else None
-
     # Create a pending document record immediately so the frontend shows it
     # without waiting for Docling/embedding processing to complete.
     with SessionLocal() as session:
         if folder == "cv":
             if not session.scalar(select(CvDocument).where(CvDocument.path == str(target_path))):
-                session.add(CvDocument(path=str(target_path), status="pending", user_id=upload_user_id))
+                session.add(CvDocument(path=str(target_path), status="pending"))
                 session.commit()
         else:
             if not session.scalar(select(JobDocument).where(JobDocument.path == str(target_path))):
-                session.add(JobDocument(path=str(target_path), status="pending", user_id=upload_user_id))
+                session.add(JobDocument(path=str(target_path), status="pending"))
                 session.commit()
 
     _on_watch_event(
@@ -1636,7 +1630,7 @@ def ingest_file(
 
 @app.post("/job-offers", response_model=JobOfferRead)
 def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
-    current_user = _require_admin(request)
+    _require_admin(request)
 
     normalized_status = payload.status if payload.status in {"draft", "published"} else "published"
     normalized_languages = ["Français"]
@@ -1683,7 +1677,6 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
             rendered_text=rendered_text,
             rendered_html=rendered_html,
             published_document_path=None,
-            user_id=current_user.id,
         )
         session.add(offer)
         session.commit()
@@ -1790,7 +1783,6 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
                                 path=str(doc_path),
                                 content_hash=content_hash,
                                 status="ready",
-                                user_id=current_user.id,
                             )
                             session2.add(job_doc)
                             session2.commit()
@@ -1812,7 +1804,7 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
 
 @app.post("/cv-profiles", response_model=CvProfileRead)
 def create_cv_profile(payload: CvProfileCreate, request: Request) -> CvProfileRead:
-    current_user = _require_admin(request)
+    _require_admin(request)
 
     normalized_status = payload.status if payload.status in {"draft", "published"} else "published"
     normalized_experience = _normalize_lines(payload.experience)
@@ -1934,7 +1926,6 @@ def create_cv_profile(payload: CvProfileCreate, request: Request) -> CvProfileRe
                             path=str(doc_path),
                             content_hash=content_hash,
                             status="ready",
-                            user_id=current_user.id,
                         )
                         session.add(cv_doc)
                         session.commit()
@@ -2097,19 +2088,15 @@ def list_scores(limit: int = 50) -> list[ScoreRead]:
 
 @app.get("/cv-documents", response_model=list[CvDocumentRead])
 def list_cv_documents(
-    request: Request,
     page: int = 1,
     page_size: int = 25,
     status: str | None = None,
     query: str | None = None,
     session_id: int | None = None,
 ) -> list[CvDocumentRead]:
-    current_user = _require_auth(request)
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(CvDocument)
-    if current_user.role not in {"admin", "superadmin"}:
-        stmt = stmt.where(CvDocument.user_id == current_user.id)
     if session_id is None:
         stmt = stmt.where(CvDocument.session_id.is_(None))
     else:
@@ -2135,26 +2122,20 @@ def list_cv_documents(
 
 
 @app.get("/cv-documents/{doc_id}", response_model=CvDocumentRead)
-def get_cv_document(request: Request, doc_id: int) -> CvDocumentRead:
-    current_user = _require_auth(request)
+def get_cv_document(doc_id: int) -> CvDocumentRead:
     with SessionLocal() as session:
         doc = session.get(CvDocument, doc_id)
         if not doc:
-            raise HTTPException(status_code=404, detail="CV document not found")
-        if current_user.role not in {"admin", "superadmin"} and doc.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="CV document not found")
         return CvDocumentRead.model_validate(doc)
 
 
 @app.get("/cv-documents/{doc_id}/details", response_model=CvDocumentDetailRead)
-def get_cv_document_details(request: Request, doc_id: int, limit: int = 6) -> CvDocumentDetailRead:
-    current_user = _require_auth(request)
+def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead:
     safe_limit = max(1, min(limit, 50))
     with SessionLocal() as session:
         doc = session.get(CvDocument, doc_id)
         if not doc:
-            raise HTTPException(status_code=404, detail="CV document not found")
-        if current_user.role not in {"admin", "superadmin"} and doc.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="CV document not found")
 
         extraction = session.scalar(
@@ -2283,19 +2264,15 @@ def get_cv_document_parsed_json(doc_id: int) -> JSONResponse:
 
 @app.get("/job-documents", response_model=list[JobDocumentRead])
 def list_job_documents(
-    request: Request,
     page: int = 1,
     page_size: int = 25,
     status: str | None = None,
     query: str | None = None,
     session_id: int | None = None,
 ) -> list[JobDocumentRead]:
-    current_user = _require_auth(request)
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(JobDocument)
-    if current_user.role not in {"admin", "superadmin"}:
-        stmt = stmt.where(JobDocument.user_id == current_user.id)
     if session_id is None:
         stmt = stmt.where(JobDocument.session_id.is_(None))
     else:
@@ -2321,26 +2298,20 @@ def list_job_documents(
 
 
 @app.get("/job-documents/{doc_id}", response_model=JobDocumentRead)
-def get_job_document(request: Request, doc_id: int) -> JobDocumentRead:
-    current_user = _require_auth(request)
+def get_job_document(doc_id: int) -> JobDocumentRead:
     with SessionLocal() as session:
         doc = session.get(JobDocument, doc_id)
         if not doc:
-            raise HTTPException(status_code=404, detail="JOB document not found")
-        if current_user.role not in {"admin", "superadmin"} and doc.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="JOB document not found")
         return JobDocumentRead.model_validate(doc)
 
 
 @app.get("/job-documents/{doc_id}/details", response_model=JobDocumentDetailRead)
-def get_job_document_details(request: Request, doc_id: int, limit: int = 6) -> JobDocumentDetailRead:
-    current_user = _require_auth(request)
+def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRead:
     safe_limit = max(1, min(limit, 50))
     with SessionLocal() as session:
         doc = session.get(JobDocument, doc_id)
         if not doc:
-            raise HTTPException(status_code=404, detail="JOB document not found")
-        if current_user.role not in {"admin", "superadmin"} and doc.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="JOB document not found")
 
         extraction = session.scalar(

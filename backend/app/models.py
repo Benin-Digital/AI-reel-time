@@ -109,7 +109,6 @@ class CvDocument(Base):
         Index("ix_cv_documents_status", "status"),
         Index("ix_cv_documents_updated_at", "updated_at"),
         Index("ix_cv_documents_session_id", "session_id"),
-        Index("ix_cv_documents_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -118,7 +117,6 @@ class CvDocument(Base):
     status: Mapped[str] = mapped_column(String(32), default="pending")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     session_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_sessions.id"), nullable=True)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -137,7 +135,6 @@ class JobDocument(Base):
         Index("ix_job_documents_status", "status"),
         Index("ix_job_documents_updated_at", "updated_at"),
         Index("ix_job_documents_session_id", "session_id"),
-        Index("ix_job_documents_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -146,7 +143,6 @@ class JobDocument(Base):
     status: Mapped[str] = mapped_column(String(32), default="pending")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     session_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_sessions.id"), nullable=True)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -164,7 +160,6 @@ class JobOffer(Base):
         Index("ix_job_offers_status", "status"),
         Index("ix_job_offers_company", "company"),
         Index("ix_job_offers_created_at", "created_at"),
-        Index("ix_job_offers_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -185,7 +180,6 @@ class JobOffer(Base):
     rendered_text: Mapped[str] = mapped_column(Text)
     rendered_html: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_document_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -201,7 +195,6 @@ class AnalysisSession(Base):
     __tablename__ = "analysis_sessions"
     __table_args__ = (
         Index("ix_analysis_sessions_status", "status"),
-        Index("ix_analysis_sessions_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -209,7 +202,6 @@ class AnalysisSession(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="open")
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
