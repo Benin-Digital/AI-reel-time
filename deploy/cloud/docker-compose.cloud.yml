@@ -20,6 +20,7 @@ services:
       AI_REALTIME_REQUIRE_API_KEY: "false"
       AI_REALTIME_API_KEYS: ${AIREALTIME_API_KEYS}
       AI_REALTIME_CORS_ALLOW_ORIGINS: ${AIREALTIME_CORS_ALLOW_ORIGINS}
+      AI_REALTIME_RATE_LIMIT_MAX_REQUESTS: "300"
     volumes:
       - /srv/ai-realtime/storage:/srv/ai-realtime/storage
       - airealtime_esco:/srv/ai-realtime/esco
