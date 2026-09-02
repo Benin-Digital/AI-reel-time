@@ -1700,22 +1700,26 @@ def create_job_offer(payload: JobOfferCreate, request: Request) -> JobOfferRead:
                 from reportlab.lib.pagesizes import A4
                 from reportlab.pdfgen import canvas
 
+                from reportlab.lib.utils import simpleSplit
+
                 c = canvas.Canvas(str(pdf_path), pagesize=A4)
                 width, height = A4
                 margin = 40
+                max_width = width - 2 * margin
                 y = height - margin
                 c.setFont("Helvetica-Bold", 16)
                 c.drawString(margin, y, offer.title or "Offre")
                 y -= 24
                 c.setFont("Helvetica", 10)
-                lines = rendered_text.splitlines()
-                for line in lines:
-                    if y < margin + 20:
-                        c.showPage()
-                        y = height - margin
-                        c.setFont("Helvetica", 10)
-                    c.drawString(margin, y, line[:200])
-                    y -= 14
+                for raw_line in rendered_text.splitlines():
+                    wrapped = simpleSplit(raw_line or " ", "Helvetica", 10, max_width)
+                    for segment in wrapped:
+                        if y < margin + 20:
+                            c.showPage()
+                            y = height - margin
+                            c.setFont("Helvetica", 10)
+                        c.drawString(margin, y, segment)
+                        y -= 14
                 c.save()
                 offer.published_document_path = str(pdf_path)
             except Exception as exc:  # pragma: no cover - optional PDF dependency
