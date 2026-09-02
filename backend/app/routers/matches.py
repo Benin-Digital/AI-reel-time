@@ -1,5 +1,6 @@
 """Endpoints /matches/* et sous-routes /cv-documents/{id}/matches, /job-documents/{id}/matches."""
 from __future__ import annotations
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
@@ -7,6 +8,35 @@ from sqlalchemy import or_, select
 
 from ..db import SessionLocal
 from ..models import CvDocument, ExtractedText, JobDocument, MatchResult
+
+
+def _cv_label(path: str, parsed_profile: dict | None) -> str:
+    name = (parsed_profile or {}).get("person_name") or ""
+    return name.strip() if name.strip() else Path(path).stem
+
+
+def _job_label(path: str, parsed_profile: dict | None) -> str:
+    title = (parsed_profile or {}).get("job_title") or ""
+    return title.strip() if title.strip() else Path(path).stem
+
+
+def _build_labels(session, rows: list) -> tuple[dict[int, str], dict[int, str]]:
+    """Retourne (cv_labels, job_labels) pour une liste de MatchResult."""
+    cv_ids  = list({r.cv_id  for r in rows})
+    job_ids = list({r.job_id for r in rows})
+
+    cv_docs  = {d.id: d for d in session.scalars(select(CvDocument).where(CvDocument.id.in_(cv_ids))).all()}
+    job_docs = {d.id: d for d in session.scalars(select(JobDocument).where(JobDocument.id.in_(job_ids))).all()}
+
+    cv_paths  = [cv_docs[i].path  for i in cv_ids  if i in cv_docs]
+    job_paths = [job_docs[i].path for i in job_ids if i in job_docs]
+
+    cv_texts  = {e.file_path: e.parsed_profile for e in session.scalars(select(ExtractedText).where(ExtractedText.file_path.in_(cv_paths))).all()}
+    job_texts = {e.file_path: e.parsed_profile for e in session.scalars(select(ExtractedText).where(ExtractedText.file_path.in_(job_paths))).all()}
+
+    cv_labels  = {i: _cv_label(cv_docs[i].path,  cv_texts.get(cv_docs[i].path))  for i in cv_ids  if i in cv_docs}
+    job_labels = {i: _job_label(job_docs[i].path, job_texts.get(job_docs[i].path)) for i in job_ids if i in job_docs}
+    return cv_labels, job_labels
 from ..schemas import (
     AnalyzeRequest,
     MatchExplainRead,
@@ -50,11 +80,14 @@ def list_matches_for_cv(doc_id: int, limit: int = 50) -> list[MatchRead]:
             .order_by(MatchResult.score.desc())
             .limit(safe_limit)
         ).all()
+        cv_labels, job_labels = _build_labels(session, rows)
         return [
             MatchRead(
                 id=row.id,
                 cv_id=row.cv_id,
                 job_id=row.job_id,
+                cv_label=cv_labels.get(row.cv_id),
+                job_label=job_labels.get(row.job_id),
                 score=row.score,
                 common_keywords=deserialize_keywords(row.common_keywords),
                 created_at=row.created_at,
@@ -74,11 +107,14 @@ def list_matches_for_job(doc_id: int, limit: int = 50) -> list[MatchRead]:
             .order_by(MatchResult.score.desc())
             .limit(safe_limit)
         ).all()
+        cv_labels, job_labels = _build_labels(session, rows)
         return [
             MatchRead(
                 id=row.id,
                 cv_id=row.cv_id,
                 job_id=row.job_id,
+                cv_label=cv_labels.get(row.cv_id),
+                job_label=job_labels.get(row.job_id),
                 score=row.score,
                 common_keywords=deserialize_keywords(row.common_keywords),
                 created_at=row.created_at,
@@ -146,11 +182,14 @@ def list_matches(
 
     with SessionLocal() as session:
         rows = session.scalars(stmt.offset(safe_offset).limit(safe_size)).all()
+        cv_labels, job_labels = _build_labels(session, rows)
         return [
             MatchRead(
                 id=row.id,
                 cv_id=row.cv_id,
                 job_id=row.job_id,
+                cv_label=cv_labels.get(row.cv_id),
+                job_label=job_labels.get(row.job_id),
                 score=row.score,
                 common_keywords=deserialize_keywords(row.common_keywords),
                 created_at=row.created_at,
@@ -166,10 +205,13 @@ def get_match(match_id: int) -> MatchRead:
         match = session.get(MatchResult, match_id)
         if not match:
             raise HTTPException(status_code=404, detail="Match not found")
+        cv_labels, job_labels = _build_labels(session, [match])
         return MatchRead(
             id=match.id,
             cv_id=match.cv_id,
             job_id=match.job_id,
+            cv_label=cv_labels.get(match.cv_id),
+            job_label=job_labels.get(match.job_id),
             score=match.score,
             common_keywords=deserialize_keywords(match.common_keywords),
             created_at=match.created_at,

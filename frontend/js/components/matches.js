@@ -119,8 +119,8 @@ function _renderMatchCard(match) {
   <div class="match-card__body">
     <div class="match-card__title">
       Match #${escapeHtml(String(match.id))}
-      <span class="badge badge--default">CV ${escapeHtml(String(match.cv_id))}</span>
-      <span class="badge badge--default">Offre ${escapeHtml(String(match.job_id))}</span>
+      <span class="badge badge--default" title="CV #${escapeHtml(String(match.cv_id))}">${escapeHtml(match.cv_label || `CV ${match.cv_id}`)}</span>
+      <span class="badge badge--default" title="Offre #${escapeHtml(String(match.job_id))}">${escapeHtml(match.job_label || `Offre ${match.job_id}`)}</span>
       ${domain}
     </div>
     ${renderScoreBar(score)}

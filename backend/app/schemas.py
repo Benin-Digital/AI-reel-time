@@ -223,6 +223,8 @@ class MatchRead(BaseModel):
     id: int
     cv_id: int
     job_id: int
+    cv_label: str | None = None
+    job_label: str | None = None
     score: float
     common_keywords: list[str]
     score_semantic: float | None = None
