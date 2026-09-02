@@ -18,6 +18,7 @@ from .models import (
     ExtractedText,
     JobDocument,
     JobEmbedding,
+    MatchFeedback,
     MatchResult,
     ScoreResult,
     User,
@@ -61,6 +62,11 @@ def cleanup_removed_file(path: Path, role: str) -> None:
         if role == "cv":
             doc = session.scalar(select(CvDocument).where(CvDocument.path == str(path)))
             if doc:
+                match_ids = session.scalars(
+                    select(MatchResult.id).where(MatchResult.cv_id == doc.id)
+                ).all()
+                if match_ids:
+                    session.execute(delete(MatchFeedback).where(MatchFeedback.match_id.in_(match_ids)))
                 session.execute(delete(CvEmbedding).where(CvEmbedding.cv_id == doc.id))
                 session.execute(delete(MatchResult).where(MatchResult.cv_id == doc.id))
                 session.delete(doc)
@@ -68,6 +74,11 @@ def cleanup_removed_file(path: Path, role: str) -> None:
         else:
             doc = session.scalar(select(JobDocument).where(JobDocument.path == str(path)))
             if doc:
+                match_ids = session.scalars(
+                    select(MatchResult.id).where(MatchResult.job_id == doc.id)
+                ).all()
+                if match_ids:
+                    session.execute(delete(MatchFeedback).where(MatchFeedback.match_id.in_(match_ids)))
                 session.execute(delete(JobEmbedding).where(JobEmbedding.job_id == doc.id))
                 session.execute(delete(MatchResult).where(MatchResult.job_id == doc.id))
                 session.delete(doc)
