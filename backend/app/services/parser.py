@@ -610,13 +610,6 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
     # was dropped in — including a self-match (same document as both CV and
     # job) collapsing to ~0% skill coverage. Aggregate the same full set of
     # sections regardless of kind so extraction only depends on content.
-    # Skill extraction runs on BOTH the aggregated informative sections AND the
-    # full cleaned text. Section classification is heuristic and sometimes
-    # misfiles content (e.g. a CV that lists tools only in per-job
-    # "Environnement technique:" lines, with no dedicated skills section, had
-    # those lines land outside skill_src and its skills — Git, SQL, ServiceNow…
-    # — were silently dropped). Scanning cleaned_text as well is a safety net:
-    # find_skills de-duplicates, so this can only add coverage, never remove it.
     skill_src = "\n".join(
         p for p in [
             job_required_text, job_nice_text, skills_text,
@@ -624,7 +617,7 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
         ] if p
     )
 
-    skill_terms = find_skills("\n".join(p for p in [skill_src, cleaned] if p) or cleaned)
+    skill_terms = find_skills(skill_src or cleaned)
     required_skill_terms = find_skills(job_required_text) if job_required_text else list(skill_terms)
     nice_skill_terms = find_skills(job_nice_text) if job_nice_text else []
 

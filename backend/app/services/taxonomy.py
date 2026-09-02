@@ -58,7 +58,7 @@ _SKILLS: dict[str, list[str]] = {
     "HTML/CSS": ["html", "html5", "css", "css3", "sass", "scss", "tailwind", "tailwindcss", "bootstrap", "styled components"],
     "React": ["react", "react.js", "reactjs", "react js", "redux", "react redux", "react hooks", "jsx", "react native"],
     "Angular": ["angular", "angularjs", "ngrx", "rxjs", "angular js"],
-    "Vue.js": ["vue.js", "vuejs", "vue js", "vuex", "pinia", "vue 3", "vue 2"],
+    "Vue.js": ["vue", "vue.js", "vuejs", "vue js", "vuex", "pinia", "vue 3", "vue 2"],
     "Node.js": ["node", "nodejs", "node.js", "node js"],
     "Next.js": ["next.js", "nextjs", "next js"],
     "Express.js": ["express.js", "expressjs", "express js", "express"],
