@@ -369,10 +369,7 @@ _NAME_CONTACT_RE = re.compile(
 _NAME_SECTION_RE = re.compile(
     r"compétence|competence|expérience|experience|formation|education|"
     r"skills|profil|summary|contact|certif|langue|language|loisir|hobby|"
-    r"réf|ref\b|version\b|doc-|"
-    r"mission|connaissance|technique|réalisation|realisation|"
-    r"parcours|diplôme|diplome|savoir|responsabilit|"
-    r"objectif|domaine|présentation|presentation|à propos|a propos",
+    r"réf|ref\b|version\b|doc-",
     re.IGNORECASE,
 )
 _NAME_YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
@@ -401,11 +398,6 @@ _NAME_STOP_WORDS = frozenset([
     "technical", "digital", "technology", "technologies", "platform", "network",
     "security", "software", "hardware", "application", "applications",
     "conception", "modelisation", "certifie", "certified",
-    # Action / section words that can lead a mis-ordered multi-column extract
-    "developpement", "deploiement", "analyse", "gestion", "maintenance",
-    "realisation", "realisations", "mission", "missions", "connaissances",
-    "competences", "objectifs", "responsabilites", "administration",
-    "coordination", "planification", "amelioration", "optimisation",
     # Common product / company names that appear capitalised
     "microsoft", "oracle", "azure", "google", "amazon", "office", "power",
     "sharepoint", "teams", "excel", "windows", "linux", "gitlab", "github",
