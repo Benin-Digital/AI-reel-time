@@ -46,7 +46,7 @@ class Settings(BaseSettings):
         "python,sql,postgresql,fastapi,docker,kubernetes,aws,azure,linux,git,"
         "communication,project management,teamwork,leadership,"
         "customer service,sales,negotiation,reporting,"
-        "marketing,accounting,finance,procurement"
+        "marketing,accounting"
     )
     scoring_skill_weight: float = 1.5
     scoring_synonyms: str = "js=javascript,ts=typescript,nodejs=node,postgres=postgresql,py=python"
