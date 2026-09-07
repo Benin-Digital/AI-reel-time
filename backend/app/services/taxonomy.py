@@ -175,7 +175,7 @@ _SKILLS: dict[str, list[str]] = {
     "Audit": ["audit", "commissariat aux comptes", "audit financier", "audit interne", "auditeur"],
     "Trésorerie": ["tresorerie", "cash management", "gestion de tresorerie", "cash flow", "plan de tresorerie"],
     "Paie": ["paie", "paye", "gestion de la paie", "bulletin de paie", "payroll", "gestionnaire de paie"],
-    "Clôture comptable": ["cloture comptable", "cloture annuelle", "cloture mensuelle", "cloture des comptes"],
+    "Clôture comptable": ["cloture", "cloture comptable", "cloture annuelle", "cloture mensuelle"],
     "Sage": ["sage", "sage 100", "sage x3", "sage compta"],
     "Cegid": ["cegid", "cegid business", "cegid expert"],
     "SAP FI": ["sap fi", "sap fico", "sap finance", "finance erp"],
@@ -234,7 +234,7 @@ _SKILLS: dict[str, list[str]] = {
     "AutoCAD": ["autocad", "cao", "dessin assiste par ordinateur", "dessin technique", "catia", "solidworks"],
     "BIM": ["bim", "building information modeling", "revit", "archicad", "bim manager"],
     "Génie civil": ["genie civil", "civil engineering", "beton arme", "gros oeuvre"],
-    "Conduite de travaux": ["conduite de travaux", "chef de chantier", "conducteur de travaux"],
+    "Conduite de travaux": ["conduite de travaux", "chef de chantier", "maitrise d oeuvre", "moe", "conducteur de travaux"],
     "Maîtrise d'ouvrage": ["maitrise d ouvrage", "moa", "maitre d ouvrage", "amoa"],
     "Électricité bâtiment": ["electrotechnique", "courants forts", "courants faibles", "cfao", "electricite batiment"],
     "Plomberie CVC": ["plomberie", "sanitaire", "genie climatique", "cvc", "hvac"],
@@ -246,7 +246,7 @@ _SKILLS: dict[str, list[str]] = {
     "E-learning": ["e-learning", "formation en ligne", "enseignement a distance", "mooc", "lms"],
     "Conception pédagogique": ["conception pedagogique", "instructional design", "design pedagogique", "ingenierie de formation"],
     "Tutorat": ["tutorat", "tutoring", "soutien scolaire", "accompagnement scolaire", "tuteur"],
-    "Mathématiques": ["mathematiques", "maths", "mathematics", "statistiques appliquees"],
+    "Mathématiques": ["mathematiques", "maths", "mathematics", "algebre", "analyse"],
 
     # ── COMPÉTENCES TRANSVERSALES ──────────────────────────────────────────
     "Travail en équipe": ["travail en equipe", "teamwork", "esprit d equipe", "collaboration", "team player"],
