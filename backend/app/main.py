@@ -735,6 +735,38 @@ def _cleanup_temp_file(path: Path) -> None:
         logger.exception("Failed to cleanup temp file: %s", path)
 
 
+def _wrap_line_to_width(text: str, font_name: str, font_size: float, max_width: float) -> list[str]:
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    if not text:
+        return [""]
+
+    lines: list[str] = []
+    current = ""
+    for word in text.split(" "):
+        candidate = word if not current else f"{current} {word}"
+        if stringWidth(candidate, font_name, font_size) <= max_width:
+            current = candidate
+            continue
+        if current:
+            lines.append(current)
+            current = ""
+        if stringWidth(word, font_name, font_size) <= max_width:
+            current = word
+            continue
+        chunk = ""
+        for char in word:
+            if stringWidth(chunk + char, font_name, font_size) <= max_width:
+                chunk += char
+            else:
+                lines.append(chunk)
+                chunk = char
+        current = chunk
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
 def _render_text_pdf_to_temp(title: str, text_value: str) -> Path:
     temp_file = tempfile.NamedTemporaryFile(prefix="parsed-", suffix=".pdf", delete=False)
     temp_file_path = Path(temp_file.name)
@@ -746,18 +778,22 @@ def _render_text_pdf_to_temp(title: str, text_value: str) -> Path:
     c = canvas.Canvas(str(temp_file_path), pagesize=A4)
     width, height = A4
     margin = 40
+    max_width = width - 2 * margin
     y = height - margin
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(margin, y, title)
-    y -= 24
+    for wrapped in _wrap_line_to_width(title, "Helvetica-Bold", 16, max_width):
+        c.drawString(margin, y, wrapped)
+        y -= 20
+    y -= 4
     c.setFont("Helvetica", 10)
     for line in text_value.splitlines():
-        if y < margin + 20:
-            c.showPage()
-            y = height - margin
-            c.setFont("Helvetica", 10)
-        c.drawString(margin, y, line[:200])
-        y -= 14
+        for wrapped in _wrap_line_to_width(line, "Helvetica", 10, max_width):
+            if y < margin + 20:
+                c.showPage()
+                y = height - margin
+                c.setFont("Helvetica", 10)
+            c.drawString(margin, y, wrapped)
+            y -= 14
     c.save()
     return temp_file_path
 
