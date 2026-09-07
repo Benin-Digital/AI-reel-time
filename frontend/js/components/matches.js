@@ -298,14 +298,20 @@ const _FB_LABELS = {
 
 function _renderFeedbackBar(matchId, current) {
   const mid = escapeHtml(String(matchId));
+  // `current` may be a bare decision string (quick-feedback path) or a full
+  // feedback object {decision, rating, comment} (form-submit or server-fetched
+  // path) — normalize both so the comment is never silently dropped.
+  const decision = typeof current === "string" ? current : (current?.decision ?? null);
+  const comment  = (current && typeof current === "object") ? current.comment : null;
   return `<div class="feedback-bar">
     <span class="feedback-bar__label">Évaluation :</span>
-    ${Object.entries(_FB_LABELS).map(([decision, { label, icon, cls }]) => {
-      const active = current === decision ? " is-active" : "";
+    ${Object.entries(_FB_LABELS).map(([dec, { label, icon, cls }]) => {
+      const active = decision === dec ? " is-active" : "";
       return `<button class="feedback-btn feedback-btn--${cls}${active}"
-        data-feedback data-match="${mid}" data-decision="${decision}"
+        data-feedback data-match="${mid}" data-decision="${dec}"
         title="${label}">${icon} ${label}</button>`;
     }).join("")}
+    ${comment ? `<div class="feedback-bar__comment text-xs text-muted">${escapeHtml(comment)}</div>` : ""}
   </div>`;
 }
 
@@ -361,12 +367,12 @@ async function _submitQuickFeedback(btn) {
   }
 }
 
-function _refreshCardFeedback(matchId, decision) {
+function _refreshCardFeedback(matchId, decision, comment = null) {
   const card = document.querySelector(`[data-match-id="${matchId}"]`);
   if (!card) return;
   const bar = card.querySelector(".feedback-bar");
   if (!bar) return;
-  bar.outerHTML = _renderFeedbackBar(matchId, decision);
+  bar.outerHTML = _renderFeedbackBar(matchId, comment ? { decision, comment } : decision);
 }
 
 function _wireFeedbackForm(matchId) {
@@ -416,7 +422,7 @@ function _wireFeedbackForm(matchId) {
       });
       _feedbackCache.set(mid, payload);
       if (msg) { msg.textContent = "Enregistré ✓"; msg.style.color = "var(--color-success)"; }
-      _refreshCardFeedback(mid, selectedDecision);
+      _refreshCardFeedback(mid, selectedDecision, payload.comment);
     } catch (err) {
       if (msg) { msg.textContent = err.message; msg.style.color = "var(--color-error)"; }
     }
