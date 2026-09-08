@@ -424,7 +424,17 @@ def match_cv_to_job(cv_text: str, job_text: str) -> MatchScore:
     """
     cv = parse_document(cv_text, kind="cv")
     job = parse_document(job_text, kind="job")
+    return match_parsed_documents(cv, job)
 
+
+def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScore:
+    """
+    Same as match_cv_to_job, but takes documents already parsed by the caller.
+
+    Use this when scoring one document against many counterparts (e.g. one
+    CV against a shortlist of jobs) so the side that doesn't change across
+    the loop is parsed once instead of once per pair.
+    """
     # Use job's domain when available (more precise about requirements)
     domain = job.domain if job.domain != "general" else cv.domain
     w = _weights(domain)

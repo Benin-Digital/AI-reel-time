@@ -105,7 +105,8 @@ from .services import (
     warn_if_unsafe_backend,
 )
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
-from .services.matcher import match_cv_to_job
+from .services.matcher import match_cv_to_job, match_parsed_documents
+from .services.parser import parse_document
 from .services.explain import build_match_explanation
 from dataclasses import asdict
 from .security import enforce_security, validate_security_settings
@@ -900,10 +901,18 @@ def _render_cv_profile_html(profile: CvProfileCreate, rendered_text: str) -> str
 def _vector_match_cv(
     cv_doc: CvDocumentRead,
     extraction: ExtractedTextRead,
-) -> set[int]:
+) -> tuple[set[int], dict[int, float]]:
+    """Score this CV against job candidates ranked by embedding similarity.
+
+    Only the top `embedding_top_k` closest jobs get the expensive full match
+    (cross-encoder + structured scoring, one CV parse shared across all of
+    them). The remaining jobs are returned as {job_id: distance} so the
+    caller can give them a cheap vector-only score instead of re-running the
+    full pipeline on every single job in the library.
+    """
     text_value = (extraction.extracted_text or "").strip()
     if not text_value:
-        return set()
+        return set(), {}
 
     # prefer using cached parsed_profile (which may have NER disabled for form-published docs)
     vector = None
@@ -945,10 +954,10 @@ def _vector_match_cv(
                             vector = averaged
     except Exception as exc:
         logger.warning("embedding failed for cv %s: %s", cv_doc.id, exc)
-        return set()
+        return set(), {}
 
     if not vector:
-        return set()
+        return set(), {}
 
     _upsert_cv_embedding(cv_doc.id, extraction.content_hash, vector)
 
@@ -964,17 +973,24 @@ def _vector_match_cv(
             .join(JobDocument, JobEmbedding.job_id == JobDocument.id)
             .join(ExtractedText, ExtractedText.file_path == JobDocument.path, isouter=True)
             .order_by(distance.asc())
-            .limit(settings.embedding_top_k)
         ).all()
 
     if not rows:
-        return set()
+        return set(), {}
+
+    top_rows = rows[: settings.embedding_top_k]
+    rest_rows = rows[settings.embedding_top_k :]
+
+    # The CV side is identical across every job in top_rows — parse it once
+    # instead of once per pair.
+    cv_parsed = parse_document(text_value, kind="cv")
 
     matched_job_ids: set[int] = set()
-    for row in rows:
+    for row in top_rows:
         job_text = (row.extracted_text or "").strip()
         if job_text:
-            match_result = match_cv_to_job(text_value, job_text)
+            job_parsed = parse_document(job_text, kind="job")
+            match_result = match_parsed_documents(cv_parsed, job_parsed)
             score = match_result.score
             common = match_result.common_skills
             cs = {
@@ -995,16 +1011,23 @@ def _vector_match_cv(
         _upsert_match_result(cv_doc.id, row.job_id, score, common, cs)
         matched_job_ids.add(int(row.job_id))
 
-    return matched_job_ids
+    remaining_distances = {int(row.job_id): float(row.distance) for row in rest_rows}
+    return matched_job_ids, remaining_distances
 
 
 def _vector_match_job(
     job_doc: JobDocumentRead,
     extraction: ExtractedTextRead,
-) -> set[int]:
+) -> tuple[set[int], dict[int, float]]:
+    """Score this job against CV candidates ranked by embedding similarity.
+
+    Mirrors _vector_match_cv: only the top `embedding_top_k` closest CVs get
+    the expensive full match; the rest are returned as {cv_id: distance} for
+    a cheap vector-only score.
+    """
     text_value = (extraction.extracted_text or "").strip()
     if not text_value:
-        return set()
+        return set(), {}
 
     # prefer using cached parsed_profile (which may have NER disabled for form-published docs)
     vector = None
@@ -1046,10 +1069,10 @@ def _vector_match_job(
                             vector = averaged
     except Exception as exc:
         logger.warning("embedding failed for job %s: %s", job_doc.id, exc)
-        return set()
+        return set(), {}
 
     if not vector:
-        return set()
+        return set(), {}
 
     _upsert_job_embedding(job_doc.id, extraction.content_hash, vector)
 
@@ -1071,23 +1094,30 @@ def _vector_match_job(
             .join(CvDocument, CvEmbedding.cv_id == CvDocument.id)
             .join(ExtractedText, ExtractedText.file_path == CvDocument.path, isouter=True)
             .order_by(distance.asc())
-            .limit(settings.embedding_top_k)
         ).all()
 
     if not rows:
-        return set()
+        return set(), {}
+
+    top_rows = rows[: settings.embedding_top_k]
+    rest_rows = rows[settings.embedding_top_k :]
+
+    # Use structured offer text when available for richer job representation.
+    # The job side is identical across every CV in top_rows — parse it once
+    # instead of once per pair.
+    job_repr = (
+        _render_job_offer_focus_text(structured_offer)
+        if structured_offer is not None
+        else text_value
+    )
+    job_parsed = parse_document(job_repr, kind="job")
 
     matched_cv_ids: set[int] = set()
-    for row in rows:
+    for row in top_rows:
         cv_text = (row.extracted_text or "").strip()
         if cv_text:
-            # Use structured offer text when available for richer job representation
-            job_repr = (
-                _render_job_offer_focus_text(structured_offer)
-                if structured_offer is not None
-                else text_value
-            )
-            match_result = match_cv_to_job(cv_text, job_repr)
+            cv_parsed = parse_document(cv_text, kind="cv")
+            match_result = match_parsed_documents(cv_parsed, job_parsed)
             score = match_result.score
             common = match_result.common_skills
             cs = {
@@ -1108,7 +1138,8 @@ def _vector_match_job(
         _upsert_match_result(row.cv_id, job_doc.id, score, common, cs)
         matched_cv_ids.add(int(row.cv_id))
 
-    return matched_cv_ids
+    remaining_distances = {int(row.cv_id): float(row.distance) for row in rest_rows}
+    return matched_cv_ids, remaining_distances
 
 
 def _is_supported_file(path: Path) -> bool:
@@ -1284,8 +1315,9 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             return
 
         matched_job_ids: set[int] = set()
+        job_distances: dict[int, float] = {}
         if settings.embedding_enabled:
-            matched_job_ids = _vector_match_cv(cv_doc, changed_result)
+            matched_job_ids, job_distances = _vector_match_cv(cv_doc, changed_result)
 
         changed_text = changed_result.extracted_text or ""
         for job_path in _list_candidate_files(Path(settings.watch_job_dir)):
@@ -1295,7 +1327,15 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
                 continue
             if not job_result.extraction_success:
                 continue
-            score, common = score_texts(changed_text, job_result.extracted_text or "")
+            if job_doc.id in job_distances:
+                # Already ranked by embedding similarity outside the expensive
+                # top-K — a cheap vector-only score avoids running the full
+                # cross-encoder + structured pipeline on every job in the
+                # library for every single upload.
+                score = _vector_score(job_distances[job_doc.id])
+                common: list[str] = []
+            else:
+                score, common = score_texts(changed_text, job_result.extracted_text or "")
             _insert_score_result(changed_path, job_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common)
     else:
@@ -1367,8 +1407,9 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             return
 
         matched_cv_ids: set[int] = set()
+        cv_distances: dict[int, float] = {}
         if settings.embedding_enabled:
-            matched_cv_ids = _vector_match_job(job_doc, changed_result)
+            matched_cv_ids, cv_distances = _vector_match_job(job_doc, changed_result)
 
         changed_text = changed_result.extracted_text or ""
         for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
@@ -1378,7 +1419,15 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
                 continue
             if not cv_result.extraction_success:
                 continue
-            score, common = score_texts(cv_result.extracted_text or "", changed_text)
+            if cv_doc.id in cv_distances:
+                # Already ranked by embedding similarity outside the expensive
+                # top-K — a cheap vector-only score avoids running the full
+                # cross-encoder + structured pipeline on every CV in the
+                # library for every single job upload.
+                score = _vector_score(cv_distances[cv_doc.id])
+                common: list[str] = []
+            else:
+                score, common = score_texts(cv_result.extracted_text or "", changed_text)
             _insert_score_result(cv_path, changed_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common)
 
