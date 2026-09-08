@@ -317,9 +317,15 @@ def _upsert_cv_document(path: Path, extraction: ExtractedTextRead) -> CvDocument
             select(CvDocument).where(CvDocument.path == str(path))
         )
         if existing:
+            content_changed = existing.content_hash != extraction.content_hash
             existing.content_hash = extraction.content_hash
             existing.status = status
             existing.last_error = last_error
+            if content_changed and existing.session_id is not None:
+                # A genuinely new file was dropped at a path that used to hold
+                # an archived document — don't let it stay hidden in that old
+                # archive; treat it as a fresh active document.
+                existing.session_id = None
             session.commit()
             session.refresh(existing)
             return CvDocumentRead.model_validate(existing)
@@ -343,9 +349,15 @@ def _upsert_job_document(path: Path, extraction: ExtractedTextRead) -> JobDocume
             select(JobDocument).where(JobDocument.path == str(path))
         )
         if existing:
+            content_changed = existing.content_hash != extraction.content_hash
             existing.content_hash = extraction.content_hash
             existing.status = status
             existing.last_error = last_error
+            if content_changed and existing.session_id is not None:
+                # A genuinely new file was dropped at a path that used to hold
+                # an archived document — don't let it stay hidden in that old
+                # archive; treat it as a fresh active document.
+                existing.session_id = None
             session.commit()
             session.refresh(existing)
             return JobDocumentRead.model_validate(existing)

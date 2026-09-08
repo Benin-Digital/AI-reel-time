@@ -62,15 +62,32 @@ def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: 
     require_user(request)
 
     rating = payload.rating
-    if rating is not None:
-        rating = max(1, min(5, rating))
-
     comment = payload.comment.strip() if payload.comment and payload.comment.strip() else None
 
     with SessionLocal() as session:
         match = session.get(MatchResult, match_id)
         if not match:
             raise HTTPException(status_code=404, detail="Match not found")
+
+        # Quick decision-only feedback (card list buttons) omits rating/comment
+        # entirely rather than sending them as null — carry the previous values
+        # forward in that case so a quick decision click doesn't blank out a
+        # comment/rating saved earlier from the evaluation page. A field sent
+        # explicitly as null (full form, user cleared it) still wins below.
+        if "rating" not in payload.model_fields_set or "comment" not in payload.model_fields_set:
+            previous = session.scalar(
+                select(MatchFeedback)
+                .where(MatchFeedback.match_id == match_id)
+                .order_by(MatchFeedback.created_at.desc())
+            )
+            if previous:
+                if "rating" not in payload.model_fields_set:
+                    rating = previous.rating
+                if "comment" not in payload.model_fields_set:
+                    comment = previous.comment
+
+        if rating is not None:
+            rating = max(1, min(5, rating))
 
         # Snapshot what was actually compared/scored right now, since the
         # underlying CV/job/MatchResult rows can later be deleted (e.g. the
