@@ -4,6 +4,7 @@ from html import escape
 import logging
 from pathlib import Path
 import tempfile
+import threading
 from time import perf_counter, time
 from datetime import datetime
 from uuid import uuid4
@@ -1515,6 +1516,16 @@ async def lifespan(app: FastAPI):
     worker.start()
     app.state.watcher = watcher
     app.state.worker = worker
+
+    if settings.conversion_use_docling:
+        def _warm_up_docling() -> None:
+            try:
+                from .services.conversion import _get_converter
+                _get_converter()
+            except Exception as exc:
+                logger.warning("Docling warm-up failed (will retry lazily on first document): %s", exc)
+
+        threading.Thread(target=_warm_up_docling, name="docling-warmup", daemon=True).start()
     try:
         yield
     finally:
