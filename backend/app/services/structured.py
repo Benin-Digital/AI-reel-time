@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 import logging
-import difflib
 import re
 import unicodedata
 from ..settings import get_settings
 from .structured_constants import (
     _BUILTIN_SKILL_SYNONYMS,
-    _CONTRACT_ALIASES,
-    _LANGUAGE_ALIASES,
     _NOISE_TERMS,
-    _SECTION_ALIASES,
 )
 from .structured_ner import (
     _SPACY_AVAILABLE,
@@ -89,44 +84,6 @@ def fold_text(value: str) -> str:
     return ascii_value.lower()
 
 
-def _normalize_line(value: str) -> str:
-    line = value.replace("\u00ad", "")
-    line = re.sub(r"\s+", " ", line.strip())
-    line = re.sub(r"^[\-*•·•\u2022\u25e6]+\s*", "", line)
-    return line.strip()
-
-
-def clean_document_text(text: str) -> str:
-    if not text:
-        return ""
-
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
-
-    counts: Counter[str] = Counter()
-    cleaned_lines: list[str] = []
-    previous_folded = ""
-    for raw_line in text.split("\n"):
-        line = _normalize_line(raw_line)
-        if not line:
-            previous_folded = ""
-            continue
-
-        folded = fold_text(line)
-        if len(folded) <= 1:
-            continue
-        if folded == previous_folded:
-            continue
-        counts[folded] += 1
-        if counts[folded] > 2:
-            continue
-
-        cleaned_lines.append(line)
-        previous_folded = folded
-
-    return "\n".join(cleaned_lines).strip()
-
-
 def _parse_synonyms(raw: str) -> dict[str, str]:
     pairs: dict[str, str] = {}
     for item in (chunk.strip() for chunk in raw.split(",") if chunk.strip()):
@@ -167,199 +124,15 @@ def canonical_token_set(text: str) -> set[str]:
 
 
 def _extract_skill_terms(text: str) -> list[str]:
+    """Thin wrapper kept for backward compatibility: the taxonomy/whitelist/
+    fuzzy-match logic that used to live only here now lives in
+    taxonomy.find_skills, so the real scoring path (parser.py) benefits from
+    it too instead of being weaker at skill detection than this display path."""
     if not text:
         return []
-    from .taxonomy import find_skills as _taxonomy_find, normalize_skill as _normalize_skill
+    from .taxonomy import find_skills as _taxonomy_find
 
-    def _skill_whitelist() -> list[str]:
-        raw = (settings.scoring_skill_keywords or "")
-        parts = [p.strip() for p in re.split(r"[,;]+", raw) if p.strip()]
-        return [_apply_synonyms(p) for p in parts]
-
-    folded_text = _apply_synonyms(text)
-    whitelist = _skill_whitelist()
-
-    # Primary: taxonomy — only known canonical skills, no false positives
-    found = _taxonomy_find(text)
-    found_lower: set[str] = {s.lower() for s in found}
-
-    # Secondary: settings whitelist exact match
-    for skill in whitelist:
-        if not skill:
-            continue
-        canonical = _normalize_skill(skill) or skill
-        if canonical.lower() not in found_lower and re.search(rf"\b{re.escape(skill)}\b", folded_text):
-            found.append(canonical)
-            found_lower.add(canonical.lower())
-
-    # Tertiary: fuzzy match — tolère les fautes de frappe courantes (ex.
-    # "Pyhton" -> "python") pour les compétences de la liste blanche qui
-    # n'ont pas matché exactement ci-dessus.
-    words = re.findall(r"[a-z0-9+.#]+", folded_text)
-    for skill in whitelist:
-        if not skill:
-            continue
-        canonical = _normalize_skill(skill) or skill
-        if canonical.lower() in found_lower:
-            continue
-        if difflib.get_close_matches(skill.lower(), words, n=1, cutoff=0.8):
-            found.append(canonical)
-            found_lower.add(canonical.lower())
-
-    return found
-
-
-def _detect_contract_type(text: str) -> str | None:
-    folded = fold_text(text)
-    for needle, label in _CONTRACT_ALIASES:
-        if re.search(rf"\b{re.escape(needle)}\b", folded):
-            return label
-    return None
-
-
-def _detect_languages(text: str) -> list[str]:
-    folded = fold_text(text)
-    languages: list[str] = []
-    seen: set[str] = set()
-    for needle, label in _LANGUAGE_ALIASES.items():
-        if re.search(rf"\b{re.escape(needle)}\b", folded) and label not in seen:
-            seen.add(label)
-            languages.append(label)
-    return languages
-
-
-def _extract_years(text: str) -> int:
-    if not text:
-        return 0
-    # Strip contact info: email "user96@mail.com", phone "+33 6 ...", URLs
-    # to prevent their embedded numbers from matching the "X ans" pattern.
-    text = re.sub(r'\S+@\S+', '', text)
-    text = re.sub(r'https?://\S+|www\.\S+', '', text)
-    text = re.sub(r'\+?\d[\d\s.\-()]{7,}\d', '', text)
-    folded = fold_text(text)
-
-    # Priority: patterns with explicit experience context
-    _exp_ctx = [
-        r"(\d{1,2})\s*\+?\s*(?:years?|ans?|annees?|ann[eé]e?s?)\s+d[e']\s*(?:experience|exp\b)",
-        r"(?:experience|exp)\s+(?:de\s+)?(\d{1,2})\s*\+?\s*(?:years?|ans?|annees?)",
-        r"depuis\s+(\d{1,2})\s*\+?\s*(?:years?|ans?|annees?)",
-        r"\+\s*(\d{1,2})\s*(?:years?|ans?|annees?)",
-    ]
-    for pattern in _exp_ctx:
-        hits = re.findall(pattern, folded)
-        values = [int(v) for v in hits if v.isdigit() and 1 <= int(v) <= 40]
-        if values:
-            return max(values)
-
-    # Fallback: plain "X ans/years" — skip age-context lines and standalone age lines
-    safe: list[str] = []
-    for line in folded.split("\n"):
-        stripped = line.strip()
-        # "29 ans" alone on a line → age, not experience
-        if re.fullmatch(r"\d{1,2}\s+ans?\.?", stripped):
-            continue
-        if re.search(r"\bne\b.{0,20}\d{4}|\bnaissance\b|\bage\s*[:\-]?\s*\d{1,2}\b", line):
-            if not re.search(r"experience|exp\b|pratique", line):
-                continue
-        safe.append(line)
-
-    hits = re.findall(r"(\d{1,2})\s*\+?\s*(?:years?|ans?|annees?|ann[eé]e?s?)", "\n".join(safe))
-    values = [int(v) for v in hits if v.isdigit() and 1 <= int(v) <= 40]
-    return max(values) if values else 0
-
-
-
-
-def _split_heading_payload(line: str) -> tuple[str | None, str]:
-    folded = fold_text(line)
-    if ":" in line:
-        head, tail = line.split(":", 1)
-        head_folded = fold_text(head)
-        heading = _match_heading(head_folded)
-        if heading:
-            return heading, tail.strip()
-    heading = _match_heading(folded)
-    if heading:
-        return heading, ""
-    return None, line
-
-
-def _is_heading(line: str, next_line: str | None = None) -> bool:
-    """Heuristique simple pour détecter si une ligne est un heading.
-
-    Utilise longueur, ponctuation, ratio de majuscules, numérotation et
-    observation de la ligne suivante (liste/bullet) pour décider.
-    """
-    if not line or not line.strip():
-        return False
-
-    folded = fold_text(line)
-
-    # numbered headings (1. , I) ou "1)"
-    if re.match(r"^\s*(?:\d+|[ivx]+)[\.)]\s+", line.lower()):
-        return True
-
-    # présence de ':' fortement indicative
-    if ":" in line and len(line) < 200:
-        return True
-
-    words = folded.split()
-    word_count = len(words)
-    if word_count == 0:
-        return False
-
-    # trop long pour être un heading
-    if len(folded) > 120 or word_count > 12:
-        return False
-
-    # ratio de majuscules (sur la ligne originale) — les headings sont souvent en MAJ
-    letters = [c for c in line if c.isalpha()]
-    if letters:
-        upper_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
-        if upper_ratio > 0.5 and word_count <= 8:
-            return True
-
-    # si la ligne suivante ressemble à une liste, la ligne courante est probablement un heading
-    if next_line:
-        if re.match(r"^[\-\*\u2022\u25e6\d]\s+", next_line.strip()):
-            return True
-        if next_line.strip().startswith("-") or next_line.strip().startswith("•"):
-            return True
-
-    # si la ligne contient un alias de section connu -> heading
-    for section, aliases in _SECTION_ALIASES:
-        for alias in aliases:
-            if fold_text(alias) in folded:
-                return True
-
-    # règle conservatrice finale: courte et peu de mots
-    avg_len = sum(len(w) for w in words) / max(1, word_count)
-    if word_count <= 6 and avg_len <= 14:
-        return True
-
-    return False
-
-
-def _match_heading(folded_line: str) -> str | None:
-    candidate = re.sub(r"\s+", " ", folded_line.strip())
-    if not candidate or len(candidate.split()) > 8:
-        return None
-    for section, aliases in _SECTION_ALIASES:
-        for alias in aliases:
-            if fold_text(alias) in candidate:
-                return section
-    return None
-
-
-def _line_chunks(text: str) -> list[str]:
-    cleaned = clean_document_text(text)
-    if not cleaned:
-        return []
-    return [line for line in cleaned.split("\n") if line.strip()]
-
-
-def _first_lines(lines: list[str], limit: int = 3) -> str:
-    return "\n".join(lines[:limit]).strip()
+    return _taxonomy_find(text)
 
 
 _NAME_CONTACT_RE = re.compile(
@@ -596,119 +369,54 @@ def build_document_profile(
     enable_ner: bool | None = None,
     override_sections: dict[str, str] | None = None,
 ) -> StructuredDocument:
-    cleaned_text = clean_document_text(text)
-    lines = _line_chunks(cleaned_text)
-    sections: dict[str, list[str]] = defaultdict(list)
-    current_section = "other"
+    """Build a StructuredDocument for display/embeddings/ESCO.
 
-    detected_headings: list[tuple[int, str, str, str]] = []  # (index, line, assigned_section, method)
+    Section/skill/experience/language/contract detection is fully delegated
+    to parser.py::parse_document — the same pipeline matcher.py scores
+    against. This used to be reimplemented independently here (different
+    heading heuristics, no whitelist/fuzzy skill matching, a separately
+    buggy text-cleaning pass) and the two could silently drift apart. Only
+    what's genuinely specific to this display path stays here: NER, rule-
+    based CV name extraction, job-title heuristics, ESCO enrichment, the
+    `sections` dict and `embedding_chunks` used by the embeddings pipeline,
+    and debug_info.
+    """
+    from .parser import parse_document
+
+    resolved_kind = kind or "cv"
 
     doc_title_override: str | None = None
-
     if override_sections:
-        # Trust upstream (Docling) section boundaries — skip heuristic heading detection.
-        # Unknown section names land in "other" so downstream lookups still see the content.
-        _known = {"summary", "skills", "experience", "education", "certifications",
-                  "languages", "contract", "location", "job_required", "job_nice", "strength"}
-        for name, content in override_sections.items():
-            if not content or not content.strip():
-                continue
-            # Reserved key "_doc_title" carries the first H1/H2 from Docling and is not
-            # appended to any section bucket.
-            if name == "_doc_title":
-                if content and content.strip():
-                    doc_title_override = content.strip()
-                continue
-            key = name if name in _known else "other"
-            sections[key].append(content.strip())
-            detected_headings.append((-1, name, key, "override"))
-    else:
-        for idx, line in enumerate(lines):
-            heading, payload = _split_heading_payload(line)
-            if heading:
-                current_section = heading
-                detected_headings.append((idx, line, current_section, "split"))
-                if payload:
-                    sections[current_section].append(payload)
-                continue
+        raw_title = override_sections.get("_doc_title")
+        if raw_title and raw_title.strip():
+            doc_title_override = raw_title.strip()
 
-            # check if the line looks like a heading (using classifier)
-            next_line = lines[idx + 1] if idx + 1 < len(lines) else None
-            if _is_heading(line, next_line=next_line):
-                matched = _match_heading(fold_text(line))
-                if matched:
-                    current_section = matched
-                    detected_headings.append((idx, line, current_section, "classifier_matched"))
-                    continue
-                guessed = _guess_section_from_heading(line)
-                if guessed:
-                    current_section = guessed
-                    detected_headings.append((idx, line, current_section, "classifier_guessed"))
-                    continue
+    parsed = parse_document(text, kind=resolved_kind, override_sections=override_sections)
 
-            sections[current_section].append(line)
+    cleaned_text = parsed.cleaned_text
+    lines = [ln for ln in cleaned_text.split("\n") if ln.strip()]
 
-    section_texts = {name: "\n".join(values).strip() for name, values in sections.items() if values}
-
-    summary_text = section_texts.get("summary", "")
-    experience_text = section_texts.get("experience", "")
-    education_text = section_texts.get("education", "")
-    certifications_text = section_texts.get("certifications", "")
-    languages_text = section_texts.get("languages", "")
-    contract_text = section_texts.get("contract", "")
-    location_text = section_texts.get("location", "")
-    job_required_text = section_texts.get("job_required", "")
-    job_nice_text = section_texts.get("job_nice", "")
-
-    skills_text = section_texts.get("skills", "")
-    other_text = section_texts.get("other", "")
-
-    if not summary_text:
-        summary_text = _first_lines(lines, 3)
-
-    if not skills_text:
-        skills_text = "\n".join(part for part in (job_required_text, job_nice_text) if part).strip()
-
-    if kind == "job" and not job_required_text:
-        job_required_text = skills_text
-    if kind == "job" and not job_nice_text:
-        job_nice_text = section_texts.get("strength", "")
-
-    skill_sources = [skills_text, job_required_text, job_nice_text]
-    if kind == "cv":
-        # Include cleaned_text as a safety net: some CVs list tools only in
-        # per-job "Environnement technique:" lines with no dedicated skills
-        # section, and section classification (esp. Docling) may file those
-        # under summary/education — outside the sections above. Scanning the
-        # full cleaned text as well ensures those skills (Git, SQL, ServiceNow…)
-        # are still found. _extract_skill_terms de-duplicates, so this only
-        # adds coverage.
-        skill_sources.extend([experience_text, certifications_text, cleaned_text])
-    elif kind == "job":
-        # Some job offers put tech stack in the summary/intro ("I. Savoir") or in
-        # uncategorised sections — include them so nothing is missed.
-        # Job offers scatter tech stack across many sections: intro/summary
-        # ("I. Savoir"), uncategorised blocks, and — critically — "Missions" /
-        # "Responsabilités" headings that Docling classifies as "experience".
-        # Without these the parser misses React/Vue/PHP etc. that appear only
-        # inside requirement bullets. "certifications" sometimes carries
-        # "Compétences attendues" content for the same reason.
-        skill_sources.extend([summary_text, other_text, experience_text, certifications_text])
-    from .taxonomy import partition_skills as _partition_skills
-
-    raw_skill_terms = _extract_skill_terms("\n".join(part for part in skill_sources if part))
-    skill_terms, soft_skill_terms = _partition_skills(raw_skill_terms)
-    required_skill_terms, _ = _partition_skills(_extract_skill_terms(job_required_text))
-    nice_skill_terms, _ = _partition_skills(_extract_skill_terms(job_nice_text))
-    esco_skill_uris: list[str] = _esco_enrich(skill_terms) if getattr(settings, "esco_enrich_skills", False) else []
-    language_terms = _detect_languages("\n".join(part for part in (languages_text, cleaned_text) if part))
-    if contract_text:
-        contract_type = _detect_contract_type(contract_text)
-    else:
-        contract_type = _detect_contract_type(
-            "\n".join(p for p in [job_required_text, cleaned_text[:600]] if p)
+    section_texts = {
+        name: value
+        for name, value in (
+            ("summary", parsed.summary_text),
+            ("skills", parsed.skills_text),
+            ("experience", parsed.experience_text),
+            ("education", parsed.education_text),
+            ("certifications", parsed.certifications_text),
+            ("languages", parsed.languages_text),
+            ("job_required", parsed.job_required_text),
+            ("job_nice", parsed.job_nice_text),
+            ("contract", parsed.contract_text),
+            ("location", parsed.location_text),
+            ("other", parsed.other_text),
         )
-    experience_years = _extract_years("\n".join(part for part in (experience_text, cleaned_text) if part))
+        if value
+    }
+
+    esco_skill_uris: list[str] = (
+        _esco_enrich(parsed.skill_terms) if getattr(settings, "esco_enrich_skills", False) else []
+    )
 
     # decide whether to run NER: default to settings.ner_enabled when enable_ner is None
     do_ner = bool(settings.ner_enabled) if enable_ner is None else bool(enable_ner)
@@ -725,34 +433,18 @@ def build_document_profile(
         date_terms = []
 
     # For CVs: rule-based name extraction overrides NER (spaCy confuses orgs/titles with persons)
-    if kind == "cv":
+    if resolved_kind == "cv":
         rule_name = _extract_name_rule_based(lines)
         if rule_name:
             person_name = rule_name
 
     # Job offers never have a person_name (NER picks up "Fiche" from "Fiche de poste", etc.)
-    if kind == "job":
+    if resolved_kind == "job":
         person_name = None
-
-    if kind == "cv" and not skill_terms:
-        fallback_sources = [skills_text, experience_text, education_text, certifications_text, summary_text]
-        fallback_terms = _extract_skill_terms("\n".join(part for part in fallback_sources if part))
-        skill_terms, fallback_soft = _partition_skills(fallback_terms)
-        if fallback_soft and not soft_skill_terms:
-            soft_skill_terms = fallback_soft
-
-    if kind == "job" and not required_skill_terms:
-        required_skill_terms = skill_terms
-
-    if kind == "job" and not language_terms:
-        language_terms = _detect_languages(section_texts.get("job_required", "") + "\n" + cleaned_text)
-
-    if kind == "job" and not contract_type:
-        contract_type = _detect_contract_type(cleaned_text)
 
     # Job title: prefer Docling's first heading; fall back to heuristic line scan.
     job_title: str | None = None
-    if kind == "job":
+    if resolved_kind == "job":
         if doc_title_override:
             job_title = doc_title_override
         else:
@@ -761,24 +453,24 @@ def build_document_profile(
     embedding_chunks = [
         chunk
         for chunk in [
-            summary_text,
-            skills_text,
-            job_required_text,
-            job_nice_text,
-            experience_text,
-            education_text,
-            certifications_text,
-            languages_text,
-            contract_text,
-            location_text,
-            other_text,
+            parsed.summary_text,
+            parsed.skills_text,
+            parsed.job_required_text,
+            parsed.job_nice_text,
+            parsed.experience_text,
+            parsed.education_text,
+            parsed.certifications_text,
+            parsed.languages_text,
+            parsed.contract_text,
+            parsed.location_text,
+            parsed.other_text,
         ]
         if chunk
     ]
     if not embedding_chunks and cleaned_text:
         embedding_chunks = [cleaned_text]
 
-    debug: dict = {"detected_headings": detected_headings} if detected_headings else {}
+    debug: dict = {}
     if person_name or organization_terms or location_terms or date_terms:
         debug["ner"] = {
             "person_name": person_name,
@@ -792,26 +484,26 @@ def build_document_profile(
         raw_text=text or "",
         cleaned_text=cleaned_text,
         sections=section_texts,
-        summary_text=summary_text,
-        skills_text=skills_text,
-        experience_text=experience_text,
-        education_text=education_text,
-        certifications_text=certifications_text,
-        languages_text=languages_text,
-        job_required_text=job_required_text,
-        job_nice_text=job_nice_text,
-        contract_text=contract_text,
-        location_text=location_text,
-        other_text=other_text,
-        skill_terms=skill_terms,
-        required_skill_terms=required_skill_terms,
-        nice_skill_terms=nice_skill_terms,
-        soft_skill_terms=soft_skill_terms,
+        summary_text=parsed.summary_text,
+        skills_text=parsed.skills_text,
+        experience_text=parsed.experience_text,
+        education_text=parsed.education_text,
+        certifications_text=parsed.certifications_text,
+        languages_text=parsed.languages_text,
+        job_required_text=parsed.job_required_text,
+        job_nice_text=parsed.job_nice_text,
+        contract_text=parsed.contract_text,
+        location_text=parsed.location_text,
+        other_text=parsed.other_text,
+        skill_terms=parsed.skill_terms,
+        required_skill_terms=parsed.required_skill_terms,
+        nice_skill_terms=parsed.nice_skill_terms,
+        soft_skill_terms=parsed.soft_skill_terms,
         job_title=job_title,
         esco_skill_uris=esco_skill_uris,
-        language_terms=language_terms,
-        contract_type=contract_type,
-        experience_years=experience_years,
+        language_terms=parsed.language_terms,
+        contract_type=parsed.contract_type,
+        experience_years=parsed.experience_years,
         person_name=person_name,
         organization_terms=organization_terms,
         location_terms=location_terms,
@@ -819,28 +511,6 @@ def build_document_profile(
         embedding_chunks=embedding_chunks,
         debug_info=debug,
     )
-
-
-def _guess_section_from_heading(line: str) -> str | None:
-    """Heuristique pour mapper un heading libre vers une section standard."""
-    folded = fold_text(line)
-    mapping = [
-        ("skills", ("skill", "competence", "stack", "technologie", "technic")),
-        ("experience", ("experience", "mission", "poste", "ancien", "parcours")),
-        ("education", ("formation", "diplom", "etude", "education")),
-        ("languages", ("langue", "language", "francais", "anglais", "spanish")),
-        ("job_required", ("require", "exigenc", "must", "prerequis", "profil")),
-        ("job_nice", ("atout", "souhait", "bonus", "appréci")),
-        ("contract", ("contrat", "cdi", "cdd", "freelance", "stage")),
-        ("location", ("localis", "teletravail", "remote", "hybrid", "hybride")),
-        ("contact", ("contact", "coordonne", "email", "telephone", "mobile")),
-        ("hobbies", ("interet", "loisir", "hobby", "passion", "sport")),
-    ]
-    for section, needles in mapping:
-        for n in needles:
-            if n in folded:
-                return section
-    return None
 
 
 def detect_document_kind(text: str) -> str | None:
