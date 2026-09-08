@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     worker_max_retries: int = 3
     worker_retry_base_delay: float = 0.5
     worker_retry_max_delay: float = 10.0
+    # Number of event-worker threads processing the ingestion queue
+    # concurrently. 1 keeps the historical single-threaded behavior.
+    worker_concurrency: int = 1
     watch_cv_dir: str = "/srv/ai-realtime/storage/cv"
     watch_job_dir: str = "/srv/ai-realtime/storage/job"
     api_keys: str = ""

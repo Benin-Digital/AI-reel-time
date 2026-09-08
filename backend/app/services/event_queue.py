@@ -59,11 +59,13 @@ def _is_stream_backend() -> bool:
     return settings.queue_backend.lower() == "stream"
 
 
-def _get_consumer_name() -> str:
+def _get_consumer_name(suffix: str = "") -> str:
     if settings.queue_consumer_name:
-        return settings.queue_consumer_name
-    host = socket.gethostname() or "worker"
-    return f"{host}-{os.getpid()}"
+        base = settings.queue_consumer_name
+    else:
+        host = socket.gethostname() or "worker"
+        base = f"{host}-{os.getpid()}"
+    return f"{base}-{suffix}" if suffix else base
 
 
 def _ensure_stream_group(client: redis.Redis) -> None:
@@ -246,7 +248,7 @@ def enqueue_event(event: WatchEvent) -> bool:
             return False
 
 
-def dequeue_event(timeout: float = 1.0) -> QueuedEvent | None:
+def dequeue_event(timeout: float = 1.0, consumer_suffix: str = "") -> QueuedEvent | None:
     if _is_stream_backend():
         try:
             client = _get_client()
@@ -254,7 +256,7 @@ def dequeue_event(timeout: float = 1.0) -> QueuedEvent | None:
             block_ms = max(1, int(timeout * 1000))
             response = client.xreadgroup(
                 _STREAM_GROUP,
-                _get_consumer_name(),
+                _get_consumer_name(consumer_suffix),
                 {_STREAM_NAME: ">"},
                 count=1,
                 block=block_ms,

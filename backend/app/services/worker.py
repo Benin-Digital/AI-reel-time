@@ -20,6 +20,7 @@ class EventWorker:
         retry_base_delay: float = 0.5,
         retry_max_delay: float = 10.0,
         ack_on_failure: bool = True,
+        num_workers: int = 1,
     ) -> None:
         self._handler = handler
         self._poll_interval = poll_interval
@@ -27,28 +28,40 @@ class EventWorker:
         self._retry_base_delay = retry_base_delay
         self._retry_max_delay = retry_max_delay
         self._ack_on_failure = ack_on_failure
+        self._num_workers = max(1, num_workers)
         self._stop_event = threading.Event()
-        self._thread = threading.Thread(
-            target=self._run,
-            name="event-worker",
-            daemon=True,
-        )
+        self._threads = [
+            threading.Thread(
+                target=self._run,
+                name=f"event-worker-{i}",
+                args=(i,),
+                daemon=True,
+            )
+            for i in range(self._num_workers)
+        ]
         self.last_error: str | None = None
 
     def start(self) -> None:
-        self._thread.start()
+        for thread in self._threads:
+            thread.start()
 
     @property
     def is_running(self) -> bool:
-        return self._thread.is_alive()
+        return all(thread.is_alive() for thread in self._threads)
 
     def stop(self) -> None:
         self._stop_event.set()
-        self._thread.join(timeout=5)
+        for thread in self._threads:
+            thread.join(timeout=5)
 
-    def _run(self) -> None:
+    def _run(self, worker_index: int) -> None:
+        # A distinct Redis consumer name per thread (not just per process) so
+        # the stream consumer group can tell them apart — running several
+        # threads under the same consumer name works but muddies delivery
+        # tracking (XPENDING/XCLAIM) if one of them ever needs recovery.
+        consumer_suffix = str(worker_index) if self._num_workers > 1 else ""
         while not self._stop_event.is_set():
-            queued = dequeue_event(timeout=self._poll_interval)
+            queued = dequeue_event(timeout=self._poll_interval, consumer_suffix=consumer_suffix)
             if queued is None:
                 continue
             success = self._process_event(queued.event)
