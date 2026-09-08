@@ -121,6 +121,11 @@ function _refreshList(docs = store.cachedJobDocuments) {
 async function _loadDetail(id) {
   const detail = $("#jobDetails");
   if (!detail) return;
+  // #jobDetails starts as .workspace__detail-empty (centers the "Sélectionnez
+  // une offre" placeholder both ways) — once we're loading a real document,
+  // that centering must go, or real content gets vertically centered inside
+  // the panel instead of anchored to the top (worse the taller the list is).
+  detail.classList.remove("workspace__detail-empty");
   detail.innerHTML = `<div class="skeleton skeleton--card" style="margin:var(--space-5)"></div>`;
   try {
     const doc = await safeFetch(`/job-documents/${id}/details`);
