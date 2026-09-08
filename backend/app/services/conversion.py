@@ -14,6 +14,7 @@ Install: pip install -r backend/requirements-poc.txt
 """
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,15 @@ from typing import Any
 from .extraction import extract_text
 
 logger = logging.getLogger(__name__)
+
+# Docling's DocumentConverter loads ML layout/table models (DocLayNet,
+# TableFormer) on construction. Building a fresh one per document — as this
+# module used to — pays that load cost on every single ingest instead of
+# once per process, and with several worker threads (AI_REALTIME_WORKER_
+# CONCURRENCY > 1) each document event could end up constructing its own
+# copy concurrently, multiplying both the load time and the memory/CPU cost.
+_converter = None
+_converter_lock = threading.Lock()
 
 
 @dataclass
@@ -84,33 +94,46 @@ def convert_document(path: Path) -> ConvertedDocument:
     return _convert_with_docling(path)
 
 
+def _get_converter():
+    """Build (once) and cache the Docling DocumentConverter for this process."""
+    global _converter
+    if _converter is None:
+        with _converter_lock:
+            if _converter is None:
+                import os
+                from docling.document_converter import DocumentConverter, PdfFormatOption
+                from docling.datamodel.base_models import InputFormat
+                from docling.datamodel.pipeline_options import PdfPipelineOptions
+                from docling.datamodel.settings import settings as docling_settings
+
+                # The Dockerfile sets DOCLING_ARTIFACTS_PATH=/app/.cache/docling but
+                # download_models() actually writes to the HuggingFace Hub cache
+                # (/app/.cache/huggingface/...). Docling reads the env var at import
+                # time into a global settings singleton, and base_pipeline.py falls
+                # back to settings.artifacts_path even when pipeline_options.artifacts_path
+                # is None. We need to clear all three: env var, singleton, and explicit
+                # kwarg. Then Docling falls back to HF Hub lazy-loading.
+                os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
+                docling_settings.artifacts_path = None
+
+                # CVs and job offers are text-based PDFs — OCR is unnecessary and
+                # pulls in heavy model dependencies (RapidOCR, EasyOCR) that are
+                # not installed.
+                pipeline_options = PdfPipelineOptions(do_ocr=False, artifacts_path=None)
+
+                logger.info("Loading Docling DocumentConverter (layout + table models)")
+                _converter = DocumentConverter(
+                    format_options={
+                        InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
+                    }
+                )
+                logger.info("Docling DocumentConverter ready")
+    return _converter
+
+
 def _convert_with_docling(path: Path) -> ConvertedDocument:
     """Use Docling for layout-aware extraction. Requires `pip install docling`."""
-    import os
-    from docling.document_converter import DocumentConverter, PdfFormatOption
-    from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
-    from docling.datamodel.settings import settings as docling_settings
-
-    # The Dockerfile sets DOCLING_ARTIFACTS_PATH=/app/.cache/docling but
-    # download_models() actually writes to the HuggingFace Hub cache
-    # (/app/.cache/huggingface/...). Docling reads the env var at import
-    # time into a global settings singleton, and base_pipeline.py falls
-    # back to settings.artifacts_path even when pipeline_options.artifacts_path
-    # is None. We need to clear all three: env var, singleton, and explicit
-    # kwarg. Then Docling falls back to HF Hub lazy-loading.
-    os.environ.pop("DOCLING_ARTIFACTS_PATH", None)
-    docling_settings.artifacts_path = None
-
-    # CVs and job offers are text-based PDFs — OCR is unnecessary and pulls in
-    # heavy model dependencies (RapidOCR, EasyOCR) that are not installed.
-    pipeline_options = PdfPipelineOptions(do_ocr=False, artifacts_path=None)
-
-    converter = DocumentConverter(
-        format_options={
-            InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
-        }
-    )
+    converter = _get_converter()
     result = converter.convert(str(path))
     doc = result.document
 
