@@ -139,7 +139,15 @@ async function _loadDetail(id) {
       pdfBtn.addEventListener("click", async () => {
         pdfBtn.disabled = true;
         try {
-          const blob = await fetchBlob(`/cv-documents/${id}/pdf`);
+          let blob;
+          try {
+            blob = await fetchBlob(`/cv-documents/${id}/pdf`);
+          } catch (err) {
+            // Original isn't a PDF (DOCX/TXT) — fall back to the already
+            // extracted text rendered as PDF instead of a dead end.
+            if (err.status !== 415) throw err;
+            blob = await fetchBlob(`/cv-documents/${id}/parsed-pdf`, { timeout: 60000 });
+          }
           const url = URL.createObjectURL(blob);
           window.open(url, "_blank");
           setTimeout(() => URL.revokeObjectURL(url), 60000);
