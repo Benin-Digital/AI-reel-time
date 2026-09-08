@@ -376,10 +376,9 @@ select:disabled {
   border: 1px solid transparent;
 }
 
-.score-chip--excellent { background: var(--tone-excellent-subtle); color: var(--tone-excellent); border-color: rgba(34,197,94,.25); }
-.score-chip--strong    { background: var(--tone-strong-subtle);    color: var(--tone-strong);    border-color: rgba(79,110,247,.25); }
-.score-chip--medium    { background: var(--tone-medium-subtle);    color: var(--tone-medium);    border-color: rgba(245,158,11,.25); }
-.score-chip--weak      { background: var(--tone-weak-subtle);      color: var(--tone-weak);      border-color: rgba(239,68,68,.25); }
+.score-chip--high { background: var(--tone-high-subtle); color: var(--tone-high); border-color: rgba(34,197,94,.25); }
+.score-chip--mid  { background: var(--tone-mid-subtle);  color: var(--tone-mid);  border-color: rgba(245,158,11,.25); }
+.score-chip--low  { background: var(--tone-low-subtle);  color: var(--tone-low);  border-color: rgba(239,68,68,.25); }
 
 /* Score bar */
 .score-bar {
@@ -394,10 +393,9 @@ select:disabled {
   transition: width var(--ease-slow);
   background: var(--color-primary);
 }
-.score-bar__fill--excellent { background: var(--tone-excellent); }
-.score-bar__fill--strong    { background: var(--tone-strong); }
-.score-bar__fill--medium    { background: var(--tone-medium); }
-.score-bar__fill--weak      { background: var(--tone-weak); }
+.score-bar__fill--high { background: var(--tone-high); }
+.score-bar__fill--mid  { background: var(--tone-mid); }
+.score-bar__fill--low  { background: var(--tone-low); }
 
 /* ---- FEEDBACK DECISION BUTTONS ---- */
 .feedback-bar {

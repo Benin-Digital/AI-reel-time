@@ -1,6 +1,6 @@
 import { safeFetch } from "../api.js";
 import { $, setBanner, show, hide, escapeHtml } from "../utils/dom.js";
-import { formatDate } from "../utils/format.js";
+import { formatDate, scoreTone } from "../utils/format.js";
 import { openDeleteConfirm, openConfirm } from "../utils/upload.js";
 
 export function initArchives() {
@@ -139,7 +139,7 @@ async function _loadDetail(sessionId) {
     const matchHtml = matches?.length
       ? matches.map((m) => {
           const score = Math.max(0, Math.min(100, Math.round(Number(m.score) || 0)));
-          const tone  = score >= 70 ? "high" : score >= 40 ? "mid" : "low";
+          const tone  = scoreTone(score).key;
           return `
             <div style="display:flex;align-items:center;gap:var(--space-3);background:var(--bg-surface-raised);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3)">
               <span class="score-chip score-chip--${tone}">${score}%</span>

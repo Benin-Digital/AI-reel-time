@@ -477,9 +477,9 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-5);
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-4);
   transition: border-color var(--ease-fast), background var(--ease-fast);
 }
@@ -489,31 +489,66 @@
   background: var(--bg-surface-hover);
 }
 
-.match-card__score {
-  flex-shrink: 0;
+/* Face-off header: CV on the left, score in the middle, job on the right —
+   so the two documents being compared, and the direct way to open each
+   one, are the first thing seen instead of a small chip buried in text. */
+.match-faceoff {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.match-faceoff__side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.match-faceoff__icon {
+  color: var(--text-muted);
+}
+
+.match-faceoff__label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  max-width: 100%;
+}
+
+.match-faceoff__score {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
-  min-width: 56px;
+  padding: 0 var(--space-4);
+  flex-shrink: 0;
+}
+
+.match-faceoff__score-chip {
+  font-size: var(--text-2xl);
+  height: auto;
+  line-height: 1.2;
+  padding: var(--space-2) var(--space-4);
+}
+
+@media (max-width: 640px) {
+  .match-faceoff {
+    grid-template-columns: 1fr;
+  }
+  .match-faceoff__score {
+    padding: var(--space-2) 0;
+  }
 }
 
 .match-card__body {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-.match-card__title {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
 }
 
 .match-card__meta {
@@ -523,6 +558,7 @@
 
 .match-card__actions {
   display: flex;
+  justify-content: flex-end;
   gap: var(--space-2);
   flex-shrink: 0;
 }

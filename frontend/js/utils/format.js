@@ -1,10 +1,9 @@
 export const clampScore = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
 
 export const scoreTone = (score) => {
-  if (score >= 85) return { key: "excellent", label: "Excellent" };
-  if (score >= 70) return { key: "strong",    label: "Fort" };
-  if (score >= 50) return { key: "medium",    label: "Moyen" };
-  return             { key: "weak",      label: "À vérifier" };
+  if (score >= 80) return { key: "high", label: "Fort" };
+  if (score >= 60) return { key: "mid",  label: "Moyen" };
+  return             { key: "low",  label: "À vérifier" };
 };
 
 export const renderScoreChip = (score) => {
