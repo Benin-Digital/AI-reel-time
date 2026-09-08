@@ -376,6 +376,21 @@
   justify-content: center;
 }
 
+/* Document preview embedded directly in the detail panel: the original
+   file if it's a PDF, otherwise the already-extracted text rendered as
+   PDF (an iframe can't preview a DOCX/TXT file directly). */
+.doc-preview {
+  min-height: 65vh;
+}
+
+.doc-preview__frame {
+  width: 100%;
+  height: 65vh;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: block;
+}
+
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; }
   .workspace__detail { display: none; }

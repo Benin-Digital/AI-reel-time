@@ -3,7 +3,7 @@ import { $, setBanner, openModal } from "../utils/dom.js";
 import { store, setStore } from "../store.js";
 import { navigateTo } from "../router.js";
 import { openDeleteConfirm } from "../utils/upload.js";
-import { buildParams, setPage, renderDocItem, renderDocDetail } from "../utils/docs.js";
+import { buildParams, setPage, renderDocItem, renderDocDetail, loadDocPdfPreview } from "../utils/docs.js";
 
 const MAX_MB = 20;
 const SUPPORTED = [".pdf", ".docx", ".txt"];
@@ -125,6 +125,7 @@ async function _loadDetail(id) {
   try {
     const doc = await safeFetch(`/cv-documents/${id}/details`);
     detail.innerHTML = `<div class="workspace__detail-body">${renderDocDetail(doc, "cv")}</div>`;
+    loadDocPdfPreview("cv", id);
 
     // wire explain buttons injected by renderDocDetail
     detail.querySelectorAll("[data-explain]").forEach((btn) => {

@@ -1,5 +1,6 @@
-import { renderKeywordChips, renderScoreChip, formatDate, statusBadge } from "./format.js";
+import { formatDate, statusBadge } from "./format.js";
 import { escapeHtml } from "./dom.js";
+import { fetchBlob } from "../api.js";
 
 /**
  * Build a URLSearchParams query string from an object.
@@ -121,50 +122,8 @@ export function renderDocItem(doc, kind, selectedId) {
  * @returns {string} HTML string
  */
 export function renderDocDetail(doc, kind) {
-  const matchCount = doc.match_count ?? 0;
-  const avgScore = doc.average_score != null
-    ? `${Math.round(Number(doc.average_score))}%`
-    : "n/a";
-  const date = formatDate(doc.updated_at ?? doc.created_at);
-  const method = escapeHtml(doc.extraction_method ?? doc.method ?? "—");
-
   const errorHtml = doc.last_error
     ? `<div class="banner banner--error">${escapeHtml(doc.last_error)}</div>`
-    : "";
-
-  const keywords = (doc.top_keywords ?? []).filter(Boolean);
-  const keywordsHtml = keywords.length
-    ? `<div>
-        <div class="text-xs font-semibold text-muted" style="margin-bottom:var(--space-2)">Mots-clés</div>
-        ${renderKeywordChips(keywords)}
-      </div>`
-    : "";
-
-  const extractedText = escapeHtml(doc.extracted_text ?? "");
-  const textHtml = extractedText
-    ? `<div>
-        <div class="text-xs font-semibold text-muted" style="margin-bottom:var(--space-2)">Texte extrait</div>
-        <div style="font-size:var(--text-xs);color:var(--text-secondary);white-space:pre-wrap;max-height:200px;overflow-y:auto;background:var(--bg-surface-raised);border-radius:var(--radius-md);padding:var(--space-3)">${extractedText}</div>
-      </div>`
-    : "";
-
-  const topMatches = (doc.top_matches ?? []).filter(Boolean);
-  const topMatchesHtml = topMatches.length
-    ? `<div>
-        <div class="text-xs font-semibold text-muted" style="margin-bottom:var(--space-2)">Meilleurs matches</div>
-        <div class="stack" style="gap:var(--space-2)">
-          ${topMatches.slice(0, 5).map((m) => {
-            const score = Math.max(0, Math.min(100, Math.round(Number(m.score) || 0)));
-            const otherId = kind === "cv" ? m.job_id : m.cv_id;
-            const otherLabel = kind === "cv" ? "Offre" : "CV";
-            return `<div style="display:flex;align-items:center;gap:var(--space-3);background:var(--bg-surface-raised);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3)">
-              ${renderScoreChip(score)}
-              <span class="text-sm text-secondary">${otherLabel} ${escapeHtml(String(otherId))}</span>
-              <button class="btn btn--ghost btn--sm" style="margin-left:auto" data-explain="${escapeHtml(String(m.id))}">Analyser</button>
-            </div>`;
-          }).join("")}
-        </div>
-      </div>`
     : "";
 
   const pdfSvg = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
@@ -183,8 +142,10 @@ export function renderDocDetail(doc, kind) {
     ? `<p class="text-xs text-muted" id="structuringWait-${escapeHtml(String(doc.id))}">Structuration en cours… Pour un document long, cela peut prendre plusieurs minutes — merci de patienter.</p>`
     : "";
 
+  const previewId = `docPreview-${kind}-${escapeHtml(String(doc.id))}`;
+
   return `
-<div class="stack" style="gap:var(--space-5)">
+<div class="stack" style="gap:var(--space-4)">
   <div style="display:flex;justify-content:flex-end;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1);flex-wrap:wrap">
     ${structuringBadge}
     <button class="btn btn--ghost btn--sm" data-action="preview-pdf" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}">${pdfSvg}Aperçu PDF</button>
@@ -193,27 +154,54 @@ export function renderDocDetail(doc, kind) {
   </div>
   ${structuringErrorHtml}
   ${structuringWaitHtml}
-  <div style="display:flex;gap:var(--space-4);flex-wrap:wrap">
-    <div class="metric-card" style="flex:1;min-width:100px">
-      <div class="metric-card__label">ID</div>
-      <div class="metric-card__value">${escapeHtml(String(doc.id))}</div>
-    </div>
-    <div class="metric-card" style="flex:1;min-width:100px">
-      <div class="metric-card__label">Matches</div>
-      <div class="metric-card__value">${escapeHtml(String(matchCount))}</div>
-    </div>
-    <div class="metric-card" style="flex:1;min-width:100px">
-      <div class="metric-card__label">Score moyen</div>
-      <div class="metric-card__value">${avgScore}</div>
-    </div>
+  ${errorHtml}
+  <div class="doc-preview" id="${previewId}">
+    <div class="skeleton doc-preview__frame"></div>
   </div>
-  <div class="stack" style="gap:var(--space-2)">
-    <p class="text-xs text-muted">Mis à jour le ${escapeHtml(date)}</p>
-    <p class="text-xs text-muted">Extraction : ${method}</p>
-    ${errorHtml}
-  </div>
-  ${keywordsHtml}
-  ${textHtml}
-  ${topMatchesHtml}
 </div>`.trim();
+}
+
+// One in-flight object URL per document kind (cv/job) — each detail panel
+// fully replaces its own preview when a different document is selected, so
+// it's safe (and necessary, to avoid leaking blob URLs) to revoke the
+// previous one for that kind right before creating the next.
+const _lastPreviewUrl = { cv: null, job: null };
+
+/**
+ * Load the document preview into the container rendered by renderDocDetail:
+ * the original file if it's already a PDF, otherwise the already-extracted
+ * text rendered as PDF (there is no way to preview a DOCX/TXT file in an
+ * iframe directly).
+ *
+ * @param {"cv"|"job"} kind
+ * @param {string|number} id
+ */
+export async function loadDocPdfPreview(kind, id) {
+  const container = document.getElementById(`docPreview-${kind}-${id}`);
+  if (!container) return;
+
+  const rawPath = kind === "cv" ? `/cv-documents/${id}/pdf` : `/job-documents/${id}/pdf`;
+  const parsedPath = kind === "cv" ? `/cv-documents/${id}/parsed-pdf` : `/job-documents/${id}/parsed-pdf`;
+
+  try {
+    let blob;
+    try {
+      blob = await fetchBlob(rawPath);
+    } catch (err) {
+      if (err.status !== 415) throw err;
+      blob = await fetchBlob(parsedPath, { timeout: 60000 });
+    }
+
+    if (_lastPreviewUrl[kind]) URL.revokeObjectURL(_lastPreviewUrl[kind]);
+    const url = URL.createObjectURL(blob);
+    _lastPreviewUrl[kind] = url;
+
+    // Guard against a stale response landing after the user already
+    // navigated to a different document.
+    if (!document.getElementById(`docPreview-${kind}-${id}`)) return;
+    container.innerHTML = `<iframe src="${url}" class="doc-preview__frame" title="Aperçu du document"></iframe>`;
+  } catch (err) {
+    if (!document.getElementById(`docPreview-${kind}-${id}`)) return;
+    container.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${escapeHtml(err.message)}</div></div>`;
+  }
 }
