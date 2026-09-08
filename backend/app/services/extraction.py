@@ -106,14 +106,42 @@ def extract_text_from_pdf(path: Path) -> str:
 
 
 def _ocr_pdf(path: Path) -> str:
-    """Tesseract OCR on each page image; uses psm=3 for multi-column layouts."""
+    """Tesseract OCR on each page image; uses psm=3 for multi-column layouts.
+
+    OCR runs synchronously in the single event worker thread, so an unbounded
+    document (scanned, many pages, or a misdetected non-CV/job file) can pin
+    the CPU for minutes and starve the whole process. Cap the number of pages
+    OCR'd and give each page a hard timeout so a pathological file degrades
+    to partial/no text instead of hanging the pipeline.
+    """
     try:
         images = convert_from_path(str(path), dpi=settings.ocr_dpi)
+        if len(images) > settings.ocr_max_pages:
+            logger.warning(
+                "PDF %s has %d pages, OCR-ing only the first %d (AI_REALTIME_OCR_MAX_PAGES)",
+                path.name,
+                len(images),
+                settings.ocr_max_pages,
+            )
+            images = images[: settings.ocr_max_pages]
+
         # psm 3 = fully automatic page segmentation (handles multi-column CVs)
         config = f"--psm 3 --oem {settings.ocr_oem}"
         parts: list[str] = []
-        for img in images:
-            t = pytesseract.image_to_string(img, lang=settings.ocr_languages, config=config)
+        for page_num, img in enumerate(images, start=1):
+            try:
+                t = pytesseract.image_to_string(
+                    img,
+                    lang=settings.ocr_languages,
+                    config=config,
+                    timeout=settings.ocr_page_timeout_seconds,
+                )
+            except RuntimeError:
+                logger.warning(
+                    "OCR timed out on page %d/%d of %s (> %ds), skipping this page",
+                    page_num, len(images), path.name, settings.ocr_page_timeout_seconds,
+                )
+                continue
             if t.strip():
                 parts.append(t)
         return "\n".join(parts)
