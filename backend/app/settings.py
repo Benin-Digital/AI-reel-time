@@ -94,6 +94,12 @@ class Settings(BaseSettings):
     ocr_languages: str = "fra+eng"
     ocr_psm: int = 6
     ocr_oem: int = 3
+    # Safety net for scanned/misdetected PDFs: without these, a long or
+    # pathological document can pin the CPU running OCR for several minutes,
+    # starving the whole process (nginx 502s) since this runs synchronously
+    # in the single event worker thread.
+    ocr_max_pages: int = 20
+    ocr_page_timeout_seconds: int = 25
     # Hybrid scoring: combine vector (bi-encoder) score with structured score
     hybrid_scoring_enabled: bool = True
     hybrid_vector_weight: float = 0.3
