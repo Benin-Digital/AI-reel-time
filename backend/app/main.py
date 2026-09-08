@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import redis
 from sqlalchemy import delete, func, or_, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from .db import SessionLocal, init_db
@@ -382,42 +383,35 @@ def _upsert_match_result(
     common: list[str],
     component_scores: dict | None = None,
 ) -> MatchRead:
+    # Atomic INSERT ... ON CONFLICT DO UPDATE instead of SELECT-then-write:
+    # with several worker threads, a CV event and a Job event can both land
+    # on the exact same (cv_id, job_id) pair at the same time. The old
+    # select-then-insert-or-update pattern raced on the unique
+    # (cv_id, job_id) constraint under that overlap.
     cs = component_scores or {}
-    with SessionLocal() as session:
-        existing = session.scalar(
-            select(MatchResult).where(
-                MatchResult.cv_id == cv_id,
-                MatchResult.job_id == job_id,
-            )
-        )
-        if existing:
-            existing.score = score
-            existing.common_keywords = serialize_keywords(common)
-            if cs:
-                existing.score_semantic = cs.get("semantic")
-                existing.score_skills = cs.get("skills")
-                existing.score_experience = cs.get("experience")
-                existing.score_education = cs.get("education")
-                existing.score_languages = cs.get("languages")
-                existing.score_contract = cs.get("contract")
-                existing.match_domain = cs.get("domain")
-            session.commit()
-            session.refresh(existing)
-            return MatchRead(
-                id=existing.id,
-                cv_id=existing.cv_id,
-                job_id=existing.job_id,
-                score=existing.score,
-                common_keywords=deserialize_keywords(existing.common_keywords),
-                created_at=existing.created_at,
-                updated_at=existing.updated_at,
-            )
-
-        match = MatchResult(
-            cv_id=cv_id,
-            job_id=job_id,
-            score=score,
-            common_keywords=serialize_keywords(common),
+    common_serialized = serialize_keywords(common)
+    insert_values = dict(
+        cv_id=cv_id,
+        job_id=job_id,
+        score=score,
+        common_keywords=common_serialized,
+        score_semantic=cs.get("semantic"),
+        score_skills=cs.get("skills"),
+        score_experience=cs.get("experience"),
+        score_education=cs.get("education"),
+        score_languages=cs.get("languages"),
+        score_contract=cs.get("contract"),
+        match_domain=cs.get("domain"),
+    )
+    # A cheap vector-only rescore (no component breakdown) must not blank out
+    # a previously-computed detailed breakdown for this pair.
+    update_values = {
+        "score": score,
+        "common_keywords": common_serialized,
+        "updated_at": func.now(),
+    }
+    if cs:
+        update_values.update(
             score_semantic=cs.get("semantic"),
             score_skills=cs.get("skills"),
             score_experience=cs.get("experience"),
@@ -426,9 +420,19 @@ def _upsert_match_result(
             score_contract=cs.get("contract"),
             match_domain=cs.get("domain"),
         )
-        session.add(match)
+
+    with SessionLocal() as session:
+        stmt = (
+            pg_insert(MatchResult)
+            .values(**insert_values)
+            .on_conflict_do_update(
+                index_elements=[MatchResult.cv_id, MatchResult.job_id],
+                set_=update_values,
+            )
+            .returning(MatchResult)
+        )
+        match = session.scalars(stmt).one()
         session.commit()
-        session.refresh(match)
         return MatchRead(
             id=match.id,
             cv_id=match.cv_id,
@@ -463,17 +467,26 @@ def _upsert_cv_embedding(
         logger.warning("embedding dim mismatch for cv %s", cv_id)
         return
 
+    # Atomic INSERT ... ON CONFLICT DO UPDATE: with several worker threads,
+    # the same CV can get re-embedded by two overlapping events (e.g. a rapid
+    # re-upload) — the old select-then-insert-or-update pattern raced on the
+    # unique cv_id constraint in that case. The WHERE clause keeps the
+    # "skip if content unchanged" shortcut atomic too.
     def _apply(target_session):
-        existing = target_session.scalar(select(CvEmbedding).where(CvEmbedding.cv_id == cv_id))
-        if existing and existing.content_hash == content_hash:
-            return
-        if existing:
-            existing.content_hash = content_hash
-            existing.embedding = embedding
-            target_session.commit()
-            return
-        row = CvEmbedding(cv_id=cv_id, content_hash=content_hash, embedding=embedding)
-        target_session.add(row)
+        stmt = (
+            pg_insert(CvEmbedding)
+            .values(cv_id=cv_id, content_hash=content_hash, embedding=embedding)
+            .on_conflict_do_update(
+                index_elements=[CvEmbedding.cv_id],
+                set_={
+                    "content_hash": content_hash,
+                    "embedding": embedding,
+                    "updated_at": func.now(),
+                },
+                where=(CvEmbedding.content_hash.is_distinct_from(content_hash)),
+            )
+        )
+        target_session.execute(stmt)
         target_session.commit()
 
     if session is not None:
@@ -494,17 +507,23 @@ def _upsert_job_embedding(
         logger.warning("embedding dim mismatch for job %s", job_id)
         return
 
+    # See _upsert_cv_embedding: atomic upsert to avoid racing on the unique
+    # job_id constraint when several worker threads run concurrently.
     def _apply(target_session):
-        existing = target_session.scalar(select(JobEmbedding).where(JobEmbedding.job_id == job_id))
-        if existing and existing.content_hash == content_hash:
-            return
-        if existing:
-            existing.content_hash = content_hash
-            existing.embedding = embedding
-            target_session.commit()
-            return
-        row = JobEmbedding(job_id=job_id, content_hash=content_hash, embedding=embedding)
-        target_session.add(row)
+        stmt = (
+            pg_insert(JobEmbedding)
+            .values(job_id=job_id, content_hash=content_hash, embedding=embedding)
+            .on_conflict_do_update(
+                index_elements=[JobEmbedding.job_id],
+                set_={
+                    "content_hash": content_hash,
+                    "embedding": embedding,
+                    "updated_at": func.now(),
+                },
+                where=(JobEmbedding.content_hash.is_distinct_from(content_hash)),
+            )
+        )
+        target_session.execute(stmt)
         target_session.commit()
 
     if session is not None:
@@ -1491,6 +1510,7 @@ async def lifespan(app: FastAPI):
         retry_base_delay=settings.worker_retry_base_delay,
         retry_max_delay=settings.worker_retry_max_delay,
         ack_on_failure=settings.queue_ack_on_failure,
+        num_workers=settings.worker_concurrency,
     )
     worker.start()
     app.state.watcher = watcher
