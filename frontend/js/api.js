@@ -93,6 +93,10 @@ export const fetchBlob = async (path, options = {}) => {
   const headers = new Headers();
   if (store.authToken) headers.set("Authorization", `Bearer ${store.authToken}`);
   const res = await withTimeout(`${API_BASE}${path}`, { method: "GET", headers }, timeout);
-  if (!res.ok) throw new Error(`Impossible de charger le fichier (${res.status})`);
+  if (!res.ok) {
+    const err = new Error(`Impossible de charger le fichier (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
   return res.blob();
 };

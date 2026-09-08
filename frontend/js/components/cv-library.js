@@ -3,7 +3,7 @@ import { $, setBanner, openModal } from "../utils/dom.js";
 import { store, setStore } from "../store.js";
 import { navigateTo } from "../router.js";
 import { openDeleteConfirm } from "../utils/upload.js";
-import { buildParams, setPage, renderDocItem, renderDocDetail } from "../utils/docs.js";
+import { buildParams, setPage, renderDocItem, renderDocDetail, loadDocPdfPreview } from "../utils/docs.js";
 
 const MAX_MB = 20;
 const SUPPORTED = [".pdf", ".docx", ".txt"];
@@ -125,6 +125,7 @@ async function _loadDetail(id) {
   try {
     const doc = await safeFetch(`/cv-documents/${id}/details`);
     detail.innerHTML = `<div class="workspace__detail-body">${renderDocDetail(doc, "cv")}</div>`;
+    loadDocPdfPreview("cv", id);
 
     // wire explain buttons injected by renderDocDetail
     detail.querySelectorAll("[data-explain]").forEach((btn) => {
@@ -139,7 +140,15 @@ async function _loadDetail(id) {
       pdfBtn.addEventListener("click", async () => {
         pdfBtn.disabled = true;
         try {
-          const blob = await fetchBlob(`/cv-documents/${id}/pdf`);
+          let blob;
+          try {
+            blob = await fetchBlob(`/cv-documents/${id}/pdf`);
+          } catch (err) {
+            // Original isn't a PDF (DOCX/TXT) — fall back to the already
+            // extracted text rendered as PDF instead of a dead end.
+            if (err.status !== 415) throw err;
+            blob = await fetchBlob(`/cv-documents/${id}/parsed-pdf`, { timeout: 60000 });
+          }
           const url = URL.createObjectURL(blob);
           window.open(url, "_blank");
           setTimeout(() => URL.revokeObjectURL(url), 60000);

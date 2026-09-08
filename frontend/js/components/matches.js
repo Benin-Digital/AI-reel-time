@@ -155,9 +155,19 @@ async function _viewDocumentPdf(kind, id, btn) {
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Ouverture…";
+  const rawPath    = kind === "cv" ? `/cv-documents/${id}/pdf` : `/job-documents/${id}/pdf`;
+  const parsedPath = kind === "cv" ? `/cv-documents/${id}/parsed-pdf` : `/job-documents/${id}/parsed-pdf`;
   try {
-    const path = kind === "cv" ? `/cv-documents/${id}/pdf` : `/job-documents/${id}/pdf`;
-    const blob = await fetchBlob(path);
+    let blob;
+    try {
+      blob = await fetchBlob(rawPath);
+    } catch (err) {
+      // The original file isn't a PDF (DOCX/TXT) — there's no way to view
+      // it as-is in a new tab, but the extracted text is already rendered
+      // as a PDF elsewhere in the app. Show that instead of a dead end.
+      if (err.status !== 415) throw err;
+      blob = await fetchBlob(parsedPath, { timeout: 60000 });
+    }
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 60000);
