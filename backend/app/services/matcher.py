@@ -63,6 +63,25 @@ def _cross_encode(query: str, document: str) -> float:
 
 
 # ── Domain-aware weights ──────────────────────────────────────────────────────
+#
+# _DOMAIN_W below is NOT applied to scoring (see _weights()). It's kept as
+# reference data from an earlier design where the final score used a
+# different weight profile per detected domain (health/legal weighting
+# education higher, tech weighting skills higher, etc.).
+#
+# That design was retired: detect_domain() (parser.py) is a keyword-count
+# heuristic over the first 3000 chars, and a single out-of-context keyword
+# (e.g. "patient" mentioned once in an e-health tech CV) could flip the
+# entire weight profile with no signal visible to the recruiter — in
+# production, tech CVs were observed landing in the health domain and
+# having their score silently distorted by it. The weight deltas between
+# profiles were also hand-tuned, never validated against real outcomes.
+#
+# Domain is still detected and shown to the recruiter as a label
+# (MatchScore.domain) — it just no longer feeds the score itself. If
+# domain-aware weighting is revisited, do it with a confidence gate or a
+# proportional blend instead of this hard per-domain lookup, and validate
+# the effect on the accuracy dataset (test_validation_dataset.py) first.
 
 _DEFAULT_W = {
     "semantic": 0.40,
@@ -181,24 +200,13 @@ def get_active_weights() -> dict[str, float] | None:
         return _learned_weights.copy() if _learned_weights else None
 
 
-def _weights(domain: str) -> dict[str, float]:
+def _weights() -> dict[str, float]:
+    """Weights for the final score. Domain-independent — see the comment
+    above _DOMAIN_W for why per-domain weighting was retired."""
     with _learned_weights_lock:
         if _learned_weights is not None:
             return _learned_weights.copy()
-    if domain not in _DOMAIN_W and domain != "general":
-        # A document was classified into a domain that parser.py knows how to
-        # detect but that has no calibrated weight profile here. Falling back
-        # to _DEFAULT_W silently would repeat the 'management'/'marketing' gap
-        # (score computed with generic weights while the UI still shows a
-        # specific domain badge) — surface it instead of hiding it.
-        logger.warning(
-            "No calibrated weight profile for domain '%s' — falling back to "
-            "_DEFAULT_W. Add an entry to _DOMAIN_W to calibrate this domain.",
-            domain,
-        )
-    raw = _DOMAIN_W.get(domain, _DEFAULT_W).copy()
-    total = sum(raw.values())
-    return {k: v / total for k, v in raw.items()} if total else raw
+    return dict(_DEFAULT_W)
 
 
 # ── Component scoring ─────────────────────────────────────────────────────────
@@ -435,9 +443,10 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     CV against a shortlist of jobs) so the side that doesn't change across
     the loop is parsed once instead of once per pair.
     """
-    # Use job's domain when available (more precise about requirements)
+    # Domain is still detected and returned as a display label (MatchScore.domain)
+    # but no longer selects a weight profile — see the comment above _DOMAIN_W.
     domain = job.domain if job.domain != "general" else cv.domain
-    w = _weights(domain)
+    w = _weights()
 
     # Semantic: feed the most relevant section of each document. Section
     # classification (_match_section) is content-driven, not kind-driven
