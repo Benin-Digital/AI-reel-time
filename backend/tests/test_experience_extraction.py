@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.services.parser import _extract_years
+from app.services.parser import _extract_years, parse_document
 
 CURRENT_YEAR = datetime.now().year
 
@@ -71,3 +71,39 @@ def test_result_stays_within_bounds():
     # Une plage absurde (avant 1970 non capturee) ne doit pas exploser
     assert _extract_years("1960 - 2024") == 0  # 1960 hors plage capturee
     assert 0 <= _extract_years("2000 - 2024") <= 40
+
+
+# ── Nom de mois / mois numerique colle a l'annee (bug trouve en audit) ───────
+# La regex exigeait une annee immediatement adjacente au separateur ; un nom
+# de mois ou un "MM/" entre les deux faisait echouer toute la plage a 0,
+# alors que c'est un format tres courant en CV francais.
+
+def test_month_name_before_year_is_handled():
+    assert _extract_years("janvier 2019 - décembre 2023") == 4
+    assert _extract_years("jan 2019 - dec 2023") == 4
+
+
+def test_numeric_month_before_year_is_handled():
+    assert _extract_years("01/2019 - 12/2023") == 4
+
+
+def test_since_with_month_name_is_handled():
+    assert _extract_years("depuis janvier 2020") == CURRENT_YEAR - 2020
+
+
+# ── Portee : ne pas compter les dates de la section Formation (bug d'audit) ──
+# _extract_years() tournait sur experience_text + tout le document nettoye,
+# donc des plages de dates de formation (ex: "Master 2015-2017") s'ajoutaient
+# a la vraie experience professionnelle des qu'une section Experience existait.
+
+def test_education_date_ranges_are_not_counted_as_experience():
+    cv_text = (
+        "Formation\n"
+        "Master Informatique - 2015 - 2017\n"
+        "Licence Informatique - 2012 - 2015\n"
+        "\n"
+        "Experience\n"
+        "Ingenieur logiciel chez ACME - 2020 - 2023\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert doc.experience_years == 3, "seule la periode 2020-2023 est une vraie experience professionnelle"

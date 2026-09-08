@@ -132,7 +132,7 @@ _SKILLS: dict[str, list[str]] = {
     "Présentation": ["presentation", "prise de parole", "powerpoint", "pitch"],
     "Résolution de problèmes": ["resolution de problemes", "problem solving", "analyse de problemes"],
     "Coaching": ["coaching", "mentoring", "mentorat", "accompagnement"],
-    "Formation": ["developpement des competences", "animation de formation", "plan de formation professionnelle", "ingenierie pedagogique"],
+    "Formation": ["developpement des competences", "animation de formation", "plan de formation professionnelle"],
     "Stratégie": ["strategic planning", "planification strategique", "vision strategique", "plan strategique"],
     "Gouvernance": ["gouvernance", "governance", "pilotage", "controle interne"],
 
@@ -167,11 +167,11 @@ _SKILLS: dict[str, list[str]] = {
 
     # ── COMPTABILITÉ & FINANCE ─────────────────────────────────────────────
     "Comptabilité générale": ["comptabilite generale", "comptabilite", "accounting", "tenue de comptabilite", "comptable"],
-    "Comptabilité analytique": ["comptabilite analytique", "controle de gestion", "comptabilite de gestion", "controlling"],
+    "Comptabilité analytique": ["comptabilite analytique", "comptabilite de gestion"],
     "Fiscalité": ["fiscalite", "tax", "droit fiscal", "tva", "impots", "declarations fiscales", "liasse fiscale"],
     "Consolidation": ["consolidation", "consolidation comptable", "etats financiers consolides", "consolidation des comptes"],
     "IFRS": ["ifrs", "normes ifrs", "normes internationales", "ias", "us gaap"],
-    "Contrôle de gestion": ["controle de gestion", "controller", "controlling", "analyse financiere", "pilotage financier"],
+    "Contrôle de gestion": ["controle de gestion", "controller", "controlling", "pilotage financier"],
     "Audit": ["audit", "commissariat aux comptes", "audit financier", "audit interne", "auditeur"],
     "Trésorerie": ["tresorerie", "cash management", "gestion de tresorerie", "cash flow", "plan de tresorerie"],
     "Paie": ["paie", "paye", "gestion de la paie", "bulletin de paie", "payroll", "gestionnaire de paie"],
@@ -255,7 +255,7 @@ _SKILLS: dict[str, list[str]] = {
     "Adaptabilité": ["adaptabilite", "adaptable", "flexibilite", "polyvalence", "agilite d adaptation"],
     "Créativité": ["creativite", "creatif", "inventivite", "ideation"],
     "Organisation": ["organisation", "sens de l organisation", "organise", "structuration"],
-    "Sens du service": ["sens du service", "orientation client", "service oriented", "service client"],
+    "Sens du service": ["sens du service", "orientation client", "service oriented"],
     "Esprit d'analyse": ["esprit d analyse", "analytical skills", "analyse", "sens analytique", "capacite d analyse"],
     "Force de proposition": ["force de proposition", "proactif", "proactivite", "initiative", "acteur du changement"],
     "Gestion du stress": ["gestion du stress", "resistance au stress", "sang-froid", "resilience"],

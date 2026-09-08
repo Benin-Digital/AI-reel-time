@@ -262,15 +262,31 @@ def _section_lookup() -> dict[str, str]:
     return lookup
 
 
+@lru_cache(maxsize=512)
+def _alias_pattern(alias: str) -> re.Pattern:
+    return re.compile(r"\b" + re.escape(alias) + r"\b")
+
+
 def _match_section(line: str) -> str | None:
-    """Return section name if the line matches a known heading alias."""
-    lookup = _section_lookup()
+    """Return section name if the line matches a known heading alias.
+
+    Only heading-shaped lines (a handful of words, like the ALL-CAPS and
+    bullet-follow heuristics below) are considered. Without that guard, an
+    alias word occurring naturally inside a normal sentence — or even glued
+    inside an unrelated word, e.g. "role" inside "controle" without a word
+    boundary — would misclassify that sentence as a section break and
+    silently drop its own content from every section.
+    """
     folded = _fold(line.strip())
+    words = folded.split()
+    if not words or len(words) > 6:
+        return None
+
+    lookup = _section_lookup()
     if folded in lookup:
         return lookup[folded]
-    # substring match (line contains the alias)
     for alias, section in lookup.items():
-        if len(alias) >= 4 and alias in folded:
+        if len(alias) >= 4 and _alias_pattern(alias).search(folded):
             return section
     return None
 
@@ -322,18 +338,28 @@ _YEAR_PLAIN_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)", r
 _AGE_CTX_RE = re.compile(r"\bne\b.{0,20}\d{4}|\bnaissance\b|\bage\s*[:\-]?\s*\d{1,2}\b", re.IGNORECASE)
 _EXP_CTX_RE = re.compile(r"exp[eé]rience|exp\b|pratique", re.IGNORECASE)
 
-# Date-range patterns, e.g. "2018 - 2023", "2020 – à ce jour", "depuis 2018".
+# Date-range patterns, e.g. "2018 - 2023", "2020 – à ce jour", "depuis 2018",
+# "janvier 2019 - décembre 2023", "01/2019 - 12/2023".
 # NOTE: this runs on the ORIGINAL text, not the _fold()ed one, because _fold
 # strips en-dash/em-dash (and accents), which would destroy the range
 # separator. We therefore accept accented "ongoing" tokens here, and make the
 # dash separator tolerant (hyphen/en-dash/em-dash, or just whitespace).
 _DASH = r"[-–—]"
 _ONGOING = r"(?:à ce jour|a ce jour|aujourd'?hui|pr[ée]sent|actuel(?:le)?|en cours|now)"
+_MONTH_NAME = (
+    r"(?:jan(?:vier)?|f[ée]v(?:rier)?|mars|avr(?:il)?|mai|juin|juil(?:let)?|"
+    r"ao[uû]t|sept?(?:embre)?|oct(?:obre)?|nov(?:embre)?|d[ée]c(?:embre)?|"
+    r"january|february|march|april|may|june|july|august|september|october|november|december)"
+)
+# A year is very often preceded by a month name ("janvier 2019") or a
+# numeric month ("01/2019") — optional so a bare year still matches.
+_MONTH_PREFIX = rf"(?:{_MONTH_NAME}\.?\s+|\d{{1,2}}\s*/\s*)?"
 _YEAR_RANGE_RE = re.compile(
-    rf"\b(19[7-9]\d|20\d\d)\s*(?:{_DASH}|au|to|\bà\b)\s*(19[7-9]\d|20\d\d|{_ONGOING})",
+    rf"\b{_MONTH_PREFIX}(19[7-9]\d|20\d\d)\s*(?:{_DASH}|au|to|\bà\b)\s*"
+    rf"{_MONTH_PREFIX}(19[7-9]\d|20\d\d|{_ONGOING})",
     re.IGNORECASE,
 )
-_SINCE_RE = re.compile(r"\bdepuis\s+(19[7-9]\d|20\d\d)\b", re.IGNORECASE)
+_SINCE_RE = re.compile(rf"\bdepuis\s+{_MONTH_PREFIX}(19[7-9]\d|20\d\d)\b", re.IGNORECASE)
 _ONGOING_RE = re.compile(_ONGOING, re.IGNORECASE)
 
 
@@ -628,7 +654,12 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
     contract_src = "\n".join(p for p in [contract_text, cleaned[:2000]] if p)
     contract_type = _detect_contract(contract_src)
 
-    exp_src = "\n".join(p for p in [experience_text, cleaned] if p)
+    # Prefer the actual experience section: scanning the whole document as
+    # well used to let date ranges from Education (e.g. "Master 2015-2017")
+    # merge into the total, inflating experience_years with years spent in
+    # school. Only fall back to the whole document when no experience
+    # section was identified at all (some CVs never label one explicitly).
+    exp_src = experience_text or cleaned
     experience_years = _extract_years(exp_src)
 
     return ParsedDocument(
