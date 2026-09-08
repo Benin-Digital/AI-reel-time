@@ -131,6 +131,7 @@ function _renderMatchCard(match) {
       <span class="score-chip score-chip--${tone.key} match-faceoff__score-chip">${score}%</span>
       <span class="text-xs text-muted">${tone.label}</span>
       ${domain}
+      <button class="btn btn--ghost btn--sm" data-explain="${escapeHtml(String(match.id))}">Analyser</button>
     </div>
     <div class="match-faceoff__side match-faceoff__side--right">
       <div class="match-faceoff__icon">${_JOB_ICON}</div>
@@ -144,9 +145,6 @@ function _renderMatchCard(match) {
     ${_renderComponentScores(match)}
     <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
     ${_renderFeedbackBar(match.id, current)}
-  </div>
-  <div class="match-card__actions">
-    <button class="btn btn--ghost btn--sm" data-explain="${escapeHtml(String(match.id))}">Analyser</button>
   </div>
 </article>`.trim();
 }

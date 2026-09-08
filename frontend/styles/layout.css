@@ -495,7 +495,7 @@
 .match-faceoff {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  align-items: center;
+  align-items: stretch;
   gap: var(--space-4);
 }
 
@@ -506,6 +506,14 @@
   text-align: center;
   gap: var(--space-2);
   min-width: 0;
+}
+
+/* Each column's action button sits at the bottom of its (stretched) column,
+   so "Voir le CV" / "Analyser" / "Voir l'offre" line up on the same row
+   regardless of how much content (domain badge, label length) sits above. */
+.match-faceoff__side > .btn,
+.match-faceoff__score > .btn {
+  margin-top: auto;
 }
 
 .match-faceoff__icon {
@@ -556,12 +564,6 @@
   color: var(--text-muted);
 }
 
-.match-card__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
 
 /* ---- AUTH GATE ---- */
 .auth-gate {
