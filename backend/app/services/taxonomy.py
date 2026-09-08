@@ -9,12 +9,17 @@ to avoid runtime downloads. Extend at startup with load_esco_csv().
 from __future__ import annotations
 
 import csv
+import difflib
 import logging
 import re
 import unicodedata
 from functools import lru_cache
 from pathlib import Path
 
+from ..settings import get_settings
+from .structured_constants import _BUILTIN_SKILL_SYNONYMS
+
+settings = get_settings()
 logger = logging.getLogger(__name__)
 
 # canonical display name → list of matching aliases (lowercase, no accents)
@@ -132,7 +137,7 @@ _SKILLS: dict[str, list[str]] = {
     "Présentation": ["presentation", "prise de parole", "powerpoint", "pitch"],
     "Résolution de problèmes": ["resolution de problemes", "problem solving", "analyse de problemes"],
     "Coaching": ["coaching", "mentoring", "mentorat", "accompagnement"],
-    "Formation": ["developpement des competences", "animation de formation", "plan de formation professionnelle", "ingenierie pedagogique"],
+    "Formation": ["developpement des competences", "animation de formation", "plan de formation professionnelle"],
     "Stratégie": ["strategic planning", "planification strategique", "vision strategique", "plan strategique"],
     "Gouvernance": ["gouvernance", "governance", "pilotage", "controle interne"],
 
@@ -167,11 +172,11 @@ _SKILLS: dict[str, list[str]] = {
 
     # ── COMPTABILITÉ & FINANCE ─────────────────────────────────────────────
     "Comptabilité générale": ["comptabilite generale", "comptabilite", "accounting", "tenue de comptabilite", "comptable"],
-    "Comptabilité analytique": ["comptabilite analytique", "controle de gestion", "comptabilite de gestion", "controlling"],
+    "Comptabilité analytique": ["comptabilite analytique", "comptabilite de gestion"],
     "Fiscalité": ["fiscalite", "tax", "droit fiscal", "tva", "impots", "declarations fiscales", "liasse fiscale"],
     "Consolidation": ["consolidation", "consolidation comptable", "etats financiers consolides", "consolidation des comptes"],
     "IFRS": ["ifrs", "normes ifrs", "normes internationales", "ias", "us gaap"],
-    "Contrôle de gestion": ["controle de gestion", "controller", "controlling", "analyse financiere", "pilotage financier"],
+    "Contrôle de gestion": ["controle de gestion", "controller", "controlling", "pilotage financier"],
     "Audit": ["audit", "commissariat aux comptes", "audit financier", "audit interne", "auditeur"],
     "Trésorerie": ["tresorerie", "cash management", "gestion de tresorerie", "cash flow", "plan de tresorerie"],
     "Paie": ["paie", "paye", "gestion de la paie", "bulletin de paie", "payroll", "gestionnaire de paie"],
@@ -255,7 +260,7 @@ _SKILLS: dict[str, list[str]] = {
     "Adaptabilité": ["adaptabilite", "adaptable", "flexibilite", "polyvalence", "agilite d adaptation"],
     "Créativité": ["creativite", "creatif", "inventivite", "ideation"],
     "Organisation": ["organisation", "sens de l organisation", "organise", "structuration"],
-    "Sens du service": ["sens du service", "orientation client", "service oriented", "service client"],
+    "Sens du service": ["sens du service", "orientation client", "service oriented"],
     "Esprit d'analyse": ["esprit d analyse", "analytical skills", "analyse", "sens analytique", "capacite d analyse"],
     "Force de proposition": ["force de proposition", "proactif", "proactivite", "initiative", "acteur du changement"],
     "Gestion du stress": ["gestion du stress", "resistance au stress", "sang-froid", "resilience"],
@@ -297,10 +302,57 @@ def normalize_skill(text: str) -> str | None:
     return _build_lookup().get(_fold(text.strip()))
 
 
+def _parse_synonyms(raw: str) -> dict[str, str]:
+    pairs: dict[str, str] = {}
+    for item in (chunk.strip() for chunk in raw.split(",") if chunk.strip()):
+        if "=" not in item:
+            continue
+        src, dest = item.split("=", 1)
+        src_folded = _fold(src).replace(".", " ")
+        dest_folded = _fold(dest).replace(".", " ")
+        if src_folded and dest_folded:
+            pairs[src_folded] = dest_folded
+    return pairs
+
+
+def _skill_synonyms() -> dict[str, str]:
+    # Not cached: settings.scoring_synonyms can be monkeypatched per-test
+    # (or changed at runtime), and this is cheap enough to recompute.
+    mapping = dict(_BUILTIN_SKILL_SYNONYMS)
+    mapping.update(_parse_synonyms(settings.scoring_synonyms))
+    return mapping
+
+
+def _apply_synonyms(text: str) -> str:
+    result = _fold(text).replace(".", " ")
+    for source, target in sorted(_skill_synonyms().items(), key=lambda item: len(item[0]), reverse=True):
+        if not source or not target or source == target:
+            continue
+        result = re.sub(rf"\b{re.escape(source)}\b", target, result)
+    return re.sub(r"\s+", " ", result).strip()
+
+
+def _skill_whitelist() -> list[str]:
+    # Not cached: settings.scoring_skill_keywords can be monkeypatched
+    # per-test (or changed at runtime), and this is cheap enough to recompute.
+    raw = settings.scoring_skill_keywords or ""
+    parts = [p.strip() for p in re.split(r"[,;]+", raw) if p.strip()]
+    return [_apply_synonyms(p) for p in parts]
+
+
 def find_skills(text: str) -> list[str]:
     """
     Find all known skills mentioned in text.
     Returns canonical names, ordered by first occurrence, deduplicated.
+
+    Three passes, in order:
+    1. Taxonomy n-gram lookup (the bulk of detection — no false positives,
+       only known canonical skills/aliases).
+    2. AI_REALTIME_SCORING_SKILL_KEYWORDS whitelist, exact word-boundary
+       match (on synonym-normalized text) — lets an admin extend detection
+       without editing the taxonomy.
+    3. Fuzzy match (typo-tolerant, e.g. "Pyhton" -> "python") for whitelist
+       entries that didn't match exactly.
     """
     if not text:
         return []
@@ -326,6 +378,33 @@ def find_skills(text: str) -> list[str]:
                 canonical = lookup[gram]
                 if canonical not in found:
                     found[canonical] = i
+
+    found_lower = {k.lower() for k in found}
+    next_position = len(words)
+    synonymized = _apply_synonyms(text)
+
+    for skill in _skill_whitelist():
+        if not skill:
+            continue
+        canonical = normalize_skill(skill) or skill
+        if canonical.lower() in found_lower:
+            continue
+        if re.search(rf"\b{re.escape(skill)}\b", synonymized):
+            found[canonical] = next_position
+            next_position += 1
+            found_lower.add(canonical.lower())
+
+    fuzzy_words = re.findall(r"[a-z0-9+.#]+", synonymized)
+    for skill in _skill_whitelist():
+        if not skill:
+            continue
+        canonical = normalize_skill(skill) or skill
+        if canonical.lower() in found_lower:
+            continue
+        if difflib.get_close_matches(skill.lower(), fuzzy_words, n=1, cutoff=0.8):
+            found[canonical] = next_position
+            next_position += 1
+            found_lower.add(canonical.lower())
 
     return [k for k, _ in sorted(found.items(), key=lambda x: x[1])]
 

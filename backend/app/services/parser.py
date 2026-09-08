@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from functools import lru_cache
 
-from .taxonomy import find_skills
+from .taxonomy import find_skills, partition_skills
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -262,15 +262,31 @@ def _section_lookup() -> dict[str, str]:
     return lookup
 
 
+@lru_cache(maxsize=512)
+def _alias_pattern(alias: str) -> re.Pattern:
+    return re.compile(r"\b" + re.escape(alias) + r"\b")
+
+
 def _match_section(line: str) -> str | None:
-    """Return section name if the line matches a known heading alias."""
-    lookup = _section_lookup()
+    """Return section name if the line matches a known heading alias.
+
+    Only heading-shaped lines (a handful of words, like the ALL-CAPS and
+    bullet-follow heuristics below) are considered. Without that guard, an
+    alias word occurring naturally inside a normal sentence — or even glued
+    inside an unrelated word, e.g. "role" inside "controle" without a word
+    boundary — would misclassify that sentence as a section break and
+    silently drop its own content from every section.
+    """
     folded = _fold(line.strip())
+    words = folded.split()
+    if not words or len(words) > 6:
+        return None
+
+    lookup = _section_lookup()
     if folded in lookup:
         return lookup[folded]
-    # substring match (line contains the alias)
     for alias, section in lookup.items():
-        if len(alias) >= 4 and alias in folded:
+        if len(alias) >= 4 and _alias_pattern(alias).search(folded):
             return section
     return None
 
@@ -322,18 +338,28 @@ _YEAR_PLAIN_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)", r
 _AGE_CTX_RE = re.compile(r"\bne\b.{0,20}\d{4}|\bnaissance\b|\bage\s*[:\-]?\s*\d{1,2}\b", re.IGNORECASE)
 _EXP_CTX_RE = re.compile(r"exp[eé]rience|exp\b|pratique", re.IGNORECASE)
 
-# Date-range patterns, e.g. "2018 - 2023", "2020 – à ce jour", "depuis 2018".
+# Date-range patterns, e.g. "2018 - 2023", "2020 – à ce jour", "depuis 2018",
+# "janvier 2019 - décembre 2023", "01/2019 - 12/2023".
 # NOTE: this runs on the ORIGINAL text, not the _fold()ed one, because _fold
 # strips en-dash/em-dash (and accents), which would destroy the range
 # separator. We therefore accept accented "ongoing" tokens here, and make the
 # dash separator tolerant (hyphen/en-dash/em-dash, or just whitespace).
 _DASH = r"[-–—]"
 _ONGOING = r"(?:à ce jour|a ce jour|aujourd'?hui|pr[ée]sent|actuel(?:le)?|en cours|now)"
+_MONTH_NAME = (
+    r"(?:jan(?:vier)?|f[ée]v(?:rier)?|mars|avr(?:il)?|mai|juin|juil(?:let)?|"
+    r"ao[uû]t|sept?(?:embre)?|oct(?:obre)?|nov(?:embre)?|d[ée]c(?:embre)?|"
+    r"january|february|march|april|may|june|july|august|september|october|november|december)"
+)
+# A year is very often preceded by a month name ("janvier 2019") or a
+# numeric month ("01/2019") — optional so a bare year still matches.
+_MONTH_PREFIX = rf"(?:{_MONTH_NAME}\.?\s+|\d{{1,2}}\s*/\s*)?"
 _YEAR_RANGE_RE = re.compile(
-    rf"\b(19[7-9]\d|20\d\d)\s*(?:{_DASH}|au|to|\bà\b)\s*(19[7-9]\d|20\d\d|{_ONGOING})",
+    rf"\b{_MONTH_PREFIX}(19[7-9]\d|20\d\d)\s*(?:{_DASH}|au|to|\bà\b)\s*"
+    rf"{_MONTH_PREFIX}(19[7-9]\d|20\d\d|{_ONGOING})",
     re.IGNORECASE,
 )
-_SINCE_RE = re.compile(r"\bdepuis\s+(19[7-9]\d|20\d\d)\b", re.IGNORECASE)
+_SINCE_RE = re.compile(rf"\bdepuis\s+{_MONTH_PREFIX}(19[7-9]\d|20\d\d)\b", re.IGNORECASE)
 _ONGOING_RE = re.compile(_ONGOING, re.IGNORECASE)
 
 
@@ -464,28 +490,39 @@ def _detect_contract(text: str) -> str | None:
 
 # ── Text cleaning ─────────────────────────────────────────────────────────────
 
+# A recurring page header/footer ("Curriculum Vitae - Jean Dupont", "Document
+# confidentiel") is almost always a full phrase, while a short recurring
+# bullet ("Python", "SQL", "Rigueur") is exactly the kind of content that
+# gets legitimately repeated across several job entries in a CV and must not
+# be capped the same way. Mirrors extraction.py::_BOILERPLATE_MIN_LENGTH.
+_BOILERPLATE_MIN_LENGTH = 20
+
+
 def _clean_text(text: str) -> str:
     """Normalize raw extracted text (no import from extraction.py to avoid cycles)."""
     if not text:
         return ""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)
+    text = text.replace("\u25a0", "fi")
+    text = re.sub(r"(?<=[a-zA-Z\u00c0-\u024f])\?(?=[a-zA-Z\u00c0-\u024f])", "ti", text)
     lines: list[str] = []
     seen: dict[str, int] = {}
     prev = ""
     for raw in text.split("\n"):
         line = re.sub(r"\u00ad", "", raw)
         line = re.sub(r"\s+", " ", line.strip())
-        line = re.sub(r"^[\-*•·\u2022\u25e6]+\s*", "", line).strip()
+        line = re.sub(r"^[\-*•·\u2022\u25e6\u00fc\u00b0\u00f0►▪▫●○]+\s*", "", line).strip()
         if not line or len(line) < 2:
             prev = ""
             continue
         key = _fold(line)
         if key == prev:
             continue
-        seen[key] = seen.get(key, 0) + 1
-        if seen[key] > 2:
-            continue
+        if len(line) > _BOILERPLATE_MIN_LENGTH:
+            seen[key] = seen.get(key, 0) + 1
+            if seen[key] > 2:
+                continue
         lines.append(line)
         prev = key
     return "\n".join(lines).strip()
@@ -515,6 +552,7 @@ class ParsedDocument:
     skill_terms: list[str] = field(default_factory=list)
     required_skill_terms: list[str] = field(default_factory=list)
     nice_skill_terms: list[str] = field(default_factory=list)
+    soft_skill_terms: list[str] = field(default_factory=list)
     language_terms: list[str] = field(default_factory=list)
     contract_type: str | None = None
     experience_years: int = 0
@@ -536,13 +574,29 @@ class ParsedDocument:
 
 # ── Main parse function ───────────────────────────────────────────────────────
 
-def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
+_OVERRIDE_KNOWN_SECTIONS = {
+    "summary", "skills", "experience", "education", "certifications",
+    "languages", "contract", "location", "job_required", "job_nice",
+}
+
+
+def parse_document(
+    text: str,
+    kind: str = "cv",
+    override_sections: dict[str, str] | None = None,
+) -> ParsedDocument:
     """
     Parse a CV or job offer into a structured ParsedDocument.
 
     Args:
         text: Raw extracted text
         kind: 'cv' or 'job'
+        override_sections: pre-split sections from an upstream structured
+            conversion (Docling). When given, heuristic heading detection is
+            skipped entirely and these boundaries are trusted as-is — this
+            is the single section-assignment path shared with
+            structured.build_document_profile, which used to reimplement
+            this independently and could drift out of sync with it.
 
     Returns:
         ParsedDocument with all extracted fields populated
@@ -553,32 +607,44 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
 
     # Section assignment
     sections: dict[str, list[str]] = {}
-    current = "other"
 
-    for idx, line in enumerate(lines):
-        next_line = lines[idx + 1] if idx + 1 < len(lines) else None
+    if override_sections:
+        for name, content in override_sections.items():
+            if name == "_doc_title" or not content or not content.strip():
+                continue
+            # Docling labels a "Strengths"-style block "strength"; it maps
+            # naturally onto job_nice (nice-to-have) rather than a section
+            # of its own.
+            key = "job_nice" if name == "strength" else name
+            if key not in _OVERRIDE_KNOWN_SECTIONS:
+                key = "other"
+            sections.setdefault(key, []).append(content.strip())
+    else:
+        current = "other"
+        for idx, line in enumerate(lines):
+            next_line = lines[idx + 1] if idx + 1 < len(lines) else None
 
-        # Inline heading: "Section: content"
-        if ":" in line and len(line) < 100:
-            head, _, payload = line.partition(":")
-            section = _match_section(head.strip())
-            if section:
+            # Inline heading: "Section: content"
+            if ":" in line and len(line) < 100:
+                head, _, payload = line.partition(":")
+                section = _match_section(head.strip())
+                if section:
+                    current = section
+                    if payload.strip():
+                        sections.setdefault(current, []).append(payload.strip())
+                    continue
+
+            # Full-line heading
+            section = _match_section(line)
+            if section and _is_heading(line, next_line):
                 current = section
-                if payload.strip():
-                    sections.setdefault(current, []).append(payload.strip())
                 continue
 
-        # Full-line heading
-        section = _match_section(line)
-        if section and _is_heading(line, next_line):
-            current = section
-            continue
+            # Unrecognized heading — don't assign content, just skip
+            if _is_heading(line, next_line) and not _match_section(line):
+                continue
 
-        # Unrecognized heading — don't assign content, just skip
-        if _is_heading(line, next_line) and not _match_section(line):
-            continue
-
-        sections.setdefault(current, []).append(line)
+            sections.setdefault(current, []).append(line)
 
     def sec(name: str) -> str:
         return "\n".join(sections.get(name, [])).strip()
@@ -617,9 +683,17 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
         ] if p
     )
 
-    skill_terms = find_skills(skill_src or cleaned)
-    required_skill_terms = find_skills(job_required_text) if job_required_text else list(skill_terms)
-    nice_skill_terms = find_skills(job_nice_text) if job_nice_text else []
+    # Soft skills ("Rigueur", "Autonomie"...) are partitioned out of the hard
+    # skill lists: matcher.py's _skill_score treats required_skill_terms as
+    # the technical coverage denominator, and a soft trait counting the same
+    # as a real hard skill both waters down genuine gaps and lets an
+    # unrelated candidate "match" on a shared soft-skill word alone.
+    all_skill_terms, soft_skill_terms = partition_skills(find_skills(skill_src or cleaned))
+    skill_terms = all_skill_terms
+    required_skill_terms, _ = (
+        partition_skills(find_skills(job_required_text)) if job_required_text else (list(skill_terms), [])
+    )
+    nice_skill_terms, _ = partition_skills(find_skills(job_nice_text)) if job_nice_text else ([], [])
 
     # Language, contract, experience year extraction
     lang_src = "\n".join(p for p in [languages_text, cleaned[:2000]] if p)
@@ -628,7 +702,12 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
     contract_src = "\n".join(p for p in [contract_text, cleaned[:2000]] if p)
     contract_type = _detect_contract(contract_src)
 
-    exp_src = "\n".join(p for p in [experience_text, cleaned] if p)
+    # Prefer the actual experience section: scanning the whole document as
+    # well used to let date ranges from Education (e.g. "Master 2015-2017")
+    # merge into the total, inflating experience_years with years spent in
+    # school. Only fall back to the whole document when no experience
+    # section was identified at all (some CVs never label one explicitly).
+    exp_src = experience_text or cleaned
     experience_years = _extract_years(exp_src)
 
     return ParsedDocument(
@@ -650,6 +729,7 @@ def parse_document(text: str, kind: str = "cv") -> ParsedDocument:
         skill_terms=skill_terms,
         required_skill_terms=required_skill_terms,
         nice_skill_terms=nice_skill_terms,
+        soft_skill_terms=soft_skill_terms,
         language_terms=language_terms,
         contract_type=contract_type,
         experience_years=experience_years,
