@@ -238,11 +238,20 @@ async function _handleUpload(files) {
   }
 }
 
-async function _pollUntilReady(statusEl, filename, maxWaitMs = 300000) {
-  const interval = 3000;
-  const deadline = Date.now() + maxWaitMs;
+async function _pollUntilReady(statusEl, filename, maxWaitMs = 1800000) {
+  // Poll every 3s for the first 5 minutes (typical case), then fall back to
+  // a slower 15s check for up to 30 minutes total — a document that takes
+  // longer isn't broken, so we keep genuinely watching instead of telling
+  // the user "check back later" and abandoning it ourselves.
+  const fastPhaseMs = 300000;
+  const fastInterval = 3000;
+  const slowInterval = 15000;
+  const startedAt = Date.now();
+  const deadline = startedAt + maxWaitMs;
+
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, interval));
+    const elapsedBefore = Date.now() - startedAt;
+    await new Promise((r) => setTimeout(r, elapsedBefore < fastPhaseMs ? fastInterval : slowInterval));
     await _load();
     const docs = (await safeFetch("/job-documents").catch(() => []));
     const basename = filename.replace(/\\/g, "/").split("/").pop();
@@ -256,9 +265,15 @@ async function _pollUntilReady(statusEl, filename, maxWaitMs = 300000) {
       setBanner(statusEl, `${filename} — échec de l'analyse`, "error");
       return;
     }
-    setBanner(statusEl, `${filename} — analyse en cours…`, "info");
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    const hint = elapsed > 30 ? " — ça prend plus de temps que d'habitude, merci de patienter" : "";
+    setBanner(statusEl, `${filename} — analyse en cours… (${elapsed}s)${hint}`, "info");
   }
-  setBanner(statusEl, `${filename} — délai d'attente dépassé`, "error");
+  setBanner(
+    statusEl,
+    `${filename} — le traitement prend anormalement longtemps. Rafraîchissez la page dans quelques minutes pour vérifier.`,
+    "warning"
+  );
 }
 
 async function _handleDelete(filename) {
