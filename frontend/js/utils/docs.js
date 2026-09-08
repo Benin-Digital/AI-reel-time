@@ -179,6 +179,9 @@ export function renderDocDetail(doc, kind) {
   const structuringErrorHtml = structuringStatus === "failed" && doc.structuring_error
     ? `<p class="text-xs text-error">${escapeHtml(doc.structuring_error)}</p>`
     : "";
+  const structuringWaitHtml = structuringStatus === "pending"
+    ? `<p class="text-xs text-muted" id="structuringWait-${escapeHtml(String(doc.id))}">Structuration en cours… Pour un document long, cela peut prendre plusieurs minutes — merci de patienter.</p>`
+    : "";
 
   return `
 <div class="stack" style="gap:var(--space-5)">
@@ -189,6 +192,7 @@ export function renderDocDetail(doc, kind) {
     <button class="btn btn--ghost btn--sm" data-action="deep-structure" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}" ${structuringDisabled}>${deepStructureSvg}${structuringLabel}</button>
   </div>
   ${structuringErrorHtml}
+  ${structuringWaitHtml}
   <div style="display:flex;gap:var(--space-4);flex-wrap:wrap">
     <div class="metric-card" style="flex:1;min-width:100px">
       <div class="metric-card__label">ID</div>

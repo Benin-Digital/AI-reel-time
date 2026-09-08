@@ -193,20 +193,41 @@ async function _loadDetail(id) {
   }
 }
 
-async function _pollStructuring(id, maxWaitMs = 300000) {
-  const interval = 3000;
-  const deadline = Date.now() + maxWaitMs;
+async function _pollStructuring(id, maxWaitMs = 1800000) {
+  // Docling structuring is genuinely slow for a long document — update the
+  // wait message with elapsed time instead of leaving a static "en cours"
+  // that looks stuck, and keep watching (slower, every 15s) well past the
+  // point a short document would already be done.
+  const fastPhaseMs = 60000;
+  const fastInterval = 3000;
+  const slowInterval = 15000;
+  const startedAt = Date.now();
+  const deadline = startedAt + maxWaitMs;
+
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, interval));
+    const elapsedBefore = Date.now() - startedAt;
+    await new Promise((r) => setTimeout(r, elapsedBefore < fastPhaseMs ? fastInterval : slowInterval));
     try {
       const doc = await safeFetch(`/cv-documents/${id}/details`);
       if (doc.structuring_status !== "pending") {
         if (_selectedId === id) await _loadDetail(id);
         return;
       }
+      const waitEl = document.getElementById(`structuringWait-${id}`);
+      if (waitEl) {
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        const hint = elapsed > 60
+          ? " Ce document est long à analyser en profondeur, ça peut prendre plusieurs minutes."
+          : "";
+        waitEl.textContent = `Structuration en cours… (${elapsed}s)${hint}`;
+      }
     } catch {
       return;
     }
+  }
+  const waitEl = document.getElementById(`structuringWait-${id}`);
+  if (waitEl) {
+    waitEl.textContent = "Ça prend anormalement longtemps. Rafraîchissez la page dans quelques minutes pour vérifier.";
   }
 }
 
