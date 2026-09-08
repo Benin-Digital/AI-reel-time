@@ -170,13 +170,25 @@ export function renderDocDetail(doc, kind) {
   const pdfSvg = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 
   const structuredSvg = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+  const deepStructureSvg = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="vertical-align:middle;margin-right:4px"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>`;
+
+  const structuringStatus = doc.structuring_status ?? null;
+  const structuringBadge = structuringStatus ? statusBadge(structuringStatus) : "";
+  const structuringDisabled = structuringStatus === "pending" ? "disabled" : "";
+  const structuringLabel = structuringStatus === "pending" ? "Structuration…" : "Structurer (approfondi)";
+  const structuringErrorHtml = structuringStatus === "failed" && doc.structuring_error
+    ? `<p class="text-xs text-error">${escapeHtml(doc.structuring_error)}</p>`
+    : "";
 
   return `
 <div class="stack" style="gap:var(--space-5)">
-  <div style="display:flex;justify-content:flex-end;gap:var(--space-2);margin-bottom:var(--space-1)">
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1);flex-wrap:wrap">
+    ${structuringBadge}
     <button class="btn btn--ghost btn--sm" data-action="preview-pdf" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}">${pdfSvg}Aperçu PDF</button>
     <button class="btn btn--ghost btn--sm" data-action="preview-parsed-pdf" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}">${structuredSvg}PDF structuré</button>
+    <button class="btn btn--ghost btn--sm" data-action="deep-structure" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}" ${structuringDisabled}>${deepStructureSvg}${structuringLabel}</button>
   </div>
+  ${structuringErrorHtml}
   <div style="display:flex;gap:var(--space-4);flex-wrap:wrap">
     <div class="metric-card" style="flex:1;min-width:100px">
       <div class="metric-card__label">ID</div>

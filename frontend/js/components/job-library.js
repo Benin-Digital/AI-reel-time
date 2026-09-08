@@ -170,9 +170,42 @@ async function _loadDetail(id) {
         }
       });
     }
+
+    // wire on-demand deep structuring (Docling) button
+    const deepStructureBtn = detail.querySelector("[data-action='deep-structure']");
+    if (deepStructureBtn) {
+      deepStructureBtn.addEventListener("click", async () => {
+        deepStructureBtn.disabled = true;
+        try {
+          await safeFetch(`/job-documents/${id}/structure`, { method: "POST" });
+          if (_selectedId === id) await _loadDetail(id);
+          _pollStructuring(id);
+        } catch (err) {
+          setBanner($("#uploadJobStatus"), `Structuration : ${err.message}`, "error");
+          deepStructureBtn.disabled = false;
+        }
+      });
+    }
   } catch (err) {
     if (err.name !== "AuthError") {
       detail.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${err.message}</div></div>`;
+    }
+  }
+}
+
+async function _pollStructuring(id, maxWaitMs = 300000) {
+  const interval = 3000;
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, interval));
+    try {
+      const doc = await safeFetch(`/job-documents/${id}/details`);
+      if (doc.structuring_status !== "pending") {
+        if (_selectedId === id) await _loadDetail(id);
+        return;
+      }
+    } catch {
+      return;
     }
   }
 }

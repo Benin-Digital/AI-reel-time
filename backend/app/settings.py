@@ -113,7 +113,11 @@ class Settings(BaseSettings):
     # v2 architecture (non-LLM) — all layers ON by default. Each layer falls
     # back gracefully (Docling→PyMuPDF, CamemBERT→spaCy, ESCO→noop, GBM→null)
     # so the API stays up even if a model is missing.
-    # Layer 1: Docling structured PDF conversion.
+    # Layer 1: Docling structured PDF conversion. Automatic ingestion never
+    # uses Docling regardless of this flag (its per-page CPU cost on modest
+    # hardware caused multi-minute stalls and nginx 502s on ordinary
+    # uploads) — it only gates the on-demand POST /{cv,job}-documents/{id}/
+    # structure action and whether the converter is warmed up at startup.
     conversion_use_docling: bool = True
     # Layer 2: CamemBERT NER (Transformers). Override path via CAMEMBERT_NER_MODEL
     # once the fine-tuned checkpoint is rsync'd into the models volume.

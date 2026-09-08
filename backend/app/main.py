@@ -254,8 +254,14 @@ def _upsert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead
         )
 
         if existing:
-            # if content changed, invalidate cached parsed profile
-            if existing.content_hash != payload.content_hash:
+            # If content changed OR the extraction method changed (e.g. a
+            # forced on-demand Docling re-extraction over the same file
+            # bytes), the cached structured profile no longer reflects the
+            # actual extracted_text — invalidate it either way.
+            if (
+                existing.content_hash != payload.content_hash
+                or existing.extraction_method != payload.extraction_method
+            ):
                 existing.parsed_profile = None
                 existing.parsed_profile_hash = None
                 existing.parsed_profile_updated_at = None
@@ -283,7 +289,18 @@ def _upsert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead
         session.add(extraction)
         session.commit()
         session.refresh(extraction)
-        profile = _get_or_build_profile(session, extraction, "cv")
+        # Eagerly build+cache the structured profile using the correct kind
+        # for this path (was hardcoded to "cv", silently mis-classifying the
+        # very first extraction of every job document). Also: this branch
+        # used to fall through without returning, so the caller got None on
+        # every brand-new file — masked in practice by the worker's retry
+        # logic finding the now-persisted row on the next attempt, at the
+        # cost of a spurious failure/retry (and, for a forced Docling
+        # extraction, running Docling twice) on every first-time extraction.
+        kind = _resolve_role(Path(payload.file_path)) or "cv"
+        if extraction.extraction_success:
+            _get_or_build_profile(session, extraction, kind)
+        return ExtractedTextRead.model_validate(extraction)
 
 
 def _insert_score_result(cv_path: Path, job_path: Path, score: float, common: list[str]) -> ScoreRead:
@@ -1215,7 +1232,21 @@ def _peek_docling_sections(content_hash: str | None) -> dict[str, str] | None:
     return _DOCLING_SECTIONS_CACHE.get(content_hash)
 
 
-def _extract_and_persist(path: Path) -> ExtractedTextRead:
+def _extract_and_persist(path: Path, force_docling: bool = False) -> ExtractedTextRead:
+    """Extract text for `path`.
+
+    By default (force_docling=False) this always uses the fast plain-text
+    path (PyMuPDF, with a page-capped/timed-out OCR fallback for scanned
+    PDFs) — this is what automatic ingestion uses for every document,
+    regardless of AI_REALTIME_CONVERSION_USE_DOCLING, since Docling's
+    layout/table models are CPU-heavy per page and were causing multi-minute
+    stalls (and nginx 502s) on ordinary uploads.
+
+    force_docling=True is used only by the explicit, user-triggered
+    "structure this document" action (see _structure_document) — a
+    deliberate, one-off, on-demand request to pay that cost for a richer,
+    section-aware extraction.
+    """
     if not path.exists():
         logger.warning("File not found for extraction: %s", path)
         return _upsert_extraction_result(
@@ -1233,18 +1264,18 @@ def _extract_and_persist(path: Path) -> ExtractedTextRead:
             select(ExtractedText).where(ExtractedText.file_path == str(path))
         )
         if existing and existing.content_hash == content_hash and existing.extraction_success:
-            settings_local = get_settings()
-            docling_active = getattr(settings_local, "conversion_use_docling", False)
             already_docling = (existing.extraction_method or "").startswith("pdf-docling") or \
                               (existing.extraction_method or "").startswith("docling")
-            # Re-extract if Docling is now active but the cached extraction didn't use it
-            if not docling_active or already_docling:
+            # Automatic (force_docling=False) calls always trust the cache
+            # once content matches, regardless of which method produced it.
+            # A forced structuring request only needs a real Docling pass if
+            # the cache isn't already a Docling extraction of this content.
+            if not force_docling or already_docling:
                 return ExtractedTextRead.model_validate(existing)
 
     try:
-        settings_local = get_settings()
         method = path.suffix.lower().lstrip(".") or "unknown"
-        if getattr(settings_local, "conversion_use_docling", False):
+        if force_docling:
             from .services.conversion import convert_document
             converted = convert_document(path)
             extracted = converted.full_text
@@ -1452,6 +1483,33 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             _upsert_match_result(cv_doc.id, job_doc.id, score, common)
 
 
+def _structure_document(path: Path, role: str) -> None:
+    """On-demand deep structuring (Docling) for one already-ingested document.
+
+    Triggered explicitly by the user via POST /{cv,job}-documents/{id}/structure
+    — never by automatic ingestion. Forces a Docling re-extraction, then (if
+    it succeeds) re-runs matching so scores reflect the richer, section-aware
+    text.
+    """
+    model = CvDocument if role == "cv" else JobDocument
+    result = _extract_and_persist(path, force_docling=True)
+
+    with SessionLocal() as session:
+        doc = session.scalar(select(model).where(model.path == str(path)))
+        if doc is None:
+            return
+        if result.extraction_success:
+            doc.structuring_status = "ready"
+            doc.structuring_error = None
+        else:
+            doc.structuring_status = "failed"
+            doc.structuring_error = result.error_message or "structuring failed"
+        session.commit()
+
+    if result.extraction_success:
+        _score_against_counterparts(path, role)
+
+
 def _process_watch_event(event: WatchEvent) -> None:
     role = _resolve_role(event.path)
     if role is None:
@@ -1463,6 +1521,10 @@ def _process_watch_event(event: WatchEvent) -> None:
 
     if not _is_supported_file(event.path):
         logger.info("Skipping unsupported file type: %s", event.path)
+        return
+
+    if event.event_type == "structure":
+        _structure_document(event.path, role)
         return
 
     _score_against_counterparts(event.path, role)
@@ -2306,6 +2368,8 @@ def get_cv_document_details(doc_id: int, limit: int = 6) -> CvDocumentDetailRead
             content_hash=doc.content_hash,
             status=doc.status,
             last_error=doc.last_error,
+            structuring_status=doc.structuring_status,
+            structuring_error=doc.structuring_error,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
             match_count=match_count,
@@ -2392,6 +2456,24 @@ def get_cv_document_parsed_json(doc_id: int) -> JSONResponse:
 
     profile = _get_or_build_profile(session, extraction, "cv")
     return JSONResponse(content=asdict(profile))
+
+
+@app.post("/cv-documents/{doc_id}/structure")
+def structure_cv_document(doc_id: int) -> dict:
+    if not settings.conversion_use_docling:
+        raise HTTPException(status_code=400, detail="Structuring is disabled on this deployment")
+
+    with SessionLocal() as session:
+        doc = session.get(CvDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="CV document not found")
+        doc.structuring_status = "pending"
+        doc.structuring_error = None
+        session.commit()
+        doc_path = Path(doc.path)
+
+    _on_watch_event(WatchEvent(path=doc_path, event_type="structure", observed_at=time()))
+    return {"status": "queued"}
 
 
 @app.get("/job-documents", response_model=list[JobDocumentRead])
@@ -2482,6 +2564,8 @@ def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRe
             content_hash=doc.content_hash,
             status=doc.status,
             last_error=doc.last_error,
+            structuring_status=doc.structuring_status,
+            structuring_error=doc.structuring_error,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
             match_count=match_count,
@@ -2590,6 +2674,24 @@ def get_job_document_parsed_json(doc_id: int) -> JSONResponse:
 
     profile = _get_or_build_profile(session, extraction, "job")
     return JSONResponse(content=asdict(profile))
+
+
+@app.post("/job-documents/{doc_id}/structure")
+def structure_job_document(doc_id: int) -> dict:
+    if not settings.conversion_use_docling:
+        raise HTTPException(status_code=400, detail="Structuring is disabled on this deployment")
+
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+        doc.structuring_status = "pending"
+        doc.structuring_error = None
+        session.commit()
+        doc_path = Path(doc.path)
+
+    _on_watch_event(WatchEvent(path=doc_path, event_type="structure", observed_at=time()))
+    return {"status": "queued"}
 
 
 @app.get("/extractions/path", response_model=ExtractedTextRead)
