@@ -1,4 +1,4 @@
-import { safeFetch } from "../api.js";
+import { safeFetch, fetchBlob } from "../api.js";
 import { $, openModal, closeModal, setBanner, escapeHtml } from "../utils/dom.js";
 import {
   renderScoreChip,
@@ -43,6 +43,10 @@ export function initMatches() {
     // Quick feedback from match card (decision only, no rating/comment)
     const fb = e.target.closest("[data-feedback]");
     if (fb) _submitQuickFeedback(fb);
+
+    // View the CV / job PDF directly from the match card
+    const viewBtn = e.target.closest("[data-view-doc]");
+    if (viewBtn) _viewDocumentPdf(viewBtn.dataset.viewDoc, viewBtn.dataset.docId, viewBtn);
   });
 
   // Close modal when a [data-modal-close] element is clicked
@@ -103,26 +107,39 @@ async function _load() {
   }
 }
 
+const _CV_ICON  = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+const _JOB_ICON = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="1" y="5" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5" stroke="currentColor" stroke-width="1.5"/></svg>`;
+
 function _renderMatchCard(match) {
   const score    = clampScore(match.score);
   const tone     = scoreTone(score);
   const keywords = (match.common_keywords ?? []).filter(Boolean).slice(0, 6);
   const domain   = match.match_domain ? `<span class="badge badge--primary">${escapeHtml(match.match_domain)}</span>` : "";
   const current  = _feedbackCache.get(String(match.id)) ?? null;
+  const cvLabel  = escapeHtml(match.cv_label || `CV ${match.cv_id}`);
+  const jobLabel = escapeHtml(match.job_label || `Offre ${match.job_id}`);
 
   return `
 <article class="match-card" data-match-id="${escapeHtml(String(match.id))}">
-  <div class="match-card__score">
-    ${renderScoreChip(score)}
-    <span class="text-xs text-muted">${tone.label}</span>
-  </div>
-  <div class="match-card__body">
-    <div class="match-card__title">
-      Match #${escapeHtml(String(match.id))}
-      <span class="badge badge--default" title="CV #${escapeHtml(String(match.cv_id))}">${escapeHtml(match.cv_label || `CV ${match.cv_id}`)}</span>
-      <span class="badge badge--default" title="Offre #${escapeHtml(String(match.job_id))}">${escapeHtml(match.job_label || `Offre ${match.job_id}`)}</span>
+  <div class="match-faceoff">
+    <div class="match-faceoff__side">
+      <div class="match-faceoff__icon">${_CV_ICON}</div>
+      <div class="match-faceoff__label truncate" title="${cvLabel} (CV #${escapeHtml(String(match.cv_id))})">${cvLabel}</div>
+      <button class="btn btn--ghost btn--sm" data-view-doc="cv" data-doc-id="${escapeHtml(String(match.cv_id))}">Voir le CV</button>
+    </div>
+    <div class="match-faceoff__score">
+      <span class="score-chip score-chip--${tone.key} match-faceoff__score-chip">${score}%</span>
+      <span class="text-xs text-muted">${tone.label}</span>
       ${domain}
     </div>
+    <div class="match-faceoff__side match-faceoff__side--right">
+      <div class="match-faceoff__icon">${_JOB_ICON}</div>
+      <div class="match-faceoff__label truncate" title="${jobLabel} (Offre #${escapeHtml(String(match.job_id))})">${jobLabel}</div>
+      <button class="btn btn--ghost btn--sm" data-view-doc="job" data-doc-id="${escapeHtml(String(match.job_id))}">Voir l'offre</button>
+    </div>
+  </div>
+  <div class="match-card__body">
+    <p class="text-xs text-muted">Match #${escapeHtml(String(match.id))}</p>
     ${renderScoreBar(score)}
     ${_renderComponentScores(match)}
     <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
@@ -132,6 +149,26 @@ function _renderMatchCard(match) {
     <button class="btn btn--ghost btn--sm" data-explain="${escapeHtml(String(match.id))}">Analyser</button>
   </div>
 </article>`.trim();
+}
+
+async function _viewDocumentPdf(kind, id, btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Ouverture…";
+  try {
+    const path = kind === "cv" ? `/cv-documents/${id}/pdf` : `/job-documents/${id}/pdf`;
+    const blob = await fetchBlob(path);
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (err) {
+    btn.title = err.message;
+    btn.textContent = "Indisponible";
+    setTimeout(() => { btn.textContent = originalText; btn.title = ""; }, 3000);
+  } finally {
+    btn.disabled = false;
+    if (btn.textContent === "Ouverture…") btn.textContent = originalText;
+  }
 }
 
 async function _loadExplain(matchId) {

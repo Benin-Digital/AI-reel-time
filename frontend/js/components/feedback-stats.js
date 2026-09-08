@@ -101,17 +101,23 @@ function _renderWeightHints(hints) {
 
   const maxDelta = Math.max(...hints.map((h) => Math.abs(h.delta)), 0.001);
 
+  // Impact magnitude has its own 4-bucket scale (not the 3-tier red/orange/
+  // green match-score scale) — direct colors, independent of the shared
+  // score tone tokens.
+  const DELTA_COLORS = { excellent: "#22c55e", strong: "#4F6EF7", medium: "#f59e0b", weak: "#ef4444" };
+
   const rows = hints.map((h) => {
     const pct   = Math.round((h.delta / maxDelta) * 100);
     const tone  = h.delta >= 0.1 ? "excellent" : h.delta >= 0.05 ? "strong" : h.delta >= 0 ? "medium" : "weak";
+    const color = DELTA_COLORS[tone];
     const arrow = h.delta > 0 ? "↑" : "↓";
     const sign  = h.delta >= 0 ? "+" : "";
     return `<div class="score-breakdown__item" style="margin-bottom:var(--space-2)">
       <span class="score-breakdown__label">${escapeHtml(h.label)}</span>
       <div class="score-breakdown__bar">
-        <div class="score-breakdown__bar-fill score-bar__fill--${tone}" style="width:${Math.abs(pct)}%"></div>
+        <div class="score-breakdown__bar-fill" style="width:${Math.abs(pct)}%;background:${color}"></div>
       </div>
-      <span class="score-breakdown__value" style="color:var(--tone-${tone})">${arrow} ${sign}${(h.delta * 100).toFixed(1)}%</span>
+      <span class="score-breakdown__value" style="color:${color}">${arrow} ${sign}${(h.delta * 100).toFixed(1)}%</span>
     </div>`;
   }).join("");
 
