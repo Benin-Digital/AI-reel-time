@@ -90,6 +90,8 @@ class CvDocumentRead(BaseModel):
     status: str
     last_error: str | None
     session_id: int | None = None
+    structuring_status: str | None = None
+    structuring_error: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -103,6 +105,8 @@ class JobDocumentRead(BaseModel):
     status: str
     last_error: str | None
     session_id: int | None = None
+    structuring_status: str | None = None
+    structuring_error: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -299,6 +303,8 @@ class DocumentDetailBase(BaseModel):
     content_hash: str | None
     status: str
     last_error: str | None
+    structuring_status: str | None = None
+    structuring_error: str | None = None
     created_at: datetime
     updated_at: datetime
     match_count: int

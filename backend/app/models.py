@@ -117,6 +117,10 @@ class CvDocument(Base):
     status: Mapped[str] = mapped_column(String(32), default="pending")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     session_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_sessions.id"), nullable=True)
+    # On-demand deep structuring (Docling), separate from `status` (which
+    # tracks the fast default extraction). None = never requested.
+    structuring_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    structuring_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -143,6 +147,10 @@ class JobDocument(Base):
     status: Mapped[str] = mapped_column(String(32), default="pending")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     session_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_sessions.id"), nullable=True)
+    # On-demand deep structuring (Docling), separate from `status` (which
+    # tracks the fast default extraction). None = never requested.
+    structuring_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    structuring_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
