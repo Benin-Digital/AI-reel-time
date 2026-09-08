@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import difflib
+import json
 import logging
 import re
 import unicodedata
@@ -274,6 +275,34 @@ def _fold(text: str) -> str:
     return nfkd.encode("ascii", "ignore").decode("ascii").lower()
 
 
+_ROME_SKILLS_PATH = Path(__file__).with_name("rome_skills_data.json")
+
+
+@lru_cache(maxsize=1)
+def _rome_skills() -> dict[str, list[str]]:
+    """Bulk skill vocabulary from France Travail's ROME 4.0 'referentiel_savoir'
+    open data export (Licence Ouverte / fr-lo), scoped to concrete
+    professional-knowledge categories (software, tools, standards,
+    regulations, techniques) and excluding diplomas/certifications and
+    domains clearly unrelated to any professional CV (the ROME "savoir"
+    referential — not "competence" — was picked specifically because its
+    labels are short noun phrases like this taxonomy's, unlike ESCO/EMSI
+    whose skill labels are full task sentences and don't lend themselves to
+    exact-phrase matching at all).
+
+    Kept as a bundled, generated JSON file (not hand-maintained) rather than
+    inline in _SKILLS: ~8500 entries would make this module unreviewable,
+    and _build_lookup() below treats it as a strictly lower-priority layer
+    so a hand-curated _SKILLS alias always wins on conflict.
+    """
+    try:
+        with _ROME_SKILLS_PATH.open(encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning("ROME skills data file not found: %s", _ROME_SKILLS_PATH)
+        return {}
+
+
 @lru_cache(maxsize=1)
 def _build_lookup() -> dict[str, str]:
     """Return alias → canonical_name mapping (cached).
@@ -294,6 +323,15 @@ def _build_lookup() -> dict[str, str]:
                     space_key = key.replace("/", " ")
                     if space_key and space_key not in lookup:
                         lookup[space_key] = canonical
+
+    # Lower-priority layer: bulk ROME vocabulary fills gaps only — it can
+    # never override a hand-curated _SKILLS alias set above.
+    for canonical, aliases in _rome_skills().items():
+        for alias in aliases:
+            key = _fold(alias)
+            if key and key not in lookup:
+                lookup[key] = canonical
+
     return lookup
 
 
