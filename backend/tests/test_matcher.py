@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from app.services import matcher, parser
 from app.services.matcher import match_cv_to_job
-from app.services.parser import _DOMAIN_SIGNALS
 
 # Texte reproduisant fidelement la structure d'un vrai document ayant declenche
 # le bug en production : rubriques "Missions principales", "Competences
@@ -106,21 +105,41 @@ def test_self_match_skill_coverage_is_full(monkeypatch):
     )
 
 
-def test_domain_weight_table_covers_all_detectable_domains():
-    """Tout domaine que detect_domain() (parser.py) peut renvoyer doit avoir
-    une entree calibree dans matcher._DOMAIN_W.
+def test_weights_are_domain_independent():
+    """Le score ne doit plus etre pondere differemment selon le domaine
+    detecte (retire en production : detect_domain() est une heuristique par
+    mots-cles sur les 3000 premiers caracteres, et un mot isole hors
+    contexte — ex. "patient" dans un CV tech e-sante — pouvait faire basculer
+    tout le profil de poids sans aucun signal visible pour le recruteur,
+    faussant silencieusement le classement).
 
-    Sinon, _weights() retombe silencieusement sur _DEFAULT_W tandis que
-    l'interface continue d'afficher le badge du domaine detecte — donnant
-    une fausse impression de pertinence metier appliquee.
-
-    Echoue aujourd'hui : le domaine 'management' est detectable par
-    parser.py mais absent de matcher._DOMAIN_W.
+    _weights() ne doit plus varier avec le domaine : c'est toujours
+    _DEFAULT_W (sauf poids appris explicitement actives, hors du perimetre
+    ici). _DOMAIN_W reste dans le code comme reference historique mais n'est
+    plus consulte par _weights().
     """
-    missing = sorted(d for d in _DOMAIN_SIGNALS if d not in matcher._DOMAIN_W)
-    assert not missing, (
-        f"domaines detectables sans poids calibres dans matcher._DOMAIN_W : {missing}"
+    assert matcher._weights() == matcher._DEFAULT_W
+    assert matcher.get_active_weights() is None, (
+        "aucun poids appris ne doit etre actif par defaut dans les tests"
     )
+
+
+def test_self_match_weights_do_not_depend_on_detected_domain(monkeypatch):
+    """Bout en bout : deux documents identiques donnent le meme profil de
+    poids quel que soit le domaine qui leur est assigne artificiellement."""
+    monkeypatch.setattr(matcher, "_cross_encode", lambda query, document: 1.0)
+    cv = parser.parse_document(JOB_SHAPED_TEXT, kind="cv")
+    job = parser.parse_document(JOB_SHAPED_TEXT, kind="job")
+
+    cv.domain = "health"
+    job.domain = "tech"
+    result_a = matcher.match_parsed_documents(cv, job)
+
+    cv.domain = "tech"
+    job.domain = "tech"
+    result_b = matcher.match_parsed_documents(cv, job)
+
+    assert result_a.weights == result_b.weights == matcher._DEFAULT_W
 
 
 def test_self_match_overall_score_is_high(monkeypatch):

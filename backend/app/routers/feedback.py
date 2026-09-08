@@ -271,14 +271,15 @@ def get_learned_weights(request: Request) -> LearnedWeightsRead | None:
 def compute_weights(request: Request) -> WeightComputeResult:
     """Preview-only: computes suggested weights from feedback via logistic
     regression, for a human (the developer) to review before deciding
-    whether/how to adjust matcher._DOMAIN_W accordingly.
+    whether/how to adjust matcher._DEFAULT_W accordingly.
 
-    Deliberately does not activate anything: the feedback pool isn't
-    segmented by domain, so blindly applying a single learned weight set
-    to every domain would undo the domain-specific calibration in
-    matcher._DOMAIN_W (e.g. education mattering more in health/legal than
-    in tech). See git history for the /feedback/apply-weights endpoint
-    that used to auto-activate this and was removed for that reason.
+    Deliberately does not activate anything: this is a global weight set
+    with no accuracy validation against the scoring dataset yet — auto-
+    activating it in production without that check is the kind of
+    unvalidated-weight-change risk we removed domain-specific weighting
+    for (see the comment above matcher._DOMAIN_W). See git history for the
+    /feedback/apply-weights endpoint that used to auto-activate this and
+    was removed for that reason.
     """
     require_admin(request)
     with SessionLocal() as session:
