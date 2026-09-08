@@ -146,8 +146,21 @@ async function _loadExplain(matchId) {
         <div class="skeleton skeleton--text" style="width:80%"></div>
         <div class="skeleton skeleton--text" style="width:60%"></div>
       </div>
-    </div>`;
+    </div>
+    <p class="text-xs text-muted" id="explainWait" style="padding:0 var(--space-4)">Analyse en cours…</p>`;
   openModal(modal);
+
+  // The first analysis after a while can be slow (cold model cache) — a
+  // silent skeleton for up to 90s reads as frozen. Show elapsed time and a
+  // reassurance line past the point where it'd normally be done.
+  const waitStartedAt = Date.now();
+  const waitTimer = setInterval(() => {
+    const el = content.querySelector("#explainWait");
+    if (!el) return;
+    const elapsed = Math.round((Date.now() - waitStartedAt) / 1000);
+    const hint = elapsed > 15 ? " — première analyse après une pause, ça peut prendre un peu plus longtemps" : "";
+    el.textContent = `Analyse en cours… (${elapsed}s)${hint}`;
+  }, 1000);
 
   try {
     // Load explain data and existing feedback in parallel.
@@ -160,6 +173,7 @@ async function _loadExplain(matchId) {
 
     if (existingFb) _feedbackCache.set(String(matchId), existingFb);
 
+    clearInterval(waitTimer);
     content.innerHTML = _renderExplainContent(data);
     _wireFeedbackForm(matchId);
 
@@ -176,6 +190,7 @@ async function _loadExplain(matchId) {
       window.print();
     });
   } catch (err) {
+    clearInterval(waitTimer);
     content.innerHTML = `<div class="banner banner--error">${escapeHtml(err.message)}</div>`;
   }
 }

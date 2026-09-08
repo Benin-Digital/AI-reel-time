@@ -347,6 +347,19 @@ select:disabled {
 .badge--failed  { background: var(--color-error-subtle);   color: var(--color-error);   border-color: var(--color-error-border); }
 .badge--draft   { background: var(--bg-surface-raised);    color: var(--text-muted);    border-color: var(--border-default); }
 
+/* "pending" always means "something is actively happening" — a static
+   label reads as stuck. A tiny spinner makes that legible at a glance. */
+.badge--pending::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+
 /* ---- SCORE CHIP ---- */
 .score-chip {
   display: inline-flex;
@@ -692,6 +705,24 @@ select:disabled {
 .banner--success { background: var(--color-success-subtle); color: var(--color-success); border-color: var(--color-success-border); }
 .banner--warning { background: var(--color-warning-subtle); color: var(--color-warning); border-color: var(--color-warning-border); }
 .banner--error   { background: var(--color-error-subtle);   color: var(--color-error);   border-color: var(--color-error-border); }
+
+/* Info banners are used for "something is in progress" messages (upload,
+   analyse en cours, structuration…) — a spinner makes that state readable
+   at a glance instead of a static line of text that looks frozen. */
+.banner--info::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
 /* ---- SKELETON LOADERS ---- */
 .skeleton {
