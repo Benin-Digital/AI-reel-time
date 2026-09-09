@@ -475,26 +475,32 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     languages, languages_ok = _language_score(cv, job)
     contract, contract_ok = _contract_score(cv, job)
 
-    low_confidence = [
-        name
-        for name, ok in (
-            ("skills", skills_ok),
-            ("experience", experience_ok),
-            ("education", education_ok),
-            ("languages", languages_ok),
-            ("contract", contract_ok),
-        )
-        if not ok
-    ]
-
-    final = (
-        w["semantic"] * semantic
-        + w["skills"] * skills
-        + w["experience"] * experience
-        + w["education"] * education
-        + w["languages"] * languages
-        + w["contract"] * contract
+    structured = (
+        ("skills", skills, skills_ok),
+        ("experience", experience, experience_ok),
+        ("education", education, education_ok),
+        ("languages", languages, languages_ok),
+        ("contract", contract, contract_ok),
     )
+    low_confidence = [name for name, _value, ok in structured if not ok]
+
+    # Renormalize over components with a real signal instead of averaging in
+    # the neutral/penalty defaults of missing ones (e.g. skills=0.0 when the
+    # CV extraction failed, experience=0.2 when years couldn't be read). Those
+    # defaults exist so each component always returns a number, not so a
+    # failed extraction can silently drag the final score down at full
+    # weight — see the has_signal contract on each _*_score function above.
+    # 'semantic' has no has_signal flag: the cross-encoder always produces a
+    # comparison (real, or a neutral 0.5 fallback when unavailable), so it
+    # always counts.
+    weighted_sum = w["semantic"] * semantic
+    weight_total = w["semantic"]
+    for name, value, ok in structured:
+        if ok:
+            weighted_sum += w[name] * value
+            weight_total += w[name]
+
+    final = weighted_sum / weight_total if weight_total > 0 else 0.5
     final = max(0.0, min(1.0, final))
 
     cv_skills = set(cv.skill_terms)
