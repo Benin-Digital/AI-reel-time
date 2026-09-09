@@ -1009,6 +1009,7 @@ def _vector_match_cv(
             )
             .join(JobDocument, JobEmbedding.job_id == JobDocument.id)
             .join(ExtractedText, ExtractedText.file_path == JobDocument.path, isouter=True)
+            .where(JobDocument.session_id.is_(None))
             .order_by(distance.asc())
         ).all()
 
@@ -1130,6 +1131,7 @@ def _vector_match_job(
             )
             .join(CvDocument, CvEmbedding.cv_id == CvDocument.id)
             .join(ExtractedText, ExtractedText.file_path == CvDocument.path, isouter=True)
+            .where(CvDocument.session_id.is_(None))
             .order_by(distance.asc())
         ).all()
 
@@ -1374,6 +1376,13 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
         for job_path in _list_candidate_files(Path(settings.watch_job_dir)):
             job_result = _extract_and_persist(job_path)
             job_doc = _upsert_job_document(job_path, job_result)
+            if job_doc.session_id is not None:
+                # Archived (assigned to a closed analysis session): stays on
+                # disk, so the file-listing loop would otherwise keep
+                # matching every new CV against it forever — archiving only
+                # ever affected the /job-documents listing filter, not this
+                # loop, which doesn't touch the DB session_id at all.
+                continue
             if job_doc.id in matched_job_ids:
                 continue
             if not job_result.extraction_success:
@@ -1466,6 +1475,9 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
         for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
             cv_result = _extract_and_persist(cv_path)
             cv_doc = _upsert_cv_document(cv_path, cv_result)
+            if cv_doc.session_id is not None:
+                # Archived: see the matching guard in the cv branch above.
+                continue
             if cv_doc.id in matched_cv_ids:
                 continue
             if not cv_result.extraction_success:
