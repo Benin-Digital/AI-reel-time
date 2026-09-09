@@ -238,6 +238,9 @@ class MatchRead(BaseModel):
     score_languages: float | None = None
     score_contract: float | None = None
     match_domain: str | None = None
+    feedback_decision: str | None = None
+    feedback_rating: int | None = None
+    feedback_comment: str | None = None
     created_at: datetime
     updated_at: datetime
 

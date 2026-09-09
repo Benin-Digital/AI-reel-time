@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import or_, select
 
 from ..db import SessionLocal
-from ..models import CvDocument, ExtractedText, JobDocument, MatchResult
+from ..models import CvDocument, ExtractedText, JobDocument, MatchFeedback, MatchResult
 
 
 def _cv_label(path: str, parsed_profile: dict | None) -> str:
@@ -37,6 +37,54 @@ def _build_labels(session, rows: list) -> tuple[dict[int, str], dict[int, str]]:
     cv_labels  = {i: _cv_label(cv_docs[i].path,  cv_texts.get(cv_docs[i].path))  for i in cv_ids  if i in cv_docs}
     job_labels = {i: _job_label(job_docs[i].path, job_texts.get(job_docs[i].path)) for i in job_ids if i in job_docs}
     return cv_labels, job_labels
+
+
+def _build_feedback_map(session, rows: list) -> dict[int, MatchFeedback]:
+    """Return {match_id: latest MatchFeedback} for a list of MatchResult rows.
+
+    The match list (GET /matches) never carried feedback, so the frontend's
+    per-card evaluation bar only ever showed a decision the user had picked
+    *in this page load* (a client-side cache populated lazily when the
+    "Analyser" modal happens to fetch GET /matches/{id}/feedback) -- a saved
+    evaluation looked like it had vanished after any page refresh, when in
+    fact it was sitting untouched in the database the whole time. Fetching
+    it here, batched, lets the list render the persisted state directly.
+    """
+    match_ids = [r.id for r in rows]
+    if not match_ids:
+        return {}
+    all_feedback = session.scalars(
+        select(MatchFeedback)
+        .where(MatchFeedback.match_id.in_(match_ids))
+        .order_by(MatchFeedback.created_at.desc(), MatchFeedback.id.desc())
+    ).all()
+    latest: dict[int, MatchFeedback] = {}
+    for fb in all_feedback:
+        latest.setdefault(fb.match_id, fb)
+    return latest
+
+
+def _to_match_read(
+    row: MatchResult,
+    cv_labels: dict[int, str],
+    job_labels: dict[int, str],
+    feedback_map: dict[int, MatchFeedback],
+) -> MatchRead:
+    fb = feedback_map.get(row.id)
+    return MatchRead(
+        id=row.id,
+        cv_id=row.cv_id,
+        job_id=row.job_id,
+        cv_label=cv_labels.get(row.cv_id),
+        job_label=job_labels.get(row.job_id),
+        score=row.score,
+        common_keywords=deserialize_keywords(row.common_keywords),
+        feedback_decision=fb.decision if fb else None,
+        feedback_rating=fb.rating if fb else None,
+        feedback_comment=fb.comment if fb else None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 from ..schemas import (
     AnalyzeRequest,
     MatchExplainRead,
@@ -81,20 +129,8 @@ def list_matches_for_cv(doc_id: int, limit: int = 50) -> list[MatchRead]:
             .limit(safe_limit)
         ).all()
         cv_labels, job_labels = _build_labels(session, rows)
-        return [
-            MatchRead(
-                id=row.id,
-                cv_id=row.cv_id,
-                job_id=row.job_id,
-                cv_label=cv_labels.get(row.cv_id),
-                job_label=job_labels.get(row.job_id),
-                score=row.score,
-                common_keywords=deserialize_keywords(row.common_keywords),
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-            )
-            for row in rows
-        ]
+        feedback_map = _build_feedback_map(session, rows)
+        return [_to_match_read(row, cv_labels, job_labels, feedback_map) for row in rows]
 
 
 @router.get("/job-documents/{doc_id}/matches", response_model=list[MatchRead])
@@ -108,20 +144,8 @@ def list_matches_for_job(doc_id: int, limit: int = 50) -> list[MatchRead]:
             .limit(safe_limit)
         ).all()
         cv_labels, job_labels = _build_labels(session, rows)
-        return [
-            MatchRead(
-                id=row.id,
-                cv_id=row.cv_id,
-                job_id=row.job_id,
-                cv_label=cv_labels.get(row.cv_id),
-                job_label=job_labels.get(row.job_id),
-                score=row.score,
-                common_keywords=deserialize_keywords(row.common_keywords),
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-            )
-            for row in rows
-        ]
+        feedback_map = _build_feedback_map(session, rows)
+        return [_to_match_read(row, cv_labels, job_labels, feedback_map) for row in rows]
 
 
 @router.get("/matches", response_model=list[MatchRead])
@@ -183,20 +207,8 @@ def list_matches(
     with SessionLocal() as session:
         rows = session.scalars(stmt.offset(safe_offset).limit(safe_size)).all()
         cv_labels, job_labels = _build_labels(session, rows)
-        return [
-            MatchRead(
-                id=row.id,
-                cv_id=row.cv_id,
-                job_id=row.job_id,
-                cv_label=cv_labels.get(row.cv_id),
-                job_label=job_labels.get(row.job_id),
-                score=row.score,
-                common_keywords=deserialize_keywords(row.common_keywords),
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-            )
-            for row in rows
-        ]
+        feedback_map = _build_feedback_map(session, rows)
+        return [_to_match_read(row, cv_labels, job_labels, feedback_map) for row in rows]
 
 
 @router.get("/matches/{match_id}", response_model=MatchRead)
@@ -206,17 +218,8 @@ def get_match(match_id: int) -> MatchRead:
         if not match:
             raise HTTPException(status_code=404, detail="Match not found")
         cv_labels, job_labels = _build_labels(session, [match])
-        return MatchRead(
-            id=match.id,
-            cv_id=match.cv_id,
-            job_id=match.job_id,
-            cv_label=cv_labels.get(match.cv_id),
-            job_label=job_labels.get(match.job_id),
-            score=match.score,
-            common_keywords=deserialize_keywords(match.common_keywords),
-            created_at=match.created_at,
-            updated_at=match.updated_at,
-        )
+        feedback_map = _build_feedback_map(session, [match])
+        return _to_match_read(match, cv_labels, job_labels, feedback_map)
 
 
 @router.get("/matches/{match_id}/explain", response_model=MatchExplainRead)

@@ -52,7 +52,7 @@ def get_match_feedback(match_id: int, request: Request) -> MatchFeedbackRead | N
         feedback = session.scalar(
             select(MatchFeedback)
             .where(MatchFeedback.match_id == match_id)
-            .order_by(MatchFeedback.created_at.desc())
+            .order_by(MatchFeedback.created_at.desc(), MatchFeedback.id.desc())
         )
         return MatchFeedbackRead.model_validate(feedback) if feedback else None
 
@@ -78,7 +78,7 @@ def create_match_feedback(match_id: int, payload: MatchFeedbackCreate, request: 
             previous = session.scalar(
                 select(MatchFeedback)
                 .where(MatchFeedback.match_id == match_id)
-                .order_by(MatchFeedback.created_at.desc())
+                .order_by(MatchFeedback.created_at.desc(), MatchFeedback.id.desc())
             )
             if previous:
                 if "rating" not in payload.model_fields_set:
