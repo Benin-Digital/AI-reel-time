@@ -50,10 +50,19 @@ _SKILLS: dict[str, list[str]] = {
     "PostgreSQL": ["postgresql", "postgres", "psql"],
     "MySQL": ["mysql", "maria db", "mariadb"],
     "Oracle DB": ["oracle", "oracle database", "oracle db", "pl/sql"],
+    "DB2": ["db2", "ibm db2"],
     "Snowflake": ["snowflake"],
     "QlikSense": ["qliksense", "qlik sense", "qlik"],
     "QlikView": ["qlikview", "qlik view"],
     "Talend": ["talend", "talend etl", "talend open studio"],
+    "Informatica": ["informatica", "informatica powercenter", "powercenter", "iics", "informatica intelligent cloud services"],
+    "Business Objects": ["business objects", "businessobjects", "sap bo", "sap businessobjects", "bo xir2", "bo xi", "xir2", "xi r2"],
+    "WebIntelligence": ["webintelligence", "webi", "web intelligence"],
+    # Bare "sas" excluded: an extremely common French legal-entity suffix
+    # (Societe par Actions Simplifiee, e.g. "ACME SAS") -- same false-positive
+    # risk that ruled out a bare "recette" alias. Only the qualified product
+    # names below are unambiguous.
+    "SAS (logiciel)": ["sas base", "sas enterprise guide", "sas grid"],
     "Power Query": ["power query", "powerquery", "power query m", "scripts m"],
     "MongoDB": ["mongodb", "mongo"],
     "Redis": ["redis"],
