@@ -1766,6 +1766,31 @@ def admin_reextract(request: Request) -> dict[str, object]:
     return {"queued": len(queued), "files": queued}
 
 
+def _ensure_pending_document_and_unarchive(model: type, path: Path) -> None:
+    """Create a pending document record for a freshly uploaded file, or, if
+    one already exists at this path, unarchive it unconditionally.
+
+    Re-uploading a file through /ingest unarchives it even when its content
+    is byte-identical to what's already on disk: an explicit upload IS the
+    user's signal of intent to make the document active again. This is
+    deliberately more permissive than the passive file-watcher path
+    (_upsert_cv_document/_upsert_job_document in _score_against_counterparts),
+    which only clears session_id when content_hash actually changed -- right
+    for a watcher restart silently rediscovering an unchanged, intentionally
+    archived file, but wrong here: without this, re-uploading a CV that
+    happens to already sit in an archive (same filename, same bytes) stayed
+    archived and invisible, with no error shown to the user.
+    """
+    with SessionLocal() as session:
+        existing = session.scalar(select(model).where(model.path == str(path)))
+        if existing is None:
+            session.add(model(path=str(path), status="pending"))
+            session.commit()
+        elif existing.session_id is not None:
+            existing.session_id = None
+            session.commit()
+
+
 @app.post("/ingest")
 def ingest_file(
     folder: str = Form(...),
@@ -1807,17 +1832,9 @@ def ingest_file(
             temp_path.unlink()
         raise
 
-    # Create a pending document record immediately so the frontend shows it
-    # without waiting for Docling/embedding processing to complete.
-    with SessionLocal() as session:
-        if folder == "cv":
-            if not session.scalar(select(CvDocument).where(CvDocument.path == str(target_path))):
-                session.add(CvDocument(path=str(target_path), status="pending"))
-                session.commit()
-        else:
-            if not session.scalar(select(JobDocument).where(JobDocument.path == str(target_path))):
-                session.add(JobDocument(path=str(target_path), status="pending"))
-                session.commit()
+    _ensure_pending_document_and_unarchive(
+        CvDocument if folder == "cv" else JobDocument, target_path
+    )
 
     _on_watch_event(
         WatchEvent(

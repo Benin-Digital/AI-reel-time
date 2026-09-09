@@ -76,3 +76,33 @@ def test_job_document_same_behavior(session_factory):
     result = app_main._upsert_job_document(app_main.Path("/job/reused.pdf"), _extraction("/job/reused.pdf", "new-hash"))
 
     assert result.session_id is None
+
+
+# ── /ingest (explicit upload) : desarchive meme sans changement de contenu ────
+#
+# Regression reelle (production, 2026-09-09) : re-televerser un CV deja
+# archive sous le meme nom de fichier ne le faisait pas reapparaitre dans
+# l'onglet actif, sans aucune erreur -- l'action explicite d'upload doit
+# etre traitee comme un signal d'intention de reactivation, contrairement
+# au watcher passif (voir tests ci-dessus) qui doit rester conservateur.
+
+def test_ingest_unarchives_existing_document_even_without_content_change(session_factory):
+    with session_factory() as session:
+        cv = CvDocument(path="/cv/reused.pdf", content_hash="same-hash", status="ready", session_id=42)
+        session.add(cv)
+        session.commit()
+
+    app_main._ensure_pending_document_and_unarchive(CvDocument, app_main.Path("/cv/reused.pdf"))
+
+    with session_factory() as session:
+        refreshed = session.query(CvDocument).filter_by(path="/cv/reused.pdf").one()
+        assert refreshed.session_id is None
+
+
+def test_ingest_creates_pending_record_for_a_brand_new_path(session_factory):
+    app_main._ensure_pending_document_and_unarchive(CvDocument, app_main.Path("/cv/new.pdf"))
+
+    with session_factory() as session:
+        created = session.query(CvDocument).filter_by(path="/cv/new.pdf").one()
+        assert created.status == "pending"
+        assert created.session_id is None
