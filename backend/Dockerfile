@@ -43,13 +43,15 @@ RUN python -c "import sentencepiece; print('sentencepiece', sentencepiece.__vers
         m = AutoModelForTokenClassification.from_pretrained('Jean-Baptiste/camembert-ner'); \
         print('model OK:', type(m).__name__)"
 
-# --- Layer 3: sentence-transformer encoders for ESCO + general embeddings ---
+# --- Layer 3: sentence-transformer encoder shared by ESCO + general embeddings ---
 RUN python -c "from sentence_transformers import SentenceTransformer; \
         SentenceTransformer('intfloat/multilingual-e5-base'); \
-        print('multilingual-e5-base OK')" && \
-    python -c "from sentence_transformers import SentenceTransformer; \
-        SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); \
-        print('all-MiniLM-L6-v2 OK')"
+        print('multilingual-e5-base OK')"
+
+# --- Cross-encoder reranker (matcher.py semantic scoring) ---
+RUN python -c "from sentence_transformers import CrossEncoder; \
+        CrossEncoder('antoinelouis/crossencoder-camembert-base-mmarcoFR'); \
+        print('crossencoder-camembert-base-mmarcoFR OK')"
 
 # --- Layer 1: Docling layout models (~250 MB) ---
 RUN python -c "from docling.utils.model_downloader import download_models; download_models()" \
