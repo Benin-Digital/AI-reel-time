@@ -25,7 +25,7 @@ Les poids sont ajustés automatiquement selon le secteur détecté : les postes 
 | Base de données | PostgreSQL 16 + pgvector |
 | File de messages | Redis Streams |
 | Embeddings | all-MiniLM-L6-v2 (384 dim) |
-| Re-ranking | cross-encoder/ms-marco-MiniLM-L-6-v2 |
+| Re-ranking | antoinelouis/crossencoder-camembert-base-mmarcoFR |
 | NER | spaCy (fr_core_news_sm · en_core_web_sm) |
 | OCR | Tesseract (fra+eng) |
 | Frontend | Vanilla JS / HTML (8 composants) |
@@ -243,7 +243,7 @@ flowchart TD
     E --> E5[Langues]
     E --> E6[Type contrat]
 
-    A --> F[Cross-Encoder\nms-marco-MiniLM-L-6-v2]
+    A --> F[Cross-Encoder\ncamembert-base-mmarcoFR]
     F --> G[Score sémantique\n0.0 → 1.0]
 
     E1 & E2 & E3 & E4 & E5 & E6 --> H[Pondération domaine]
@@ -672,7 +672,7 @@ graph LR
     end
 
     subgraph Sémantique["Scoring Sémantique (matcher.py)"]
-        CE[Cross-Encoder\nms-marco-MiniLM-L-6-v2]
+        CE[Cross-Encoder\ncamembert-base-mmarcoFR]
         SEM[Score sémantique\n0.0 → 1.0]
     end
 
@@ -1073,7 +1073,7 @@ AI_REALTIME_NER_ENABLED=true
 AI_REALTIME_NER_MODEL_MAP=fr:fr_core_news_sm,en:en_core_web_sm
 
 AI_REALTIME_CROSSENCODER_ENABLED=true
-AI_REALTIME_CROSSENCODER_MODEL_NAME=cross-encoder/ms-marco-MiniLM-L-6-v2
+AI_REALTIME_CROSSENCODER_MODEL_NAME=antoinelouis/crossencoder-camembert-base-mmarcoFR
 ```
 
 ### 11.3 Poids de scoring
