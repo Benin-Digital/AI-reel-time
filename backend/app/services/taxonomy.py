@@ -303,6 +303,20 @@ def _rome_skills() -> dict[str, list[str]]:
         return {}
 
 
+# Found empirically: the ROME bulk import (unlike the hand-curated _SKILLS
+# above, which was reviewed alias-by-alias) contains a handful of bare
+# 1-2 letter aliases that collide with ordinary French words once the
+# tokenizer splits on punctuation. E.g. "c" -> canonical "C" (the language)
+# matches every "c'est"/"c'était" ("c'" has no apostrophe in the token
+# class, so it tokenizes as bare "c"), and "son" -> canonical "Son" matches
+# the extremely common possessive "son/sa/ses". A single-character alias is
+# excluded categorically (never specific enough to mean a real skill in
+# flowing prose); "son" is excluded by name since it's the only length>=2
+# case found so far. Extend this set if find_skills() regression tests
+# surface more (see test_skill_detection_false_positives.py).
+_ROME_ALIAS_STOPWORDS: frozenset[str] = frozenset({"son"})
+
+
 @lru_cache(maxsize=1)
 def _build_lookup() -> dict[str, str]:
     """Return alias → canonical_name mapping (cached).
@@ -329,7 +343,7 @@ def _build_lookup() -> dict[str, str]:
     for canonical, aliases in _rome_skills().items():
         for alias in aliases:
             key = _fold(alias)
-            if key and key not in lookup:
+            if key and len(key) >= 2 and key not in _ROME_ALIAS_STOPWORDS and key not in lookup:
                 lookup[key] = canonical
 
     return lookup

@@ -14,7 +14,7 @@ categories de connaissances professionnelles concretes (logiciels,
 langages informatiques, normes/reglementations, techniques), en excluant
 diplomes/certifications et domaines hors-sujet (agriculture, sport, arts).
 
-Deux bugs trouves et corriges pendant l'import, couverts ici :
+Trois bugs trouves et corriges pendant l'import, couverts ici :
 1. Des mots generiques de secteur ("Finance", "Assurances", "Marketing"...)
    reproduisaient exactement le faux-positif deja corrige une fois pour la
    liste blanche de scoring (voir test_finance_sector_false_positive.py) :
@@ -24,6 +24,19 @@ Deux bugs trouves et corriges pendant l'import, couverts ici :
    n'etaient pas normalises en espaces avant stockage, alors que le
    tokenizer de find_skills() les traite comme separateurs de mots a la
    lecture — l'alias stocke ne matchait donc jamais le meme texte recherche.
+3. Deux alias courts de l'import ("c" -> "C", "son" -> "Son") collidaient
+   avec des mots grammaticaux francais extremement courants une fois le
+   texte tokenise : "c'est"/"c'etait" perd son apostrophe au tokenizing et
+   redevient le bare token "c", et "son/sa/ses" (possessif) est un des mots
+   les plus frequents du francais. Resultat : la phrase la plus banale
+   ("...pour son equipe, c'etait...") declenchait deux fausses competences
+   ("C" le langage, "Son"). Corrige dans _build_lookup() (taxonomy.py) en
+   excluant les alias ROME a 1 caractere et un petit set nomme
+   (_ROME_ALIAS_STOPWORDS) pour les cas >= 2 caracteres trouves. Les autres
+   alias courts a risque moindre (grec, turc, taxi, moto...) n'ont pas ete
+   touches : ce sont souvent des mentions legitimes (ex: "parle grec" est un
+   vrai signal de competence linguistique), contrairement a "c"/"son" qui ne
+   peuvent jamais l'etre dans un texte francais courant.
 """
 from __future__ import annotations
 
@@ -75,6 +88,23 @@ def test_real_rome_terms_are_now_recognized():
     }
     for text, expected in cases.items():
         assert expected in find_skills(text), f"{text!r} devrait resoudre a {expected!r}"
+
+
+def test_common_french_function_words_do_not_trigger_rome_skills():
+    """Reproduit le troisieme bug : des mots grammaticaux francais ordinaires
+    ne doivent jamais devenir une 'competence' a cause d'un alias ROME court."""
+    assert normalize_skill("c") is None
+    assert normalize_skill("son") is None
+
+    result = find_skills("C'était un projet passionnant pour son équipe.")
+    assert "C" not in result
+    assert "Son" not in result
+
+
+def test_legitimate_short_rome_terms_still_resolve():
+    """Garde-fou : le filtre anti-faux-positif ne doit pas etre trop large et
+    supprimer des mentions de competence reelles a cote des mots-outils."""
+    assert find_skills("Je parle couramment le grec et le turc.") == ["Grec", "Turc"]
 
 
 def test_hand_curated_entry_always_wins_over_rome():
