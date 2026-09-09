@@ -85,14 +85,17 @@ class EscoIndex:
 
     def _build_index(self) -> None:
         try:
-            from sentence_transformers import SentenceTransformer
             import faiss
             import numpy as np
+            from .embeddings import get_sentence_transformer
         except ImportError as exc:
             logger.error("ESCO index needs sentence-transformers + faiss-cpu: %s", exc)
             return
 
-        self._model = SentenceTransformer(self.model_name)
+        # Shared with embeddings.py's get_embedder(): same default model
+        # (intfloat/multilingual-e5-base), so this avoids loading a second
+        # ~1GB+ copy into the process. See embeddings.py's _model_registry.
+        self._model = get_sentence_transformer(self.model_name)
         labels = [s.preferred_label for s in self.skills]
         embeddings = self._model.encode(
             labels, batch_size=64, show_progress_bar=False, normalize_embeddings=True

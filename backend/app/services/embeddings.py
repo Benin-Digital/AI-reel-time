@@ -9,8 +9,17 @@ from ..settings import get_settings
 from .structured import build_document_profile
 
 settings = get_settings()
-_embedder = None
 _lock = threading.Lock()
+
+# Shared registry keyed by (model_name, device): esco_taxonomy.py's EscoIndex
+# loads its own sentence-transformer for skill-to-ESCO linking, and by default
+# points at the same model as embedding_model_name (intfloat/multilingual-e5-base).
+# Without sharing, both would load a separate ~1GB+ copy of the same model into
+# the same process — real memory pressure on a mem-limited container. Callers
+# that need a specific model (not necessarily settings.embedding_model_name)
+# should go through get_sentence_transformer() rather than instantiating
+# SentenceTransformer directly.
+_model_registry: dict[tuple[str, str], object] = {}
 
 
 def _load_sentence_transformer():
@@ -22,19 +31,21 @@ def _load_sentence_transformer():
         return exc
 
 
-def get_embedder():
-    global _embedder
-    if _embedder is None:
+def get_sentence_transformer(model_name: str, device: str | None = None):
+    device = device or settings.embedding_device
+    key = (model_name, device)
+    if key not in _model_registry:
         with _lock:
-            if _embedder is None:
+            if key not in _model_registry:
                 SentenceTransformer = _load_sentence_transformer()
                 if not callable(SentenceTransformer):
                     raise RuntimeError(f"sentence-transformers unavailable: {SentenceTransformer}")
-                _embedder = SentenceTransformer(
-                    settings.embedding_model_name,
-                    device=settings.embedding_device,
-                )
-    return _embedder
+                _model_registry[key] = SentenceTransformer(model_name, device=device)
+    return _model_registry[key]
+
+
+def get_embedder():
+    return get_sentence_transformer(settings.embedding_model_name, settings.embedding_device)
 
 
 def embed_texts(texts: Iterable[str]) -> list[list[float]]:
