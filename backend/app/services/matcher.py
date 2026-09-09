@@ -2,7 +2,7 @@
 AI matching engine v2.
 
 Combines:
-  1. Cross-encoder semantic scoring (cross-encoder/ms-marco-MiniLM-L-6-v2)
+  1. Cross-encoder semantic scoring (antoinelouis/crossencoder-camembert-base-mmarcoFR)
   2. Structured field scoring (skills, experience, education, languages, contract)
   3. Domain-aware weight adjustment
 
@@ -26,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 _cross_encoder = None
 _ce_lock = threading.Lock()
-_CE_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# French-native reranker (CamemBERT fine-tuned on mMARCO-fr): the previous
+# ms-marco-MiniLM-L-6-v2 was trained only on English MS MARCO and was
+# effectively out-of-domain on French CV/job text, which this component's
+# 40% weight made costly.
+_CE_MODEL = "antoinelouis/crossencoder-camembert-base-mmarcoFR"
 
 
 def _get_cross_encoder():
