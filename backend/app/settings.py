@@ -73,6 +73,19 @@ class Settings(BaseSettings):
     # the CV, award partial credit based on max embedding cosine similarity to
     # the CV's skills. Disabled -> pure lexical (previous behaviour).
     skill_embedding_enabled: bool = True
+    # Deliberately NOT embedding_model_name: multilingual-e5-base (validated
+    # for full-document/French semantic similarity) fails to discriminate
+    # between short technical skill names -- measured "Python" vs
+    # "Photoshop" at 0.85 cosine similarity (raw, no e5 "query:" prefix;
+    # adding the prefix did not fix it either), well above
+    # skill_embedding_threshold, handing out semantic credit for a total
+    # domain mismatch (caught by CI: test_total_mismatch_scores_low).
+    # all-MiniLM-L6-v2 scores that same pair at 0.35 -- its STS/NLI
+    # training data is itself short-phrase-pair based, matching this
+    # task's regime, unlike e5's longer query/passage retrieval training.
+    # skill_embedding_threshold/max_credit below were tuned against this
+    # model; re-validate them if this ever changes.
+    skill_embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     skill_embedding_threshold: float = 0.6   # min cosine sim to grant any credit
     skill_embedding_max_credit: float = 0.8  # cap: a semantic match never beats exact (1.0)
     structured_lexical_weight: float = 0.18

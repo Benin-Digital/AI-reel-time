@@ -48,6 +48,14 @@ RUN python -c "from sentence_transformers import SentenceTransformer; \
         SentenceTransformer('intfloat/multilingual-e5-base'); \
         print('multilingual-e5-base OK')"
 
+# Skill-to-skill semantic credit (matcher.py's _semantic_skill_credit) uses a
+# separate, smaller model: multilingual-e5-base does not discriminate
+# between short technical skill names (see settings.py's
+# skill_embedding_model_name comment) -- all-MiniLM-L6-v2 does.
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+        SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); \
+        print('all-MiniLM-L6-v2 OK')"
+
 # --- Cross-encoder reranker (matcher.py semantic scoring) ---
 RUN python -c "from sentence_transformers import CrossEncoder; \
         CrossEncoder('antoinelouis/crossencoder-camembert-large-mmarcoFR'); \

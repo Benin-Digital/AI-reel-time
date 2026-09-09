@@ -117,11 +117,21 @@ def compute_domain_sim(cv_profile: dict, job_profile: dict) -> float:
 
 @lru_cache(maxsize=4096)
 def _embed_one(label: str) -> tuple[float, ...] | None:
-    """Embed a single skill label, cached. Returns None if unavailable."""
-    vectors = embed_texts([label])
-    if not vectors:
+    """Embed a single skill label, cached. Returns None if unavailable.
+
+    Uses settings.skill_embedding_model_name, NOT the general document
+    embedder (settings.embedding_model_name) -- see the comment on
+    skill_embedding_model_name in settings.py for why these two are
+    deliberately different models.
+    """
+    try:
+        model = get_sentence_transformer(settings.skill_embedding_model_name, settings.embedding_device)
+        vectors = model.encode([label], normalize_embeddings=True)
+    except Exception:
         return None
-    return tuple(vectors[0])
+    if vectors is None or len(vectors) == 0:
+        return None
+    return tuple(float(x) for x in vectors[0])
 
 
 def best_skill_similarities(
