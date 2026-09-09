@@ -20,6 +20,7 @@ Install: pip install -r backend/requirements-poc.txt
 """
 import csv
 import logging
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -38,6 +39,7 @@ class EscoSkill:
 
 
 _index_singleton: Optional["EscoIndex"] = None
+_index_lock = threading.Lock()
 
 
 class EscoIndex:
@@ -164,7 +166,19 @@ class EscoIndex:
 
 
 def get_esco_index() -> Optional[EscoIndex]:
-    """Lazy-load and cache the ESCO index. Returns None if ESCO_DIR is not configured."""
+    """Lazy-load and cache the ESCO index. Returns None if ESCO_DIR is not configured.
+
+    Double-checked locking around the actual build: FastAPI runs sync path
+    operations (like /parsed-pdf, which reaches this via _esco_enrich) in a
+    thread pool, and without a lock, several concurrent requests arriving
+    before the first build finishes each saw _index_singleton as None and
+    started their own redundant build -- observed in production as the same
+    "ESCO FAISS index ready" log line firing 5 times over several minutes,
+    with 5 threads competing for CPU on the same ~20k-vector embedding job
+    at once, turning a several-minutes cold start into ~13 minutes per
+    request. The lock only serializes the rare cold-start path; every call
+    after the singleton is set returns immediately without acquiring it.
+    """
     global _index_singleton
     if _index_singleton is not None:
         return _index_singleton
@@ -177,11 +191,14 @@ def get_esco_index() -> Optional[EscoIndex]:
     if not esco_dir.is_dir():
         logger.warning("ESCO dir not found: %s", esco_dir)
         return None
-    model_name = getattr(settings, "esco_model_name", "intfloat/multilingual-e5-base")
-    idx = EscoIndex(esco_dir, model_name)
-    idx.load()
-    _index_singleton = idx
-    return idx
+    with _index_lock:
+        if _index_singleton is not None:
+            return _index_singleton
+        model_name = getattr(settings, "esco_model_name", "intfloat/multilingual-e5-base")
+        idx = EscoIndex(esco_dir, model_name)
+        idx.load()
+        _index_singleton = idx
+        return idx
 
 
 def find_skills_esco(text: str, top_k: int = 5) -> list[tuple[EscoSkill, float]]:

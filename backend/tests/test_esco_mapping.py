@@ -196,6 +196,50 @@ def test_get_esco_index_returns_none_for_missing_dir(settings, monkeypatch, tmp_
     assert get_esco_index() is None
 
 
+def test_get_esco_index_builds_only_once_under_concurrent_calls(settings, monkeypatch, tmp_path):
+    """Regression reelle (production, 2026-09-09) : get_esco_index() n'avait
+    aucun verrou autour de la construction. FastAPI execute les endpoints
+    synchrones (ex: /parsed-pdf, qui declenche l'enrichissement ESCO) dans un
+    pool de threads -- plusieurs requetes concurrentes arrivant avant la fin
+    du premier build voyaient toutes _index_singleton a None et demarraient
+    chacune leur propre construction complete et redondante. Observe en prod :
+    le meme log "ESCO FAISS index ready" declenche 5 fois de suite, 5 threads
+    se disputant le CPU pour le meme calcul, transformant un cold start de
+    quelques minutes en ~13 minutes par requete."""
+    import threading
+    import time
+
+    _write_skills_csv(tmp_path / "skills_fr.csv")
+    monkeypatch.setattr(settings, "esco_dir", str(tmp_path))
+
+    build_calls = []
+    start_gate = threading.Event()
+
+    def fake_load(self):
+        build_calls.append(1)
+        time.sleep(0.1)  # widen the race window while other threads pile up on the lock
+        self._load_csv()
+
+    monkeypatch.setattr(EscoIndex, "load", fake_load)
+
+    results = []
+
+    def call():
+        start_gate.wait()
+        results.append(get_esco_index())
+
+    threads = [threading.Thread(target=call) for _ in range(5)]
+    for t in threads:
+        t.start()
+    start_gate.set()  # release all 5 threads together, maximizing overlap
+    for t in threads:
+        t.join(timeout=5)
+
+    assert len(build_calls) == 1, "l'index ne doit etre construit qu'une seule fois"
+    assert len(results) == 5
+    assert all(r is results[0] for r in results), "tous les appels doivent renvoyer la meme instance"
+
+
 # ── structured._esco_enrich ──────────────────────────────────────────────
 
 def test_esco_enrich_dedupes_and_caps_at_max_uris(monkeypatch):
