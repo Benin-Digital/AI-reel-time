@@ -181,3 +181,40 @@ def test_esco_enrich_returns_empty_on_lookup_failure(monkeypatch):
 
 def test_esco_enrich_returns_empty_for_no_skill_terms():
     assert structured._esco_enrich([]) == []
+
+
+def _counter_value(outcome: str) -> float:
+    from app.observability import ESCO_ENRICH_TERMS_TOTAL
+
+    return ESCO_ENRICH_TERMS_TOTAL.labels(outcome=outcome)._value.get()
+
+
+def test_esco_enrich_records_mapped_and_unmapped_metrics(monkeypatch):
+    """Chaque terme doit incrementer exactement un des compteurs
+    mapped/unmapped -- c'est ce qui permet de detecter une derive de
+    couverture ESCO au lieu d'un echec silencieux (voir _esco_enrich)."""
+    def fake_find_skills_esco(term, top_k=1):
+        if term == "python":
+            return [(EscoSkill("uri-python", "Python", [], ""), 0.9)]
+        return []  # rien au-dessus du seuil
+
+    monkeypatch.setattr(esco_taxonomy, "find_skills_esco", fake_find_skills_esco)
+
+    before_mapped = _counter_value("mapped")
+    before_unmapped = _counter_value("unmapped")
+
+    structured._esco_enrich(["python", "un-terme-jamais-mappe"])
+
+    assert _counter_value("mapped") == before_mapped + 1
+    assert _counter_value("unmapped") == before_unmapped + 1
+
+
+def test_esco_enrich_records_error_metric_on_lookup_failure(monkeypatch):
+    def raising_find_skills_esco(term, top_k=1):
+        raise RuntimeError("modele indisponible")
+
+    monkeypatch.setattr(esco_taxonomy, "find_skills_esco", raising_find_skills_esco)
+
+    before_error = _counter_value("error")
+    structured._esco_enrich(["python", "docker"])
+    assert _counter_value("error") == before_error + 2

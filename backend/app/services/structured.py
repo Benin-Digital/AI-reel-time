@@ -287,13 +287,21 @@ def _extract_name_rule_based(lines: list[str]) -> str | None:
 
 
 def _esco_enrich(skill_terms: list[str]) -> list[str]:
-    """Map skill terms to ESCO concept URIs (top-1 per term). Safe no-op if ESCO is offline."""
+    """Map skill terms to ESCO concept URIs (top-1 per term). Safe no-op if ESCO is offline.
+
+    Records ESCO_ENRICH_TERMS_TOTAL{outcome=mapped|unmapped|error} per term so
+    a drift in mapping quality (e.g. after a taxonomy import that introduces
+    labels the embedding model maps poorly) shows up as a metric instead of
+    silently vanishing into an empty result — see test_esco_mapping.py.
+    """
     if not skill_terms:
         return []
     try:
         from .esco_taxonomy import find_skills_esco
     except Exception:
         return []
+    from ..observability import ESCO_ENRICH_TERMS_TOTAL
+
     max_uris = int(getattr(settings, "esco_enrich_max_uris", 30) or 30)
     seen: set[str] = set()
     uris: list[str] = []
@@ -301,7 +309,12 @@ def _esco_enrich(skill_terms: list[str]) -> list[str]:
         try:
             hits = find_skills_esco(term, top_k=1)
         except Exception:
+            ESCO_ENRICH_TERMS_TOTAL.labels(outcome="error").inc()
             continue
+        if not hits or not any(skill.uri for skill, _score in hits):
+            ESCO_ENRICH_TERMS_TOTAL.labels(outcome="unmapped").inc()
+            continue
+        ESCO_ENRICH_TERMS_TOTAL.labels(outcome="mapped").inc()
         for skill, _score in hits:
             if skill.uri and skill.uri not in seen:
                 seen.add(skill.uri)
