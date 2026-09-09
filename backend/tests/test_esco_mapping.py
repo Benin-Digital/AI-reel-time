@@ -24,6 +24,13 @@ en environnement de test, ce fichier teste isolement :
      recherche semantique).
   6. get_esco_index() : absence/invalidite de AI_REALTIME_ESCO_DIR.
   7. structured._esco_enrich() : dedup, plafond, degrade gracieux.
+  8. warn_if_esco_missing() : avertissement bruyant au demarrage quand ESCO
+     est active mais les CSV absents -- l'auto-telechargement ESCO au build
+     Docker a ete retire (le site ESCO exige desormais une demande manuelle
+     email + CAPTCHA, plus d'URL stable a curl), donc un oubli de
+     provisionnement manuel du volume doit se voir immediatement dans les
+     logs de demarrage, pas ressembler des jours plus tard a un bug de
+     scoring silencieux.
 """
 from __future__ import annotations
 
@@ -33,7 +40,7 @@ from pathlib import Path
 import pytest
 
 from app.services import esco_taxonomy, structured
-from app.services.esco_taxonomy import EscoIndex, EscoSkill, get_esco_index
+from app.services.esco_taxonomy import EscoIndex, EscoSkill, get_esco_index, warn_if_esco_missing
 
 
 @pytest.fixture(autouse=True)
@@ -261,3 +268,45 @@ def test_esco_enrich_records_error_metric_on_lookup_failure(monkeypatch):
     before_error = _counter_value("error")
     structured._esco_enrich(["python", "docker"])
     assert _counter_value("error") == before_error + 2
+
+
+# ── warn_if_esco_missing ──────────────────────────────────────────────────
+
+def test_warn_if_esco_missing_stays_silent_when_disabled(settings, monkeypatch, caplog):
+    monkeypatch.setattr(settings, "esco_enrich_skills", False)
+    with caplog.at_level("WARNING"):
+        warn_if_esco_missing()
+    assert not caplog.records
+
+
+def test_warn_if_esco_missing_stays_silent_without_esco_dir(settings, monkeypatch, caplog):
+    monkeypatch.setattr(settings, "esco_enrich_skills", True)
+    monkeypatch.setattr(settings, "esco_dir", "")
+    with caplog.at_level("WARNING"):
+        warn_if_esco_missing()
+    assert not caplog.records
+
+
+def test_warn_if_esco_missing_warns_when_directory_has_no_csv(settings, monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(settings, "esco_enrich_skills", True)
+    monkeypatch.setattr(settings, "esco_dir", str(tmp_path))
+    with caplog.at_level("WARNING"):
+        warn_if_esco_missing()
+    assert any("ESCO" in r.message for r in caplog.records)
+
+
+def test_warn_if_esco_missing_warns_when_directory_absent(settings, monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(settings, "esco_enrich_skills", True)
+    monkeypatch.setattr(settings, "esco_dir", str(tmp_path / "does-not-exist"))
+    with caplog.at_level("WARNING"):
+        warn_if_esco_missing()
+    assert any("ESCO" in r.message for r in caplog.records)
+
+
+def test_warn_if_esco_missing_stays_silent_when_csv_present(settings, monkeypatch, tmp_path, caplog):
+    (tmp_path / "skills_fr.csv").write_text("conceptUri,preferredLabel,altLabels,description\n")
+    monkeypatch.setattr(settings, "esco_enrich_skills", True)
+    monkeypatch.setattr(settings, "esco_dir", str(tmp_path))
+    with caplog.at_level("WARNING"):
+        warn_if_esco_missing()
+    assert not caplog.records
