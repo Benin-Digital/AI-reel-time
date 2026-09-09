@@ -135,6 +135,12 @@ class Settings(BaseSettings):
     # Layer 3: ESCO taxonomy. Default points to the Docker volume mount.
     esco_dir: str = "/srv/ai-realtime/esco"
     esco_model_name: str = "intfloat/multilingual-e5-base"
+    # Min cosine similarity to accept an ESCO concept match (EscoIndex.find_skills).
+    # Was hardcoded in esco_taxonomy.py; externalized so it can be tuned per
+    # deployment without a code change (inspired by Nesta ojd_daps_skills,
+    # which externalizes its taxonomy-matching thresholds to a config file
+    # instead of hardcoding them).
+    esco_min_score: float = 0.55
     # When true, build_document_profile populates StructuredDocument.esco_skill_uris
     # by mapping each extracted skill term to its ESCO concept (top-1, score >= 0.55).
     esco_enrich_skills: bool = True

@@ -107,7 +107,7 @@ class EscoIndex:
         logger.info("ESCO FAISS index ready: %d vectors, dim=%d", len(self.skills), dim)
 
     def find_skills(
-        self, text: str, top_k: int = 5, min_score: float = 0.55
+        self, text: str, top_k: int = 5, min_score: float | None = None
     ) -> list[tuple[EscoSkill, float]]:
         """Return up to top_k ESCO skills matching `text`. Exact alias match short-circuits."""
         if not text:
@@ -117,6 +117,8 @@ class EscoIndex:
             return [(exact, 1.0)]
         if self._faiss is None or self._model is None:
             return []
+        if min_score is None:
+            min_score = get_settings().esco_min_score
         import numpy as np
         vec = self._model.encode([text], normalize_embeddings=True)
         scores, idx = self._faiss.search(np.asarray(vec, dtype="float32"), top_k)
