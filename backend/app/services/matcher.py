@@ -68,6 +68,70 @@ def _cross_encode(query: str, document: str) -> float:
         return 0.5
 
 
+# A CamemBERT-family cross-encoder shares one ~512-token budget across BOTH
+# sequences of the pair, so 800 chars/side (~200 tokens each at this
+# tokenizer's ~4 chars/token) leaves headroom rather than betting the whole
+# budget on a single side.
+_CHUNK_CHARS = 800
+# Hard cap on chunks per side: bounds worst-case cross-encoder calls for one
+# pathological document (a huge OCR dump) instead of scaling unboundedly.
+_MAX_CHUNKS = 8
+
+
+def _chunk_text(text: str, chunk_size: int = _CHUNK_CHARS) -> list[str]:
+    """Split text into chunk_size-character windows, breaking at the last
+    newline/space before the limit so a chunk doesn't split mid-word."""
+    text = text.strip()
+    if not text:
+        return []
+    if len(text) <= chunk_size:
+        return [text]
+
+    chunks: list[str] = []
+    start = 0
+    n = len(text)
+    while start < n and len(chunks) < _MAX_CHUNKS:
+        end = min(start + chunk_size, n)
+        if end < n:
+            break_at = text.rfind("\n", start, end)
+            if break_at <= start:
+                break_at = text.rfind(" ", start, end)
+            if break_at > start:
+                end = break_at
+        chunk = text[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        start = end
+    return chunks
+
+
+def _cross_encode_best(query: str, document: str) -> float:
+    """Cross-encode a pair that may be too long for a single ~512-token pass
+    by scoring every (query_chunk, document_chunk) combination and keeping
+    the best (max) score, instead of silently losing whatever falls outside
+    a single window.
+
+    Real CVs in this project average ~9-10k characters — a manual check on
+    35 real documents found 67% still exceeded a single 2000-char window
+    even after _semantic_repr() already prioritizes the most relevant
+    sections (skills/summary) over raw text. A long CV's most relevant
+    excerpt should be able to drive the score, not just whatever happened
+    to fit first.
+
+    Reuses _cross_encode() per chunk pair (rather than batching all pairs
+    into one model.predict() call) so existing tests that monkeypatch
+    _cross_encode stay meaningful, and because at this project's documented
+    scale (≤50 CV/job pairs) the extra per-call overhead is negligible.
+    """
+    query_chunks = _chunk_text(query) or [""]
+    doc_chunks = _chunk_text(document) or [""]
+    return max(
+        _cross_encode(q, d)
+        for q in query_chunks
+        for d in doc_chunks
+    )
+
+
 # ── Domain-aware weights ──────────────────────────────────────────────────────
 #
 # _DOMAIN_W below is NOT applied to scoring (see _weights()). It's kept as
@@ -392,10 +456,16 @@ def _semantic_repr(doc: ParsedDocument) -> str:
     F4: rather than betting on a single section (which fails when section
     classification misfires), combine the informative sections in a fixed
     order — required/skills first (most discriminating), then summary, then
-    a cleaned-text tail to fill any gap — de-duplicated and truncated to the
-    cross-encoder's window (~512 tokens ≈ 2000 chars). Same order regardless
-    of doc.kind, so the CV and job sides stay symmetric (see the comment in
-    match_cv_to_job for why symmetry matters).
+    a cleaned-text tail to fill any gap — de-duplicated. Same order
+    regardless of doc.kind, so the CV and job sides stay symmetric (see the
+    comment in match_cv_to_job for why symmetry matters).
+
+    Capped at 12000 chars as a safety ceiling (a pathological OCR dump),
+    NOT at the cross-encoder's single-pass window: _cross_encode_best()
+    chunks and scores the full text instead of betting everything on one
+    ~2000-char window, since real CVs in this project average ~9-10k
+    characters and a manual check found most exceed a single window even
+    after this section-priority selection.
 
     Falls back to cleaned_text when the structured sections are empty, so a
     document whose sections were all mis-parsed still gets a representation.
@@ -422,7 +492,7 @@ def _semantic_repr(doc: ParsedDocument) -> str:
         if tail and tail not in seen:
             combined = (combined + "\n" + tail).strip()
 
-    return combined[:2000]
+    return combined[:12000]
 
 
 def match_cv_to_job(cv_text: str, job_text: str) -> MatchScore:
@@ -467,7 +537,7 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     # differs. Both sides now use the same fallback order.
     cv_repr = _semantic_repr(cv)
     job_repr = _semantic_repr(job)
-    semantic = _cross_encode(job_repr, cv_repr)
+    semantic = _cross_encode_best(job_repr, cv_repr)
 
     skills, skills_ok = _skill_score(cv, job)
     experience, experience_ok = _experience_score(cv, job)
