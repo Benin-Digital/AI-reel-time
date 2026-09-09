@@ -4,6 +4,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile
+    image: app3-api:2026-09-03
     container_name: airealtime-api
     ports:
       - "127.0.0.1:8010:8000"
