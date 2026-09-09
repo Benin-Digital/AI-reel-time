@@ -65,24 +65,25 @@ RUN python -c "from sentence_transformers import CrossEncoder; \
 RUN python -c "from docling.utils.model_downloader import download_models; download_models()" \
     || python -c "from docling.document_converter import DocumentConverter; DocumentConverter()"
 
-# --- Layer 3 data: ESCO v1.2.0 FR + EN dumps (graceful if URLs change) ---
-# If the download fails (URL pattern changes between ESCO releases), the layer
-# silently moves on — the user can drop the CSV(s) on the mounted /srv/ai-realtime/esco
-# volume at runtime to enable it.
-ARG ESCO_VERSION=1.2.0
-ARG ESCO_BASE_URL=https://esco.ec.europa.eu/sites/default/files
-RUN mkdir -p /srv/ai-realtime/esco \
-    && cd /srv/ai-realtime/esco \
-    && (curl -fL --retry 2 -o esco_fr.zip \
-          "${ESCO_BASE_URL}/ESCO%20dataset%20-%20v${ESCO_VERSION}%20-%20classification%20-%20fr%20-%20csv.zip" \
-        && unzip -o -j esco_fr.zip 'skills_fr.csv' -d . \
-        && rm -f esco_fr.zip) \
-       || echo "[warn] ESCO FR auto-download failed — drop skills_fr.csv into the esco volume to enable" \
-    && (curl -fL --retry 2 -o esco_en.zip \
-          "${ESCO_BASE_URL}/ESCO%20dataset%20-%20v${ESCO_VERSION}%20-%20classification%20-%20en%20-%20csv.zip" \
-        && unzip -o -j esco_en.zip 'skills_en.csv' -d . \
-        && rm -f esco_en.zip) \
-       || echo "[warn] ESCO EN auto-download failed — drop skills_en.csv into the esco volume to enable"
+# --- Layer 3 data: ESCO CSVs — NOT auto-downloaded, provision manually ---
+#
+# This used to curl a static zip URL at build time. As of the ESCO v1.2.1
+# release, the download page (https://esco.ec.europa.eu/en/use-esco/download)
+# replaced that with a gated request form: email address, organisation type,
+# intended use, a privacy-statement acceptance, AND a CAPTCHA, with the file
+# delivered by email afterwards — there is no stable URL left to curl, so a
+# version bump alone can never fix this again. Retrying it here would only
+# burn build time on a download that is now permanently impossible to
+# automate (and completing a CAPTCHA programmatically is out of bounds).
+#
+# Provisioning is manual and one-time: request the dataset yourself at the
+# URL above (Content: Classification, File type: csv, Language: fr/en),
+# then drop the resulting skills_fr.csv / skills_en.csv onto the
+# /srv/ai-realtime/esco volume mounted at runtime. esco_taxonomy.py already
+# degrades gracefully (empty lookups, no crash) when these files are absent
+# — but see main.py's startup check for a loud warning when that happens,
+# so a missing file reads as "ESCO not configured", not as a scoring bug.
+RUN mkdir -p /srv/ai-realtime/esco
 
 # scoring_v2 model dir (writable volume mount at runtime)
 RUN mkdir -p /srv/ai-realtime/models

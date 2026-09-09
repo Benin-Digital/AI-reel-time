@@ -34,6 +34,17 @@ docker compose --env-file deploy/cloud/.env.cloud -f deploy/cloud/docker-compose
 curl -sS https://$AIREALTIME_DOMAIN/health
 ```
 
+Verifier aussi les logs de demarrage du conteneur `api` juste apres un
+`up -d --build` — un WARNING au demarrage (ex: ESCO manquant, backend de
+queue non-persistant) signale un outil/fichier absent en silence plutot
+qu'un bug de code, et ne se reverra plus une fois noye dans les logs
+applicatifs suivants :
+
+```bash
+docker compose --env-file deploy/cloud/.env.cloud -f deploy/cloud/docker-compose.cloud.yml \
+	logs api --since 5m | grep -i warning
+```
+
 ## Migrations DB
 
 ```bash

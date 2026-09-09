@@ -190,3 +190,39 @@ def find_skills_esco(text: str, top_k: int = 5) -> list[tuple[EscoSkill, float]]
     if idx is None:
         return []
     return idx.find_skills(text, top_k=top_k)
+
+
+def warn_if_esco_missing() -> None:
+    """Log a loud warning at app startup if ESCO enrichment is enabled but no
+    skills_*.csv is present, instead of waiting for get_esco_index() to warn
+    lazily on the first document processed.
+
+    Why this matters operationally: ESCO's CSV download used to be
+    auto-fetched at Docker build time, but that download is now gated behind
+    a manual request form + CAPTCHA (see backend/Dockerfile's ESCO comment)
+    and can no longer be automated. esco_taxonomy.py itself degrades
+    gracefully with no crash when the files are missing — which is correct
+    for scoring, but means a missing/forgotten manual step reads as a silent
+    capability gap discovered days later during testing, easily mistaken for
+    a scoring bug instead of a missing file. Surfacing it once, loudly, at
+    startup (call from main.py's lifespan) closes that gap.
+    """
+    settings = get_settings()
+    if not getattr(settings, "esco_enrich_skills", False):
+        return
+    raw = (getattr(settings, "esco_dir", "") or "").strip()
+    if not raw:
+        return
+    esco_dir = Path(raw)
+    if esco_dir.is_dir() and list(esco_dir.glob("skills_*.csv")):
+        return
+    logger.warning(
+        "ESCO enrichment is enabled (esco_enrich_skills=true) but no "
+        "skills_*.csv found in %s -- ESCO-to-skill mapping will silently "
+        "return no matches for every document. This is NOT a scoring bug: "
+        "ESCO's dataset download now requires a manual request (email + "
+        "CAPTCHA) at https://esco.ec.europa.eu/en/use-esco/download -- "
+        "request it yourself, then drop the resulting skills_fr.csv/"
+        "skills_en.csv onto this path.",
+        esco_dir,
+    )

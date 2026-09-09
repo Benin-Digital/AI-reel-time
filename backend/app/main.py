@@ -105,6 +105,7 @@ from .services import (
     deserialize_keywords,
     get_queue_status,
     warn_if_unsafe_backend,
+    warn_if_esco_missing,
 )
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
 from .services.matcher import match_cv_to_job, match_parsed_documents
@@ -1560,6 +1561,7 @@ def _on_watch_event(event: WatchEvent) -> None:
 async def lifespan(app: FastAPI):
     validate_security_settings()
     warn_if_unsafe_backend()
+    warn_if_esco_missing()
     init_db()
     with SessionLocal() as session:
         ensure_bootstrap_user(session)
