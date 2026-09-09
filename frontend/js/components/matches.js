@@ -99,6 +99,22 @@ async function _load() {
         </div>`;
       return;
     }
+    // Seed the feedback cache from the server's own persisted state: without
+    // this, a saved evaluation only showed up in the card list while its
+    // decision happened to already be in this in-memory cache (set when the
+    // user picked it, or when the "Analyser" modal was opened for that exact
+    // match in this page load) -- any other page load, including a plain
+    // refresh, showed every match as unevaluated even though the feedback
+    // was sitting untouched in the database the whole time.
+    for (const match of data) {
+      if (match.feedback_decision) {
+        _feedbackCache.set(String(match.id), {
+          decision: match.feedback_decision,
+          rating: match.feedback_rating ?? 0,
+          comment: match.feedback_comment ?? null,
+        });
+      }
+    }
     list.innerHTML = data.map(_renderMatchCard).join("");
   } catch (err) {
     if (err.name !== "AuthError") {
