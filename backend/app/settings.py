@@ -114,7 +114,10 @@ class Settings(BaseSettings):
     # reranker: the former cross-encoder/ms-marco-MiniLM-L-6-v2 was trained
     # only on English MS MARCO and was effectively out-of-domain on French
     # CV/job text, which this component's 40% score weight made costly.
-    crossencoder_model_name: str = "antoinelouis/crossencoder-camembert-base-mmarcoFR"
+    # "large" over "base": best published French mmarco benchmark
+    # (MRR@10=35.23 vs 33.4), same MIT-licensed family — the safer accuracy
+    # upgrade at this project's volume (<=50 CV/job pairs, CPU).
+    crossencoder_model_name: str = "antoinelouis/crossencoder-camembert-large-mmarcoFR"
     crossencoder_enabled: bool = True
     # v2 architecture (non-LLM) — all layers ON by default. Each layer falls
     # back gracefully (Docling→PyMuPDF, CamemBERT→spaCy, ESCO→noop, GBM→null)

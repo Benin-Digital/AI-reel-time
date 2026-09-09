@@ -2,7 +2,7 @@
 AI matching engine v2.
 
 Combines:
-  1. Cross-encoder semantic scoring (antoinelouis/crossencoder-camembert-base-mmarcoFR)
+  1. Cross-encoder semantic scoring (antoinelouis/crossencoder-camembert-large-mmarcoFR)
   2. Structured field scoring (skills, experience, education, languages, contract)
   3. Domain-aware weight adjustment
 
