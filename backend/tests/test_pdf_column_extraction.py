@@ -65,6 +65,40 @@ def test_sidebar_lines_stay_grouped_instead_of_interleaved(tmp_path):
     )
 
 
+def test_name_in_right_sidebar_is_not_buried_behind_a_long_left_body(tmp_path):
+    """Regression reelle (production, 2026-09-09) : sidebar courte (nom,
+    contact, competences) a DROITE, corps principal long a GAUCHE.
+
+    PyMuPDF fusionne souvent tout le corps principal en un seul bloc dont la
+    bbox est l'union de toutes ses lignes -- si une seule ligne de ce corps
+    depasse le milieu de page, la bbox du bloc entier chevauche le milieu,
+    le classant "pleine largeur" au lieu de "colonne gauche". La detection
+    de mise en page a 2 colonnes se desactive alors, et l'ancienne version
+    (qui triait des BLOCS entiers, pas des lignes) faisait sortir tout le
+    bloc du corps principal (potentiellement des dizaines de lignes) avant
+    le bloc du nom des qu'ils demarraient a un y proche (egalite tranchee
+    par x, et le corps commence plus a gauche) -- repoussant le nom bien
+    au-dela de la fenetre de lignes que le heuristique de nom scanne."""
+    path = tmp_path / "right_sidebar_cv.pdf"
+    inserts = [((72, 60 + i * 14), f"Ligne d'experience professionnelle {i} chez ACME") for i in range(50)]
+    inserts += [
+        ((420, 60), "Jean DUPONT"),
+        ((420, 90), "06 12 34 56 78"),
+        ((420, 120), "Python"),
+        ((420, 150), "Docker"),
+    ]
+    _make_pdf(path, inserts)
+
+    result = extract_text_from_pdf(path)
+    lines = result.splitlines()
+
+    name_position = lines.index("Jean DUPONT")
+    assert name_position < 40, (
+        f"le nom doit rester dans la fenetre scannee par le heuristique de "
+        f"nom (build_document_profile), obtenu position={name_position}"
+    )
+
+
 def test_single_column_with_right_aligned_date_is_not_split_into_columns(tmp_path):
     """Une date alignee a droite sur un CV mono-colonne (tres courant :
     intitule de poste a gauche, dates a droite sur la meme ligne) ne doit
