@@ -526,38 +526,6 @@ def build_document_profile(
     )
 
 
-def detect_document_kind(text: str) -> str | None:
-    folded = fold_text(text)
-    job_markers = (
-        "offre structuree",
-        "competences requises",
-        "responsabilites",
-        "taches",
-        "qualifications",
-        "profil recherche",
-        "poste",
-        "missions",
-        "what you will do",
-        "your mission",
-    )
-    cv_markers = (
-        "curriculum vitae",
-        "curriculum-vitae",
-        "cv",
-        "resume",
-        "experience professionnelle",
-        "formations",
-        "formation",
-        "competences",
-        "skills",
-    )
-    if any(fold_text(marker) in folded for marker in job_markers):
-        return "job"
-    if any(fold_text(marker) in folded for marker in cv_markers):
-        return "cv"
-    return None
-
-
 def canonical_document_text(text: str, kind: str | None = None) -> str:
     return build_document_profile(text, kind=kind).canonical_text
 
