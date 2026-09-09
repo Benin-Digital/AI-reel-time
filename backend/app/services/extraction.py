@@ -86,18 +86,24 @@ def clean_text(text: str) -> str:
 clean_document_text = clean_text
 
 
-def _block_text(block: dict) -> str:
-    """Join a get_text('dict') text block's lines/spans into a string."""
-    lines = []
-    for line in block.get("lines", []):
-        line_text = "".join(span.get("text", "") for span in line.get("spans", []))
-        if line_text.strip():
-            lines.append(line_text)
-    return "\n".join(lines)
+def _iter_lines(blocks: list[dict]) -> list[dict]:
+    """Flatten get_text('dict') blocks into individual {"bbox", "text"} lines.
+
+    Feeds _order_lines_by_column() at line granularity rather than whole
+    blocks -- see that function's docstring for why block-level bboxes are
+    unreliable for column detection.
+    """
+    result: list[dict] = []
+    for block in blocks:
+        for line in block.get("lines", []):
+            text = "".join(span.get("text", "") for span in line.get("spans", []))
+            if text.strip():
+                result.append({"bbox": line["bbox"], "text": text})
+    return result
 
 
-def _order_blocks_by_column(blocks: list[dict], page_width: float) -> list[dict]:
-    """Reorder text blocks to read a two-column layout column-by-column
+def _order_lines_by_column(lines: list[dict], page_width: float) -> list[dict]:
+    """Reorder text lines to read a two-column layout column-by-column
     instead of interleaving by y-position.
 
     PyMuPDF's get_text(sort=True) orders spans by (y, x), which is correct
@@ -109,56 +115,71 @@ def _order_blocks_by_column(blocks: list[dict], page_width: float) -> list[dict]
     test_name_section_title.py for a real case this caused: an action verb
     from the interleaved main body was mistaken for the candidate's name).
 
-    Detects a clean vertical split — every block sits entirely left of or
+    Works line-by-line, not block-by-block: an earlier version classified
+    and sorted whole get_text('dict') blocks, but a block's bbox is the
+    union of every line inside it, so a single long line reaching past the
+    page midpoint drags its entire block across the midline too. PyMuPDF
+    routinely merges a CV's whole main-body column into one block, so a
+    single wide line flips that whole block from "left column" to "spans
+    both columns", disabling two-column detection and falling back to a
+    plain (y, x) sort of whole blocks -- where the ENTIRE multi-line body
+    block can then out-sort a much narrower header/name block sitting at a
+    similar y (ties break on x, and a body starting at x=40 wins over a
+    name at x=420), instead of the two interleaving line-by-line the way
+    get_text(sort=True) did. This pushed a real candidate's name dozens of
+    lines down, past the window build_document_profile's name heuristic
+    scans (see test_pdf_column_extraction.py's regression test for the
+    exact repro).
+
+    Detects a clean vertical split — every line sits entirely left of or
     entirely right of the page's horizontal midline, except full-width ones
-    like a name/header banner — and only then reads full-width blocks in
+    like a name/header banner — and only then reads full-width lines in
     their natural top-to-bottom position, then the whole left column top-to-
     bottom, then the whole right column. Falls back to plain (y, x) order
     when no clean split exists, so ordinary single-column CVs are unaffected.
     """
-    if not blocks:
+    if not lines:
         return []
 
     mid = page_width / 2
     left, right, full = [], [], []
-    for b in blocks:
-        x0, _, x1, _ = b["bbox"]
+    for ln in lines:
+        x0, _, x1, _ = ln["bbox"]
         if x1 <= mid:
-            left.append(b)
+            left.append(ln)
         elif x0 >= mid:
-            right.append(b)
+            right.append(ln)
         else:
-            full.append(b)
+            full.append(ln)
 
     # Require both sides to carry a meaningful share of the page's text, not
-    # just count blocks: a genuine sidebar column is very often ONE block
-    # (a whole paragraph), while a single-column CV can have a small block
-    # entirely right of the midline too (a right-aligned date, a page
-    # number) without being a two-column layout at all. Gating on character
-    # share instead avoids reordering (and scrambling) that common
-    # single-column case.
-    total_chars = sum(len(_block_text(b)) for b in blocks) or 1
-    left_chars = sum(len(_block_text(b)) for b in left)
-    right_chars = sum(len(_block_text(b)) for b in right)
+    # just count lines: a genuine sidebar column can be a single short line,
+    # while a single-column CV can have a small line entirely right of the
+    # midline too (a right-aligned date, a page number) without being a
+    # two-column layout at all. Gating on character share instead avoids
+    # reordering (and scrambling) that common single-column case.
+    total_chars = sum(len(ln["text"]) for ln in lines) or 1
+    left_chars = sum(len(ln["text"]) for ln in left)
+    right_chars = sum(len(ln["text"]) for ln in right)
     min_share = 0.15
     if left_chars < total_chars * min_share or right_chars < total_chars * min_share:
-        return sorted(blocks, key=lambda b: (b["bbox"][1], b["bbox"][0]))
+        return sorted(lines, key=lambda ln: (ln["bbox"][1], ln["bbox"][0]))
 
-    left.sort(key=lambda b: b["bbox"][1])
-    right.sort(key=lambda b: b["bbox"][1])
-    full.sort(key=lambda b: b["bbox"][1])
+    left.sort(key=lambda ln: ln["bbox"][1])
+    right.sort(key=lambda ln: ln["bbox"][1])
+    full.sort(key=lambda ln: ln["bbox"][1])
 
     first_col_y = min(left[0]["bbox"][1], right[0]["bbox"][1])
-    header = [b for b in full if b["bbox"][1] < first_col_y]
-    trailer = [b for b in full if b["bbox"][1] >= first_col_y]
+    header = [ln for ln in full if ln["bbox"][1] < first_col_y]
+    trailer = [ln for ln in full if ln["bbox"][1] >= first_col_y]
     return header + left + right + trailer
 
 
 def extract_text_from_pdf(path: Path) -> str:
     """Extract PDF text via PyMuPDF with column-aware ordering; OCR fallback for scanned pages.
 
-    Blocks are read via get_text('dict') (bounding boxes) and reordered by
-    _order_blocks_by_column() rather than PyMuPDF's own sort=True, which
+    Lines are read via get_text('dict') (bounding boxes) and reordered by
+    _order_lines_by_column() rather than PyMuPDF's own sort=True, which
     handles single-column and matched-height side-by-side text but not an
     asymmetric sidebar template — see that function's docstring.
 
@@ -175,8 +196,9 @@ def extract_text_from_pdf(path: Path) -> str:
         for i, page in enumerate(doc):
             raw = page.get_text("dict")
             blocks = [b for b in raw.get("blocks", []) if b.get("type") == 0]
-            ordered = _order_blocks_by_column(blocks, raw.get("width") or page.rect.width)
-            t = "\n".join(_block_text(b) for b in ordered)
+            lines = _iter_lines(blocks)
+            ordered = _order_lines_by_column(lines, raw.get("width") or page.rect.width)
+            t = "\n".join(ln["text"] for ln in ordered)
             page_texts.append(t)
             if len(t.strip()) < settings.ocr_min_text_length:
                 weak_pages.append(i)
