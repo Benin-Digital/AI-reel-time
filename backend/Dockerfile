@@ -83,6 +83,22 @@ RUN python -c "from docling.utils.model_downloader import download_models; downl
 # degrades gracefully (empty lookups, no crash) when these files are absent
 # — but see main.py's startup check for a loud warning when that happens,
 # so a missing file reads as "ESCO not configured", not as a scoring bug.
+#
+# Ownership pitfall hit in production: `docker cp host_file container:/path`
+# preserves the HOST file's numeric uid/gid, not the container's appuser
+# (created above by `adduser --system`, uid 100 / gid 101 on this image —
+# confirm with `docker exec <container> id appuser`, system UID allocation
+# isn't guaranteed identical on every rebuild). A file copied in from a
+# typical Ubuntu host lands owned by uid/gid 1000, mode 600 — unreadable by
+# appuser, and esco_taxonomy.py's broad except swallows the resulting
+# PermissionError exactly like a missing file, so it fails the same silent
+# way this whole comment exists to prevent. Fix on the HOST (this
+# container drops ALL capabilities, so even `docker exec -u root ... chown`
+# fails with "Operation not permitted" from inside it):
+#   docker volume inspect <esco_volume_name> --format '{{.Mountpoint}}'
+#   chown 100:101 <mountpoint>/skills_fr.csv && chmod 644 <mountpoint>/skills_fr.csv
+# Then verify as the real runtime user, not root:
+#   docker exec -u appuser <container> head -c 100 /srv/ai-realtime/esco/skills_fr.csv
 RUN mkdir -p /srv/ai-realtime/esco
 
 # scoring_v2 model dir (writable volume mount at runtime)
