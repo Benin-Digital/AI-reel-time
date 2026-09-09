@@ -107,8 +107,11 @@ class Settings(BaseSettings):
     hybrid_scoring_enabled: bool = True
     hybrid_vector_weight: float = 0.3
     hybrid_lexical_weight: float = 0.7
-    # Cross-encoder model for semantic matching (matcher.py)
-    crossencoder_model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Cross-encoder model for semantic matching (matcher.py). French-native
+    # reranker: the former cross-encoder/ms-marco-MiniLM-L-6-v2 was trained
+    # only on English MS MARCO and was effectively out-of-domain on French
+    # CV/job text, which this component's 40% score weight made costly.
+    crossencoder_model_name: str = "antoinelouis/crossencoder-camembert-base-mmarcoFR"
     crossencoder_enabled: bool = True
     # v2 architecture (non-LLM) — all layers ON by default. Each layer falls
     # back gracefully (Docling→PyMuPDF, CamemBERT→spaCy, ESCO→noop, GBM→null)

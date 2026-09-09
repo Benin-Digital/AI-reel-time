@@ -26,11 +26,6 @@ logger = logging.getLogger(__name__)
 
 _cross_encoder = None
 _ce_lock = threading.Lock()
-# French-native reranker (CamemBERT fine-tuned on mMARCO-fr): the previous
-# ms-marco-MiniLM-L-6-v2 was trained only on English MS MARCO and was
-# effectively out-of-domain on French CV/job text, which this component's
-# 40% weight made costly.
-_CE_MODEL = "antoinelouis/crossencoder-camembert-base-mmarcoFR"
 
 
 def _get_cross_encoder():
@@ -38,10 +33,17 @@ def _get_cross_encoder():
     if _cross_encoder is None:
         with _ce_lock:
             if _cross_encoder is None:
+                from ..settings import get_settings
+
+                settings = get_settings()
+                if not settings.crossencoder_enabled:
+                    _cross_encoder = "unavailable"
+                    return None
+                model_name = settings.crossencoder_model_name
                 try:
                     from sentence_transformers import CrossEncoder
-                    logger.info("Loading cross-encoder: %s", _CE_MODEL)
-                    _cross_encoder = CrossEncoder(_CE_MODEL)
+                    logger.info("Loading cross-encoder: %s", model_name)
+                    _cross_encoder = CrossEncoder(model_name)
                     logger.info("Cross-encoder ready")
                 except Exception as exc:
                     logger.warning("Cross-encoder unavailable (%s) — semantic score = 0.5", exc)
