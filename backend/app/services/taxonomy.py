@@ -95,6 +95,28 @@ _SKILLS: dict[str, list[str]] = {
     "SAP": ["sap", "sap erp", "sap hana", "sap r3", "sap r/3"],
     "Salesforce": ["salesforce", "sfdc", "crm salesforce"],
     "Cybersécurité": ["cybersecurite", "cybersecurity", "securite informatique", "pentest", "securite reseau", "soc", "siem", "owasp", "csrf", "xss"],
+    "ISO 27001": ["iso 27001", "iso27001", "norme iso 27001"],
+    "ISO 27005": ["iso 27005", "iso27005"],
+    "ISO 42001": ["iso 42001", "iso42001"],
+    "EBIOS": ["ebios", "ebios rm", "methode ebios"],
+    # "dora" bare collides with the first name (find_skills folds case, so
+    # "Dora" the person == "DORA" the regulation) -- same class of risk as
+    # "c"/"son" fixed in the ROME import, but not excluded: unlike those two
+    # near-ubiquitous French function words, a stray first-name mention is
+    # rare in CV/job text, and the acronym is how real GRC/finance CVs list
+    # it (bare, alongside NIS2/SOX/PCI-DSS with no surrounding context) --
+    # dropping the bare alias would make it undetectable in exactly that
+    # real case. Accepted trade-off, not an oversight.
+    "DORA": ["dora", "digital operational resilience act"],
+    "NIS2": ["nis2", "nis 2", "directive nis2"],
+    "CISA": ["cisa", "certified information systems auditor"],
+    "PCI-DSS": ["pci-dss", "pci dss", "pcidss"],
+    "SMSI": ["smsi", "isms"],
+    "IAM": ["iam", "identity and access management", "gestion des identites et des acces", "gestion des identites"],
+    "PKI": ["pki", "infrastructure a cles publiques", "infrastructures a cles publiques"],
+    "COBIT": ["cobit", "cobit 5", "cobit 5.0", "cobit 2019"],
+    "ISAE 3402": ["isae 3402", "isae3402"],
+    "SOX": ["sox", "sarbanes-oxley", "sarbanes oxley"],
     "Accessibilité web": ["accessibilite", "accessibility", "accessibilite web", "accessibilite numerique",
                           "wcag", "wcag 2", "wcag 2.0", "wcag 2.1", "wcag 2.2", "wcagrgaa",
                           "rgaa", "rgaa 4", "rgaa 4.1", "a11y", "wai-aria", "aria",
