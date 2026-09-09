@@ -4,15 +4,16 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
-from ..auth import authenticate_user, create_access_token, hash_password
+from ..auth import authenticate_user, create_access_token, hash_password, verify_password
 from ..db import SessionLocal
-from ..deps import require_admin
+from ..deps import require_admin, require_superadmin
 from ..models import User
 from ..schemas import (
     AuthLoginRequest,
     AuthLoginResponse,
     UserCreate,
     UserRead,
+    UserSelfUpdate,
     UserUpdate,
 )
 
@@ -38,6 +39,40 @@ def get_me(request: Request) -> UserRead:
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     return UserRead.model_validate(user)
+
+
+@router.patch("/me", response_model=UserRead)
+def update_me(payload: UserSelfUpdate, request: Request) -> UserRead:
+    """Self-service email/password change. Superadmin-only for now: the
+    superadmin account is otherwise fully locked out of PATCH /users/{id}
+    (see the blanket "Superadmin account is protected" guard there), which
+    left it with no way to ever change its own credentials."""
+    current_user = require_superadmin(request)
+
+    if payload.new_email is None and payload.new_password is None:
+        raise HTTPException(status_code=400, detail="Provide new_email and/or new_password")
+
+    with SessionLocal() as session:
+        user = session.get(User, current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if not verify_password(payload.current_password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+        if payload.new_email is not None and payload.new_email != user.email:
+            existing = session.scalar(select(User).where(User.email == payload.new_email))
+            if existing is not None:
+                raise HTTPException(status_code=409, detail="Email already in use")
+            user.email = payload.new_email
+
+        if payload.new_password is not None:
+            user.password_hash = hash_password(payload.new_password)
+
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return UserRead.model_validate(user)
 
 
 @router.get("/users", response_model=list[UserRead])
