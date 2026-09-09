@@ -61,15 +61,31 @@ class Settings(BaseSettings):
     scoring_experience_penalty: float = 0.05
     upload_max_mb: int = 20
     embedding_enabled: bool = True
-    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Multilingual model: all-MiniLM-L6-v2 is trained mostly on English and was
+    # inconsistent with esco_taxonomy.py, which already uses this same model
+    # for skill-to-ESCO linking on the same French text.
+    embedding_model_name: str = "intfloat/multilingual-e5-base"
     embedding_device: str = "cpu"
-    embedding_dim: int = 384
+    embedding_dim: int = 768
     embedding_top_k: int = 10
     embedding_batch_size: int = 16
     # Hybrid skill scoring (F6): when a required skill isn't found literally in
     # the CV, award partial credit based on max embedding cosine similarity to
     # the CV's skills. Disabled -> pure lexical (previous behaviour).
     skill_embedding_enabled: bool = True
+    # Deliberately NOT embedding_model_name: multilingual-e5-base (validated
+    # for full-document/French semantic similarity) fails to discriminate
+    # between short technical skill names -- measured "Python" vs
+    # "Photoshop" at 0.85 cosine similarity (raw, no e5 "query:" prefix;
+    # adding the prefix did not fix it either), well above
+    # skill_embedding_threshold, handing out semantic credit for a total
+    # domain mismatch (caught by CI: test_total_mismatch_scores_low).
+    # all-MiniLM-L6-v2 scores that same pair at 0.35 -- its STS/NLI
+    # training data is itself short-phrase-pair based, matching this
+    # task's regime, unlike e5's longer query/passage retrieval training.
+    # skill_embedding_threshold/max_credit below were tuned against this
+    # model; re-validate them if this ever changes.
+    skill_embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     skill_embedding_threshold: float = 0.6   # min cosine sim to grant any credit
     skill_embedding_max_credit: float = 0.8  # cap: a semantic match never beats exact (1.0)
     structured_lexical_weight: float = 0.18
@@ -107,8 +123,14 @@ class Settings(BaseSettings):
     hybrid_scoring_enabled: bool = True
     hybrid_vector_weight: float = 0.3
     hybrid_lexical_weight: float = 0.7
-    # Cross-encoder model for semantic matching (matcher.py)
-    crossencoder_model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Cross-encoder model for semantic matching (matcher.py). French-native
+    # reranker: the former cross-encoder/ms-marco-MiniLM-L-6-v2 was trained
+    # only on English MS MARCO and was effectively out-of-domain on French
+    # CV/job text, which this component's 40% score weight made costly.
+    # "large" over "base": best published French mmarco benchmark
+    # (MRR@10=35.23 vs 33.4), same MIT-licensed family — the safer accuracy
+    # upgrade at this project's volume (<=50 CV/job pairs, CPU).
+    crossencoder_model_name: str = "antoinelouis/crossencoder-camembert-large-mmarcoFR"
     crossencoder_enabled: bool = True
     # v2 architecture (non-LLM) — all layers ON by default. Each layer falls
     # back gracefully (Docling→PyMuPDF, CamemBERT→spaCy, ESCO→noop, GBM→null)
@@ -126,6 +148,12 @@ class Settings(BaseSettings):
     # Layer 3: ESCO taxonomy. Default points to the Docker volume mount.
     esco_dir: str = "/srv/ai-realtime/esco"
     esco_model_name: str = "intfloat/multilingual-e5-base"
+    # Min cosine similarity to accept an ESCO concept match (EscoIndex.find_skills).
+    # Was hardcoded in esco_taxonomy.py; externalized so it can be tuned per
+    # deployment without a code change (inspired by Nesta ojd_daps_skills,
+    # which externalizes its taxonomy-matching thresholds to a config file
+    # instead of hardcoding them).
+    esco_min_score: float = 0.55
     # When true, build_document_profile populates StructuredDocument.esco_skill_uris
     # by mapping each extracted skill term to its ESCO concept (top-1, score >= 0.55).
     esco_enrich_skills: bool = True

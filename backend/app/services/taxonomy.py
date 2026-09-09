@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import difflib
+import json
 import logging
 import re
 import unicodedata
@@ -94,6 +95,28 @@ _SKILLS: dict[str, list[str]] = {
     "SAP": ["sap", "sap erp", "sap hana", "sap r3", "sap r/3"],
     "Salesforce": ["salesforce", "sfdc", "crm salesforce"],
     "Cybersécurité": ["cybersecurite", "cybersecurity", "securite informatique", "pentest", "securite reseau", "soc", "siem", "owasp", "csrf", "xss"],
+    "ISO 27001": ["iso 27001", "iso27001", "norme iso 27001"],
+    "ISO 27005": ["iso 27005", "iso27005"],
+    "ISO 42001": ["iso 42001", "iso42001"],
+    "EBIOS": ["ebios", "ebios rm", "methode ebios"],
+    # "dora" bare collides with the first name (find_skills folds case, so
+    # "Dora" the person == "DORA" the regulation) -- same class of risk as
+    # "c"/"son" fixed in the ROME import, but not excluded: unlike those two
+    # near-ubiquitous French function words, a stray first-name mention is
+    # rare in CV/job text, and the acronym is how real GRC/finance CVs list
+    # it (bare, alongside NIS2/SOX/PCI-DSS with no surrounding context) --
+    # dropping the bare alias would make it undetectable in exactly that
+    # real case. Accepted trade-off, not an oversight.
+    "DORA": ["dora", "digital operational resilience act"],
+    "NIS2": ["nis2", "nis 2", "directive nis2"],
+    "CISA": ["cisa", "certified information systems auditor"],
+    "PCI-DSS": ["pci-dss", "pci dss", "pcidss"],
+    "SMSI": ["smsi", "isms"],
+    "IAM": ["iam", "identity and access management", "gestion des identites et des acces", "gestion des identites"],
+    "PKI": ["pki", "infrastructure a cles publiques", "infrastructures a cles publiques"],
+    "COBIT": ["cobit", "cobit 5", "cobit 5.0", "cobit 2019"],
+    "ISAE 3402": ["isae 3402", "isae3402"],
+    "SOX": ["sox", "sarbanes-oxley", "sarbanes oxley"],
     "Accessibilité web": ["accessibilite", "accessibility", "accessibilite web", "accessibilite numerique",
                           "wcag", "wcag 2", "wcag 2.0", "wcag 2.1", "wcag 2.2", "wcagrgaa",
                           "rgaa", "rgaa 4", "rgaa 4.1", "a11y", "wai-aria", "aria",
@@ -274,6 +297,48 @@ def _fold(text: str) -> str:
     return nfkd.encode("ascii", "ignore").decode("ascii").lower()
 
 
+_ROME_SKILLS_PATH = Path(__file__).with_name("rome_skills_data.json")
+
+
+@lru_cache(maxsize=1)
+def _rome_skills() -> dict[str, list[str]]:
+    """Bulk skill vocabulary from France Travail's ROME 4.0 'referentiel_savoir'
+    open data export (Licence Ouverte / fr-lo), scoped to concrete
+    professional-knowledge categories (software, tools, standards,
+    regulations, techniques) and excluding diplomas/certifications and
+    domains clearly unrelated to any professional CV (the ROME "savoir"
+    referential — not "competence" — was picked specifically because its
+    labels are short noun phrases like this taxonomy's, unlike ESCO/EMSI
+    whose skill labels are full task sentences and don't lend themselves to
+    exact-phrase matching at all).
+
+    Kept as a bundled, generated JSON file (not hand-maintained) rather than
+    inline in _SKILLS: ~8500 entries would make this module unreviewable,
+    and _build_lookup() below treats it as a strictly lower-priority layer
+    so a hand-curated _SKILLS alias always wins on conflict.
+    """
+    try:
+        with _ROME_SKILLS_PATH.open(encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning("ROME skills data file not found: %s", _ROME_SKILLS_PATH)
+        return {}
+
+
+# Found empirically: the ROME bulk import (unlike the hand-curated _SKILLS
+# above, which was reviewed alias-by-alias) contains a handful of bare
+# 1-2 letter aliases that collide with ordinary French words once the
+# tokenizer splits on punctuation. E.g. "c" -> canonical "C" (the language)
+# matches every "c'est"/"c'était" ("c'" has no apostrophe in the token
+# class, so it tokenizes as bare "c"), and "son" -> canonical "Son" matches
+# the extremely common possessive "son/sa/ses". A single-character alias is
+# excluded categorically (never specific enough to mean a real skill in
+# flowing prose); "son" is excluded by name since it's the only length>=2
+# case found so far. Extend this set if find_skills() regression tests
+# surface more (see test_skill_detection_false_positives.py).
+_ROME_ALIAS_STOPWORDS: frozenset[str] = frozenset({"son"})
+
+
 @lru_cache(maxsize=1)
 def _build_lookup() -> dict[str, str]:
     """Return alias → canonical_name mapping (cached).
@@ -294,6 +359,15 @@ def _build_lookup() -> dict[str, str]:
                     space_key = key.replace("/", " ")
                     if space_key and space_key not in lookup:
                         lookup[space_key] = canonical
+
+    # Lower-priority layer: bulk ROME vocabulary fills gaps only — it can
+    # never override a hand-curated _SKILLS alias set above.
+    for canonical, aliases in _rome_skills().items():
+        for alias in aliases:
+            key = _fold(alias)
+            if key and len(key) >= 2 and key not in _ROME_ALIAS_STOPWORDS and key not in lookup:
+                lookup[key] = canonical
+
     return lookup
 
 

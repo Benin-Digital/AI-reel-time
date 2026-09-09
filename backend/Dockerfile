@@ -43,13 +43,23 @@ RUN python -c "import sentencepiece; print('sentencepiece', sentencepiece.__vers
         m = AutoModelForTokenClassification.from_pretrained('Jean-Baptiste/camembert-ner'); \
         print('model OK:', type(m).__name__)"
 
-# --- Layer 3: sentence-transformer encoders for ESCO + general embeddings ---
+# --- Layer 3: sentence-transformer encoder shared by ESCO + general embeddings ---
 RUN python -c "from sentence_transformers import SentenceTransformer; \
         SentenceTransformer('intfloat/multilingual-e5-base'); \
-        print('multilingual-e5-base OK')" && \
-    python -c "from sentence_transformers import SentenceTransformer; \
+        print('multilingual-e5-base OK')"
+
+# Skill-to-skill semantic credit (matcher.py's _semantic_skill_credit) uses a
+# separate, smaller model: multilingual-e5-base does not discriminate
+# between short technical skill names (see settings.py's
+# skill_embedding_model_name comment) -- all-MiniLM-L6-v2 does.
+RUN python -c "from sentence_transformers import SentenceTransformer; \
         SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); \
         print('all-MiniLM-L6-v2 OK')"
+
+# --- Cross-encoder reranker (matcher.py semantic scoring) ---
+RUN python -c "from sentence_transformers import CrossEncoder; \
+        CrossEncoder('antoinelouis/crossencoder-camembert-large-mmarcoFR'); \
+        print('crossencoder-camembert-large-mmarcoFR OK')"
 
 # --- Layer 1: Docling layout models (~250 MB) ---
 RUN python -c "from docling.utils.model_downloader import download_models; download_models()" \

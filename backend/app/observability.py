@@ -65,6 +65,11 @@ JOB_EMBEDDING_COUNT = Gauge(
     "airealtime_job_embedding_count",
     "Job embedding count",
 )
+ESCO_ENRICH_TERMS_TOTAL = Counter(
+    "airealtime_esco_enrich_terms_total",
+    "Skill terms processed by ESCO enrichment, by outcome",
+    ["outcome"],  # "mapped" | "unmapped" | "error"
+)
 
 
 def record_request(method: str, path: str, status: int, duration_seconds: float) -> None:
