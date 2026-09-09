@@ -16,8 +16,14 @@ en environnement de test, ce fichier teste isolement :
   3. Le degrade gracieux quand l'index n'est pas construit.
   4. Le seuil/tri de l'algorithme de mapping semantique, via un faux index
      FAISS + faux modele deterministes (pas de reseau, pas de vrai modele).
-  5. get_esco_index() : absence/invalidite de AI_REALTIME_ESCO_DIR.
-  6. structured._esco_enrich() : dedup, plafond, degrade gracieux.
+  5. La dedup par competence quand plusieurs lignes FAISS (preferredLabel +
+     altLabels) pointent vers la meme EscoSkill -- necessaire depuis que
+     _build_index() embarque aussi les altLabels dans l'index semantique
+     (avant, seul preferredLabel etait embarque : les synonymes ESCO deja
+     telecharges ne servaient qu'au raccourci de match exact, jamais a la
+     recherche semantique).
+  6. get_esco_index() : absence/invalidite de AI_REALTIME_ESCO_DIR.
+  7. structured._esco_enrich() : dedup, plafond, degrade gracieux.
 """
 from __future__ import annotations
 
@@ -99,6 +105,8 @@ class _FakeModel:
 class _FakeFaiss:
     """Renvoie 3 candidats a scores fixes, quel que soit le vecteur d'entree."""
 
+    ntotal = 3
+
     def search(self, vec, top_k):
         return ([[0.9, 0.6, 0.3]], [[0, 1, 2]])
 
@@ -113,6 +121,7 @@ def _build_fake_semantic_index() -> EscoIndex:
     idx.label_to_skill = {}  # aucun alias exact -> force le chemin semantique
     idx._model = _FakeModel()
     idx._faiss = _FakeFaiss()
+    idx._index_to_skill = [0, 1, 2]  # une seule ligne FAISS par competence ici
     return idx
 
 
@@ -121,6 +130,40 @@ def test_find_skills_applies_explicit_min_score_threshold():
     result = idx.find_skills("une requete", min_score=0.5)
     assert [s.uri for s, _ in result] == ["uri-0", "uri-1"]
     assert [round(score, 2) for _, score in result] == [0.9, 0.6]
+
+
+def test_find_skills_dedupes_multiple_faiss_rows_per_skill():
+    """Depuis que _build_index() embarque aussi les altLabels, une meme
+    EscoSkill peut occuper plusieurs lignes FAISS (une par altLabel qui
+    matche). find_skills() doit renvoyer chaque competence une seule fois,
+    avec son meilleur score, sans que le doublon ne masque une autre
+    competence pertinente derriere lui."""
+    idx = EscoIndex(Path("/unused"), "unused-model-name")
+    idx.skills = [
+        EscoSkill(uri="uri-0", preferred_label="Skill zero", alt_labels=["Zero alt"], description=""),
+        EscoSkill(uri="uri-1", preferred_label="Skill one", alt_labels=[], description=""),
+    ]
+    idx.label_to_skill = {}
+    idx._model = _FakeModel()
+
+    class _FakeFaissWithDuplicateRows:
+        ntotal = 3
+
+        def search(self, vec, top_k):
+            # ligne 0 = preferredLabel de uri-0 (0.9), ligne 1 = son altLabel
+            # "Zero alt" (0.85, un peu moins bon mais toujours au-dessus du
+            # seuil), ligne 2 = uri-1 (0.6).
+            return ([[0.9, 0.85, 0.6]], [[0, 1, 2]])
+
+    idx._faiss = _FakeFaissWithDuplicateRows()
+    idx._index_to_skill = [0, 0, 1]  # lignes 0 et 1 pointent toutes deux vers uri-0
+
+    result = idx.find_skills("une requete", min_score=0.5, top_k=5)
+    assert [s.uri for s, _ in result] == ["uri-0", "uri-1"], (
+        "uri-0 ne doit apparaitre qu'une fois (meilleur score gardé), et "
+        "uri-1 ne doit pas etre masque par le doublon de uri-0"
+    )
+    assert round(result[0][1], 2) == 0.9
 
 
 def test_find_skills_falls_back_to_settings_esco_min_score(settings, monkeypatch):

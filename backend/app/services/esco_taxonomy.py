@@ -50,6 +50,10 @@ class EscoIndex:
         self.label_to_skill: dict[str, EscoSkill] = {}
         self._faiss = None
         self._model = None
+        # Maps a FAISS row -> index into self.skills. Needed because each
+        # skill embeds multiple rows (preferredLabel + every altLabel), so
+        # FAISS row index != skill index once altLabels are embedded too.
+        self._index_to_skill: list[int] = []
 
     def load(self) -> None:
         self._load_csv()
@@ -96,15 +100,33 @@ class EscoIndex:
         # (intfloat/multilingual-e5-base), so this avoids loading a second
         # ~1GB+ copy into the process. See embeddings.py's _model_registry.
         self._model = get_sentence_transformer(self.model_name)
-        labels = [s.preferred_label for s in self.skills]
+
+        # Embed every altLabel too, not just preferredLabel: ESCO ships
+        # synonyms we were downloading but never using for semantic search
+        # (only for the exact-match shortcut in label_to_skill above). A
+        # free-text snippet that phrases a skill the way an altLabel does,
+        # but not like the preferredLabel, previously had no chance of
+        # surfacing via the embedding search at all.
+        texts: list[str] = []
+        self._index_to_skill = []
+        for skill_idx, skill in enumerate(self.skills):
+            texts.append(skill.preferred_label)
+            self._index_to_skill.append(skill_idx)
+            for alt in skill.alt_labels:
+                texts.append(alt)
+                self._index_to_skill.append(skill_idx)
+
         embeddings = self._model.encode(
-            labels, batch_size=64, show_progress_bar=False, normalize_embeddings=True
+            texts, batch_size=64, show_progress_bar=False, normalize_embeddings=True
         )
         arr = np.asarray(embeddings, dtype="float32")
         dim = arr.shape[1]
         self._faiss = faiss.IndexFlatIP(dim)
         self._faiss.add(arr)
-        logger.info("ESCO FAISS index ready: %d vectors, dim=%d", len(self.skills), dim)
+        logger.info(
+            "ESCO FAISS index ready: %d skills, %d vectors (incl. altLabels), dim=%d",
+            len(self.skills), len(texts), dim,
+        )
 
     def find_skills(
         self, text: str, top_k: int = 5, min_score: float | None = None
@@ -121,12 +143,23 @@ class EscoIndex:
             min_score = get_settings().esco_min_score
         import numpy as np
         vec = self._model.encode([text], normalize_embeddings=True)
-        scores, idx = self._faiss.search(np.asarray(vec, dtype="float32"), top_k)
+        # Multiple rows can point to the same skill (preferredLabel + N
+        # altLabels), so over-fetch raw candidates and dedupe by skill below
+        # to still return up to top_k *distinct* skills.
+        raw_k = min(top_k * 5, self._faiss.ntotal)
+        scores, idx = self._faiss.search(np.asarray(vec, dtype="float32"), raw_k)
         results: list[tuple[EscoSkill, float]] = []
+        seen: set[str] = set()
         for score, i in zip(scores[0], idx[0]):
             if i < 0 or float(score) < min_score:
                 continue
-            results.append((self.skills[i], float(score)))
+            skill = self.skills[self._index_to_skill[i]]
+            if skill.uri in seen:
+                continue
+            seen.add(skill.uri)
+            results.append((skill, float(score)))
+            if len(results) >= top_k:
+                break
         return results
 
 
