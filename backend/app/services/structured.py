@@ -179,6 +179,13 @@ _NAME_STOP_WORDS = frozenset([
     "realisation", "realisations", "mission", "missions", "connaissances",
     "competences", "objectifs", "responsabilites", "administration",
     "coordination", "planification", "amelioration", "optimisation",
+    # Education institution words: same letter-spaced-header failure mode as
+    # the French connectors below, but for the "Formation"/"Éducation"
+    # section -- a school name line ("LYCÉE LOUIS ARMAND") can otherwise read
+    # as a plausible 2-3 word capitalised name once its own section header
+    # is letter-spaced and no longer matches _NAME_SECTION_RE.
+    "lycee", "universite", "ecole", "institut", "faculte", "college",
+    "campus", "academie", "baccalaureat",
     # Common product / company names that appear capitalised
     "microsoft", "oracle", "azure", "google", "amazon", "office", "power",
     "sharepoint", "teams", "excel", "windows", "linux", "gitlab", "github",
@@ -188,6 +195,16 @@ _NAME_STOP_WORDS = frozenset([
     "servicenow", "sonarqube", "datadog", "sentry", "grafana", "prometheus",
     "docker", "kubernetes", "terraform", "ansible", "jenkins",
     "mongodb", "redis", "kafka", "rabbitmq", "elasticsearch",
+    # French connectors/articles: never part of a real name, but a bare
+    # short word like "ET" or "DE" satisfies _is_name_word's all-caps/
+    # capitalised-word check just like a real name token would. Without this,
+    # a section title split across capitalised words (e.g. a diploma line
+    # "COMMERCE ET SERVICE") can be mistaken for a two-word name once its
+    # actual header ("É D U C A T I O N") is letter-spaced and no longer
+    # matches _NAME_SECTION_RE as a section marker (see
+    # test_letter_spaced_header_is_not_a_name).
+    "et", "de", "du", "des", "la", "le", "les", "un", "une",
+    "en", "au", "aux", "pour", "avec", "sans", "sur", "dans", "par", "ou",
 ])
 
 
@@ -239,6 +256,24 @@ def _extract_name_rule_based(lines: list[str]) -> str | None:
                 break
         return collected
 
+    def _is_letter_spaced(line: str) -> bool:
+        """True for a decoratively kerned header like "P E L A G I E N J I K I"
+        (a real name/title, one letter per token) -- common CV template style
+        for the name banner. The individual letters can't be reassembled into
+        words from plain extracted text alone (inter-letter and inter-word
+        gaps both collapse to one space), and the same letter-spacing defeats
+        _NAME_SECTION_RE on the section header that would otherwise mark the
+        education/experience content coming after it as off-limits. Once such
+        a line is seen, further scanning reliably picks up an unrelated
+        capitalised phrase instead (a diploma, a school name, a bullet point)
+        rather than the real name -- so treat it as a signal to stop, not a
+        line to skip past."""
+        tokens = line.split()
+        if len(tokens) < 4:
+            return False
+        single_char = sum(1 for t in tokens if len(t) == 1)
+        return single_char / len(tokens) >= 0.6
+
     def _try_segment(segment: str) -> str | None:
         segment = segment.replace('\u2019', "'").replace('\u2018', "'").strip()
         if not segment or len(segment) < 3:
@@ -255,6 +290,8 @@ def _extract_name_rule_based(lines: list[str]) -> str | None:
         line = line.replace('\u2019', "'").replace('\u2018', "'").strip()
         if not line or len(line) < 3 or len(line) > 60:
             continue
+        if _is_letter_spaced(line):
+            return None
         if _NAME_CONTACT_RE.search(line) or _NAME_SECTION_RE.search(line) or _NAME_YEAR_RE.search(line):
             continue
         if re.search(r"\d{3,}", line):

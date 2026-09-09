@@ -37,6 +37,33 @@ def test_action_words_are_not_a_name():
     assert _extract_name_rule_based(["Analyse Conception", "..."]) is None
 
 
+# ── En-tete "espacee lettre par lettre" : ne doit jamais produire un faux nom ──
+
+def test_letter_spaced_header_is_not_a_name():
+    """Regression reelle (production, 2026-09-09) : un CV dont le nom est mis
+    en forme "P E L A G I E N J I K I" (une lettre par mot, style decoratif
+    courant) faisait deux degats en cascade avant ce fix :
+    1. Le vrai nom n'etait jamais lisible (chaque lettre seule < 2 caracteres
+       est rejetee par _collect_name_words).
+    2. Le titre de section "É D U C A T I O N", lui aussi espace, ne
+       correspondait plus a _NAME_SECTION_RE (qui cherche "education" en
+       continu) -- son contenu (diplome, ecole) redevenait alors une cible
+       valide pour l'heuristique de nom, produisant successivement les faux
+       noms "COMMERCE ET" puis "LYCÉE LOUIS ARMAND"."""
+    lines = [
+        "P | N",
+        "P E L A G I E N J I K I",
+        "C O N S U LT A N T E G E S T I O N D E B A S E",
+        "pelagienjiki@yahoo.fr",
+        "É D U C A T I O N",
+        "BACCALAURÉAT",
+        "COMMERCE ET SERVICE",
+        "LYCÉE LOUIS ARMAND /",
+        "Eaubonne, France / 1995",
+    ]
+    assert _extract_name_rule_based(lines) is None
+
+
 # ── Vrais noms : ne doivent pas etre perdus ──────────────────────────────────
 
 def test_real_names_still_detected():
