@@ -17,14 +17,14 @@ Les CVs et les offres d'emploi sont déposés dans des dossiers surveillés ou s
 
 Les poids sont ajustés automatiquement selon le secteur détecté : les postes tech privilégient les compétences techniques, la santé les diplômes, le commercial l'expérience terrain.
 
-**Stack technique :** API REST FastAPI (Python), PostgreSQL + pgvector pour la recherche vectorielle, Redis pour la file de traitement, sentence-transformers pour les embeddings (384 dim), spaCy pour l'extraction d'entités, Tesseract OCR pour les PDFs scannés, et un dashboard Vanilla JS sans framework.
+**Stack technique :** API REST FastAPI (Python), PostgreSQL + pgvector pour la recherche vectorielle, Redis pour la file de traitement, sentence-transformers pour les embeddings (768 dim, multilingue), spaCy pour l'extraction d'entités, Tesseract OCR pour les PDFs scannés, et un dashboard Vanilla JS sans framework.
 
 | Composant | Technologie |
 |-----------|-------------|
 | API | FastAPI + uvicorn |
 | Base de données | PostgreSQL 16 + pgvector |
 | File de messages | Redis Streams |
-| Embeddings | all-MiniLM-L6-v2 (384 dim) |
+| Embeddings | intfloat/multilingual-e5-base (768 dim) |
 | Re-ranking | antoinelouis/crossencoder-camembert-base-mmarcoFR |
 | NER | spaCy (fr_core_news_sm · en_core_web_sm) |
 | OCR | Tesseract (fra+eng) |
@@ -59,7 +59,7 @@ AI Real-Time est une plateforme de recrutement intelligente qui :
 - **Surveille** des dossiers pour détecter l'arrivée de CV et d'offres d'emploi (PDF / DOCX / TXT)
 - **Extrait** le texte brut (pypdf, python-docx, OCR Tesseract en fallback)
 - **Profile** les documents (sections, compétences, expérience, langues) via NER spaCy
-- **Génère** des embeddings vectoriels (sentence-transformers `all-MiniLM-L6-v2`, 384 dim)
+- **Génère** des embeddings vectoriels (sentence-transformers `intfloat/multilingual-e5-base`, 768 dim)
 - **Calcule** un score hybride lexical + sémantique pour chaque paire CV ↔ Offre
 - **Expose** 40+ endpoints REST consommés par un tableau de bord Vanilla JS
 
@@ -70,7 +70,7 @@ graph LR
     C --> D[Event Worker]
     D --> E[Extraction\nPDF · DOCX · OCR]
     E --> F[Profiling\nspaCy NER]
-    F --> G[Embeddings\nall-MiniLM-L6-v2]
+    F --> G[Embeddings\nmultilingual-e5-base]
     F --> H[Scoring hybride\nLexical + Sémantique]
     G --> H
     H --> I[(PostgreSQL\n+ pgvector)]
@@ -93,7 +93,7 @@ flowchart TD
 
     D --> E[Extraction\nPDF · DOCX · OCR]
     D --> F[Profiling\nspaCy NER]
-    D --> G[Embeddings\nall-MiniLM-L6-v2]
+    D --> G[Embeddings\nmultilingual-e5-base]
     D --> H[Scoring hybride\nLexical + Cross-Encoder]
 
     E & F & G & H --> I[(PostgreSQL\n+ pgvector)]
@@ -122,7 +122,7 @@ AI reel-time/
 │   │   ├── observability.py # Métriques Prometheus
 │   │   └── services/
 │   │       ├── extraction.py    # PDF / DOCX / TXT + OCR
-│   │       ├── embeddings.py    # Vecteurs 384-dim
+│   │       ├── embeddings.py    # Vecteurs 768-dim
 │   │       ├── scoring.py       # Score hybride
 │   │       ├── structured.py    # Profiling NER (1060 lignes)
 │   │       ├── matcher.py       # Cross-encoder + scores structurés
@@ -1064,9 +1064,9 @@ AI_REALTIME_CORS_ALLOW_HEADERS=Authorization,Content-Type,X-API-Key
 
 ```bash
 AI_REALTIME_EMBEDDING_ENABLED=true
-AI_REALTIME_EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+AI_REALTIME_EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-base
 AI_REALTIME_EMBEDDING_DEVICE=cpu   # cpu | cuda
-AI_REALTIME_EMBEDDING_DIM=384
+AI_REALTIME_EMBEDDING_DIM=768
 AI_REALTIME_EMBEDDING_BATCH_SIZE=16
 
 AI_REALTIME_NER_ENABLED=true
