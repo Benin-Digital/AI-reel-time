@@ -316,7 +316,7 @@ class CvEmbedding(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     cv_id: Mapped[int] = mapped_column(ForeignKey("cv_documents.id"))
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    embedding: Mapped[list[float]] = mapped_column(Vector(384))
+    embedding: Mapped[list[float]] = mapped_column(Vector(768))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -338,7 +338,7 @@ class JobEmbedding(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("job_documents.id"))
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    embedding: Mapped[list[float]] = mapped_column(Vector(384))
+    embedding: Mapped[list[float]] = mapped_column(Vector(768))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

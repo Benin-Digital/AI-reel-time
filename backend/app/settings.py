@@ -61,9 +61,12 @@ class Settings(BaseSettings):
     scoring_experience_penalty: float = 0.05
     upload_max_mb: int = 20
     embedding_enabled: bool = True
-    embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # Multilingual model: all-MiniLM-L6-v2 is trained mostly on English and was
+    # inconsistent with esco_taxonomy.py, which already uses this same model
+    # for skill-to-ESCO linking on the same French text.
+    embedding_model_name: str = "intfloat/multilingual-e5-base"
     embedding_device: str = "cpu"
-    embedding_dim: int = 384
+    embedding_dim: int = 768
     embedding_top_k: int = 10
     embedding_batch_size: int = 16
     # Hybrid skill scoring (F6): when a required skill isn't found literally in
