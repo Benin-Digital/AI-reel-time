@@ -368,6 +368,12 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class UserSelfUpdate(BaseModel):
+    current_password: str
+    new_email: str | None = None
+    new_password: str | None = Field(default=None, min_length=8)
+
+
 class AuthLoginRequest(BaseModel):
     email: str
     password: str
