@@ -39,7 +39,20 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    mem_limit: 768m
+    # 768m was sized for the original model stack (small English cross-encoder
+    # + all-MiniLM-L6-v2 only). It no longer fits: multilingual-e5-base
+    # (~1.1GB) + crossencoder-camembert-large-mmarcoFR (~1.3GB) +
+    # Jean-Baptiste/camembert-ner (~440MB) + the dedicated skill embedding
+    # model + the ESCO FAISS index (altLabels included) can all be resident
+    # in the same process at once. Confirmed in production via dmesg: the
+    # cgroup OOM killer killed uvicorn twice within 21 minutes at ~768m
+    # (anon-rss+file-rss ~1.1-1.5GB at time of kill), silently dropping the
+    # in-flight matching event after it had already marked the document
+    # "ready" -- so a document could reach "ready" with zero matches and no
+    # visible error. 3072m leaves ample room for this model set plus growth,
+    # while still well under the VPS's 7.6GB total (postgres 512m + redis
+    # 256m + OS leave enough headroom, confirmed via `free -h`).
+    mem_limit: 3072m
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8000/health\").read()'" ]
       interval: 10s
