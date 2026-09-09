@@ -50,8 +50,8 @@ RUN python -c "from sentence_transformers import SentenceTransformer; \
 
 # --- Cross-encoder reranker (matcher.py semantic scoring) ---
 RUN python -c "from sentence_transformers import CrossEncoder; \
-        CrossEncoder('antoinelouis/crossencoder-camembert-base-mmarcoFR'); \
-        print('crossencoder-camembert-base-mmarcoFR OK')"
+        CrossEncoder('antoinelouis/crossencoder-camembert-large-mmarcoFR'); \
+        print('crossencoder-camembert-large-mmarcoFR OK')"
 
 # --- Layer 1: Docling layout models (~250 MB) ---
 RUN python -c "from docling.utils.model_downloader import download_models; download_models()" \
