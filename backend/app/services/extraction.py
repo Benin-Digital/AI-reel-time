@@ -86,11 +86,81 @@ def clean_text(text: str) -> str:
 clean_document_text = clean_text
 
 
-def extract_text_from_pdf(path: Path) -> str:
-    """Extract PDF text via PyMuPDF with layout-aware sorting; OCR fallback for scanned pages.
+def _block_text(block: dict) -> str:
+    """Join a get_text('dict') text block's lines/spans into a string."""
+    lines = []
+    for line in block.get("lines", []):
+        line_text = "".join(span.get("text", "") for span in line.get("spans", []))
+        if line_text.strip():
+            lines.append(line_text)
+    return "\n".join(lines)
 
-    sort=True makes PyMuPDF order text spans by reading position (y then x),
-    which correctly reconstructs multi-column CVs that pypdf/pdfminer mangles.
+
+def _order_blocks_by_column(blocks: list[dict], page_width: float) -> list[dict]:
+    """Reorder text blocks to read a two-column layout column-by-column
+    instead of interleaving by y-position.
+
+    PyMuPDF's get_text(sort=True) orders spans by (y, x), which is correct
+    for single-column text and for side-by-side columns of matching height,
+    but scrambles the common CV template of a short sidebar (name/contact/
+    skills) next to a much taller main body: a sidebar line and a main-body
+    line that happen to sit at a similar y both get emitted at that point,
+    interleaving two unrelated sections mid-sentence (see
+    test_name_section_title.py for a real case this caused: an action verb
+    from the interleaved main body was mistaken for the candidate's name).
+
+    Detects a clean vertical split — every block sits entirely left of or
+    entirely right of the page's horizontal midline, except full-width ones
+    like a name/header banner — and only then reads full-width blocks in
+    their natural top-to-bottom position, then the whole left column top-to-
+    bottom, then the whole right column. Falls back to plain (y, x) order
+    when no clean split exists, so ordinary single-column CVs are unaffected.
+    """
+    if not blocks:
+        return []
+
+    mid = page_width / 2
+    left, right, full = [], [], []
+    for b in blocks:
+        x0, _, x1, _ = b["bbox"]
+        if x1 <= mid:
+            left.append(b)
+        elif x0 >= mid:
+            right.append(b)
+        else:
+            full.append(b)
+
+    # Require both sides to carry a meaningful share of the page's text, not
+    # just count blocks: a genuine sidebar column is very often ONE block
+    # (a whole paragraph), while a single-column CV can have a small block
+    # entirely right of the midline too (a right-aligned date, a page
+    # number) without being a two-column layout at all. Gating on character
+    # share instead avoids reordering (and scrambling) that common
+    # single-column case.
+    total_chars = sum(len(_block_text(b)) for b in blocks) or 1
+    left_chars = sum(len(_block_text(b)) for b in left)
+    right_chars = sum(len(_block_text(b)) for b in right)
+    min_share = 0.15
+    if left_chars < total_chars * min_share or right_chars < total_chars * min_share:
+        return sorted(blocks, key=lambda b: (b["bbox"][1], b["bbox"][0]))
+
+    left.sort(key=lambda b: b["bbox"][1])
+    right.sort(key=lambda b: b["bbox"][1])
+    full.sort(key=lambda b: b["bbox"][1])
+
+    first_col_y = min(left[0]["bbox"][1], right[0]["bbox"][1])
+    header = [b for b in full if b["bbox"][1] < first_col_y]
+    trailer = [b for b in full if b["bbox"][1] >= first_col_y]
+    return header + left + right + trailer
+
+
+def extract_text_from_pdf(path: Path) -> str:
+    """Extract PDF text via PyMuPDF with column-aware ordering; OCR fallback for scanned pages.
+
+    Blocks are read via get_text('dict') (bounding boxes) and reordered by
+    _order_blocks_by_column() rather than PyMuPDF's own sort=True, which
+    handles single-column and matched-height side-by-side text but not an
+    asymmetric sidebar template — see that function's docstring.
 
     The OCR threshold is checked per page, not on the document's combined
     text: a handful of real pages easily clear a document-wide threshold on
@@ -103,7 +173,10 @@ def extract_text_from_pdf(path: Path) -> str:
         page_texts: list[str] = []
         weak_pages: list[int] = []  # 0-indexed pages below the OCR threshold
         for i, page in enumerate(doc):
-            t = page.get_text("text", sort=True)
+            raw = page.get_text("dict")
+            blocks = [b for b in raw.get("blocks", []) if b.get("type") == 0]
+            ordered = _order_blocks_by_column(blocks, raw.get("width") or page.rect.width)
+            t = "\n".join(_block_text(b) for b in ordered)
             page_texts.append(t)
             if len(t.strip()) < settings.ocr_min_text_length:
                 weak_pages.append(i)

@@ -40,11 +40,23 @@ def _restore_settings():
 
 
 class _FakePage:
+    """Mimics fitz.Page.get_text('dict') just enough for extract_text_from_pdf's
+    per-page threshold logic: one block whose text round-trips through
+    _block_text() back to the original string (these tests aren't about
+    column ordering -- see test_pdf_column_extraction.py for that)."""
+
     def __init__(self, text: str):
         self._text = text
 
-    def get_text(self, mode, sort=True):
-        return self._text
+    def get_text(self, mode):
+        blocks = []
+        if self._text:
+            blocks = [{
+                "type": 0,
+                "bbox": (0, 0, 100, 20),
+                "lines": [{"spans": [{"text": self._text}]}],
+            }]
+        return {"width": 200, "height": 800, "blocks": blocks}
 
 
 class _FakeDoc:
