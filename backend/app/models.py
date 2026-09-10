@@ -151,6 +151,13 @@ class JobDocument(Base):
     # tracks the fast default extraction). None = never requested.
     structuring_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     structuring_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Recruiter-curated priority keywords for this offer, one per line.
+    # Distinct from the auto-detected taxonomy skills: some of these terms
+    # (acronyms like "LOD2", "DORA", "TRM") aren't in the skill dictionary
+    # at all, so they're injected directly into required_skill_terms at
+    # match time instead of going through find_skills() -- see
+    # matcher.py::_priority_keyword_terms.
+    priority_keywords: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

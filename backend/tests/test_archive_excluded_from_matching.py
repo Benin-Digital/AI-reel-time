@@ -94,7 +94,7 @@ def test_archived_job_is_excluded_when_a_new_cv_is_added(session_factory, tmp_pa
         return _fake_extraction(path, content_hash)
 
     monkeypatch.setattr(app_main, "_extract_and_persist", fake_extract_and_persist)
-    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text: (77.0, ["Python"]))
+    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text, priority_keywords=None: (77.0, ["Python"]))
 
     app_main._score_against_counterparts(cv_path, "cv")
 
@@ -138,7 +138,7 @@ def test_archived_cv_is_excluded_when_a_new_job_is_added(session_factory, tmp_pa
         return _fake_extraction(path, content_hash)
 
     monkeypatch.setattr(app_main, "_extract_and_persist", fake_extract_and_persist)
-    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text: (77.0, ["Python"]))
+    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text, priority_keywords=None: (77.0, ["Python"]))
 
     app_main._score_against_counterparts(job_path, "job")
 

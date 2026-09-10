@@ -112,7 +112,7 @@ def test_reactivated_cv_still_matches_a_brand_new_job(session_factory, tmp_path,
         return _fake_extraction(path, content_hash)
 
     monkeypatch.setattr(app_main, "_extract_and_persist", fake_extract_and_persist)
-    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text: (77.0, ["Python"]))
+    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text, priority_keywords=None: (77.0, ["Python"]))
 
     app_main._score_against_counterparts(reactivated_cv_path, "cv")
 
@@ -165,7 +165,7 @@ def test_reactivated_job_still_matches_a_brand_new_cv(session_factory, tmp_path,
         return _fake_extraction(path, content_hash)
 
     monkeypatch.setattr(app_main, "_extract_and_persist", fake_extract_and_persist)
-    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text: (77.0, ["Python"]))
+    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text, priority_keywords=None: (77.0, ["Python"]))
 
     app_main._score_against_counterparts(reactivated_job_path, "job")
 

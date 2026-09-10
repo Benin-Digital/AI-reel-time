@@ -566,6 +566,13 @@ class ParsedDocument:
     skill_terms: list[str] = field(default_factory=list)
     required_skill_terms: list[str] = field(default_factory=list)
     nice_skill_terms: list[str] = field(default_factory=list)
+    # Recruiter-curated priority keywords (job side only -- see
+    # JobDocument.priority_keywords). Not populated by parse_document();
+    # set by the caller before scoring, and folded into required_skill_terms
+    # by matcher.py::match_parsed_documents() -- see that function for why
+    # this can't just be find_skills()'d like everything else (some of
+    # these terms, e.g. "LOD2"/"DORA", aren't in the skill taxonomy at all).
+    priority_keyword_terms: list[str] = field(default_factory=list)
     soft_skill_terms: list[str] = field(default_factory=list)
     language_terms: list[str] = field(default_factory=list)
     contract_type: str | None = None
