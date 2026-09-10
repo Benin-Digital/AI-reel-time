@@ -456,7 +456,7 @@ async function _savePriorityKeywords(id) {
       body: JSON.stringify({ keywords: textarea.value }),
       json: true,
     });
-    _setPriorityKeywordsMsg(msg, "Enregistré — recalcul des scores en cours…", "info");
+    _setPriorityKeywordsMsg(msg, "Enregistré, recalcul des scores en cours…", "info");
     // Refresh so the sidebar/list badges (feedback count, etc.) reflect the
     // rescoring this save just triggered, same as after "Relancer l'IA".
     window.dispatchEvent(new CustomEvent("load-matches"));
@@ -467,7 +467,7 @@ async function _savePriorityKeywords(id) {
     // finished by the time this PATCH returned.
     window.dispatchEvent(new CustomEvent("matches-rescoring", {
       detail: {
-        message: "Mots-clés prioritaires enregistrés — les scores de cette offre se recalculent, "
+        message: "Mots-clés prioritaires enregistrés, les scores de cette offre se recalculent, "
           + "ça peut prendre quelques instants.",
       },
     }));
