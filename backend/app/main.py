@@ -1375,7 +1375,13 @@ def _get_or_build_profile(session: Session, extraction: ExtractedText, kind: str
     return profile
 
 
-def _score_against_counterparts(changed_path: Path, role: str) -> None:
+def _score_against_counterparts(changed_path: Path, role: str, force: bool = False) -> None:
+    """force=True bypasses the "content unchanged and already matched"
+    skip below, and the embedding-based shortlist shortcut, so every pair
+    is rescored through the full score_texts() pipeline regardless of
+    whether anything on disk changed. Used by POST /matches/recompute to
+    let a recruiter see the effect of a matcher.py/parser.py/taxonomy.py
+    deploy on already-computed scores, without touching any document."""
     changed_result = _extract_and_persist(changed_path)
     if role == "cv":
         previous_hash = None
@@ -1391,7 +1397,8 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             return
 
         if (
-            previous_hash
+            not force
+            and previous_hash
             and changed_result.content_hash == previous_hash
             and previous_status == "ready"
             and _matched_all_active_counterparts(cv_doc.id, "cv")
@@ -1400,7 +1407,7 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
 
         matched_job_ids: set[int] = set()
         job_distances: dict[int, float] = {}
-        if settings.embedding_enabled:
+        if settings.embedding_enabled and not force:
             matched_job_ids, job_distances = _vector_match_cv(cv_doc, changed_result)
 
         changed_text = changed_result.extracted_text or ""
@@ -1490,7 +1497,8 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
                 logger.exception("Failed to auto-create JobOffer from file: %s", exc)
 
         if (
-            previous_hash
+            not force
+            and previous_hash
             and changed_result.content_hash == previous_hash
             and previous_status == "ready"
             and _matched_all_active_counterparts(job_doc.id, "job")
@@ -1499,7 +1507,7 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
 
         matched_cv_ids: set[int] = set()
         cv_distances: dict[int, float] = {}
-        if settings.embedding_enabled:
+        if settings.embedding_enabled and not force:
             matched_cv_ids, cv_distances = _vector_match_job(job_doc, changed_result)
 
         changed_text = changed_result.extracted_text or ""
@@ -1568,6 +1576,10 @@ def _process_watch_event(event: WatchEvent) -> None:
 
     if event.event_type == "structure":
         _structure_document(event.path, role)
+        return
+
+    if event.event_type == "rescore":
+        _score_against_counterparts(event.path, role, force=True)
         return
 
     _score_against_counterparts(event.path, role)
@@ -1853,6 +1865,42 @@ def admin_reextract(request: Request) -> dict[str, object]:
             queued.append(str(path))
         except Exception as exc:
             logger.warning("reextract: failed to queue %s: %s", path, exc)
+    return {"queued": len(queued), "files": queued}
+
+
+@app.post("/matches/recompute")
+def recompute_matches(request: Request) -> dict[str, object]:
+    """Force a full rescoring of every active CV against every active job
+    with the current matching code, bypassing the "content unchanged and
+    already matched" optimization that normally skips a document with
+    nothing new to process.
+
+    Extraction is unaffected -- unchanged files still hit the extraction
+    cache (see _extract_and_persist) -- only the scoring step reruns, and
+    it updates each pair's existing MatchResult row in place (same
+    cv_id/job_id upsert as automatic ingestion), so any feedback already
+    left on a match stays attached to it.
+
+    Use this right after deploying a change to matcher.py, parser.py, or
+    taxonomy.py to see its effect on already-computed scores without
+    touching or reuploading any document. Only accessible to admins:
+    rescoring the whole active library runs the cross-encoder on every
+    pair, which is not something to trigger by accident.
+    """
+    _require_admin(request)
+    with SessionLocal() as session:
+        active_cv_paths = session.scalars(
+            select(CvDocument.path).where(CvDocument.session_id.is_(None))
+        ).all()
+
+    queued: list[str] = []
+    for raw_path in active_cv_paths:
+        path = Path(raw_path)
+        try:
+            _on_watch_event(WatchEvent(path=path, event_type="rescore", observed_at=time()))
+            queued.append(str(path))
+        except Exception as exc:
+            logger.warning("recompute: failed to queue %s: %s", path, exc)
     return {"queued": len(queued), "files": queued}
 
 
