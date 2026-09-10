@@ -1,9 +1,11 @@
 import { safeFetch } from "../api.js";
 import { $, setBanner, escapeHtml } from "../utils/dom.js";
-import { store } from "../store.js";
+import { store, persistAuth, setStore } from "../store.js";
+import { updateAuthUi } from "../auth.js";
 
 const ADMIN_ROLES = new Set(["admin", "superadmin"]);
 const canManage = () => store.authUser && ADMIN_ROLES.has(store.authUser.role);
+const isSuperadmin = () => store.authUser?.role === "superadmin";
 
 export function initAdmin() {
   $("#adminCreateUserForm")?.addEventListener("submit", async (e) => {
@@ -53,8 +55,49 @@ export function initAdmin() {
     }
   });
 
+  $("#adminSelfUpdateForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("#adminSelfUpdateMsg");
+    const btn = $("#adminSelfUpdateButton");
+    setBanner(msg, "");
+
+    const currentPassword = $("#selfUpdateCurrentPassword")?.value ?? "";
+    const newEmail    = $("#selfUpdateNewEmail")?.value.trim();
+    const newPassword = $("#selfUpdateNewPassword")?.value;
+
+    if (!newEmail && !newPassword) {
+      setBanner(msg, "Renseignez un nouvel email et/ou un nouveau mot de passe.", "error");
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = "Mise à jour…"; }
+
+    try {
+      const updated = await safeFetch("/auth/me", {
+        method: "PATCH",
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_email:    newEmail || null,
+          new_password: newPassword || null,
+        }),
+        json: true,
+      });
+      persistAuth(store.authToken, updated);
+      setStore({ authUser: updated });
+      updateAuthUi();
+      setBanner(msg, "Identifiants mis à jour.", "success");
+      e.target.reset();
+    } catch (err) {
+      setBanner(msg, err.message, "error");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "Mettre à jour"; }
+    }
+  });
+
   window.addEventListener("load-admin", () => {
     if (canManage()) _loadUsers();
+    const card = $("#adminSelfCredentialsCard");
+    if (card) card.hidden = !isSuperadmin();
   });
 }
 

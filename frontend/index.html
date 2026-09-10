@@ -676,6 +676,35 @@
                 <div class="stack" id="adminUsersList"></div>
               </div>
             </div>
+
+            <div class="card" id="adminSelfCredentialsCard" style="margin-top:var(--space-4)" hidden>
+              <div class="card__header">
+                <div class="card__title">Mes identifiants</div>
+              </div>
+              <p class="text-sm text-muted" style="margin-bottom:var(--space-4)">
+                Réservé au superadmin : le compte superadmin est protégé contre toute
+                modification par un autre compte, y compris le vôtre depuis la liste
+                ci-dessus. C'est ici que vous changez votre propre email ou mot de passe.
+              </p>
+              <form id="adminSelfUpdateForm" class="stack" style="gap:var(--space-4)">
+                <div class="form-group">
+                  <label class="form-label" for="selfUpdateCurrentPassword">Mot de passe actuel *</label>
+                  <input id="selfUpdateCurrentPassword" type="password" placeholder="Mot de passe actuel" required autocomplete="current-password" />
+                </div>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label class="form-label" for="selfUpdateNewEmail">Nouvel email</label>
+                    <input id="selfUpdateNewEmail" type="email" placeholder="Laisser vide pour ne pas changer" autocomplete="email" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="selfUpdateNewPassword">Nouveau mot de passe</label>
+                    <input id="selfUpdateNewPassword" type="password" placeholder="8 caractères min., laisser vide sinon" autocomplete="new-password" />
+                  </div>
+                </div>
+                <button class="btn btn--primary" type="submit" id="adminSelfUpdateButton" style="align-self:flex-start">Mettre à jour</button>
+                <div id="adminSelfUpdateMsg" class="banner" hidden role="alert"></div>
+              </form>
+            </div>
           </section>
 
         </main>
