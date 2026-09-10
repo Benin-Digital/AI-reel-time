@@ -222,6 +222,65 @@
                 <div class="metric-card__hint">statut traitement</div>
               </div>
             </div>
+
+            <div class="view__header" style="margin-top:var(--space-6)">
+              <div>
+                <h2 class="card__title" style="margin:0">État actuel</h2>
+                <p class="view__subtitle">Ce qui est réellement actif sur la plateforme en ce moment.</p>
+              </div>
+            </div>
+            <div class="state-grid" id="dashboardStateGrid">
+              <div class="chart-card">
+                <div class="chart-card__title">CV</div>
+                <div class="donut" id="cvStateDonut">
+                  <svg viewBox="0 0 36 36">
+                    <circle class="donut__bg" cx="18" cy="18" r="15.9155"></circle>
+                    <circle class="donut__fill donut__fill--cv" cx="18" cy="18" r="15.9155" stroke-dasharray="0 100" stroke-dashoffset="25"></circle>
+                  </svg>
+                  <div class="donut__center">
+                    <span class="donut__value" id="cvStateActiveValue">–</span>
+                    <span class="donut__label">actifs</span>
+                  </div>
+                </div>
+                <div class="chart-card__legend">
+                  <span class="legend-item"><i class="legend-dot legend-dot--cv"></i>Actifs : <strong id="cvStateActiveText">–</strong></span>
+                  <span class="legend-item"><i class="legend-dot legend-dot--muted"></i>Archivés : <strong id="cvStateArchivedText">–</strong></span>
+                </div>
+              </div>
+              <div class="chart-card">
+                <div class="chart-card__title">Offres</div>
+                <div class="donut" id="jobStateDonut">
+                  <svg viewBox="0 0 36 36">
+                    <circle class="donut__bg" cx="18" cy="18" r="15.9155"></circle>
+                    <circle class="donut__fill donut__fill--job" cx="18" cy="18" r="15.9155" stroke-dasharray="0 100" stroke-dashoffset="25"></circle>
+                  </svg>
+                  <div class="donut__center">
+                    <span class="donut__value" id="jobStateActiveValue">–</span>
+                    <span class="donut__label">actives</span>
+                  </div>
+                </div>
+                <div class="chart-card__legend">
+                  <span class="legend-item"><i class="legend-dot legend-dot--job"></i>Actives : <strong id="jobStateActiveText">–</strong></span>
+                  <span class="legend-item"><i class="legend-dot legend-dot--muted"></i>Archivées : <strong id="jobStateArchivedText">–</strong></span>
+                </div>
+              </div>
+              <div class="chart-card chart-card--wide">
+                <div class="chart-card__title">Répartition des scores (correspondances actives)</div>
+                <div class="score-distribution" id="scoreDistributionBar">
+                  <div class="score-distribution__bar">
+                    <div class="score-distribution__segment score-distribution__segment--high" id="scoreDistHigh" style="width:0%"></div>
+                    <div class="score-distribution__segment score-distribution__segment--mid" id="scoreDistMid" style="width:0%"></div>
+                    <div class="score-distribution__segment score-distribution__segment--low" id="scoreDistLow" style="width:0%"></div>
+                  </div>
+                </div>
+                <div class="chart-card__legend">
+                  <span class="legend-item"><i class="legend-dot legend-dot--high"></i>Fort : <strong id="scoreDistHighText">–</strong></span>
+                  <span class="legend-item"><i class="legend-dot legend-dot--mid"></i>Moyen : <strong id="scoreDistMidText">–</strong></span>
+                  <span class="legend-item"><i class="legend-dot legend-dot--low"></i>À vérifier : <strong id="scoreDistLowText">–</strong></span>
+                </div>
+              </div>
+            </div>
+
             <div class="dashboard-logo-area">
               <img src="./cropped-Benin-digital-182.png" alt="Bénin Digital" class="dashboard-logo" />
             </div>

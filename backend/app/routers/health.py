@@ -67,11 +67,54 @@ def metrics(request: Request) -> dict[str, float | int | bool | str | None]:
         events = session.scalar(select(func.count()).select_from(EventLog))
         extractions = session.scalar(select(func.count()).select_from(ExtractedText))
         scores = session.scalar(select(func.count()).select_from(ScoreResult))
+
+        # "event_count"/"extraction_count"/"score_count" above are lifetime
+        # totals -- they only ever grow and say nothing about the platform's
+        # current state (archiving doesn't delete history), which read as
+        # a "primitive", uninformative dashboard. These give an actual
+        # snapshot: how much is active right now, vs sitting in an archive.
+        active_cv_count = session.scalar(
+            select(func.count()).select_from(CvDocument).where(CvDocument.session_id.is_(None))
+        ) or 0
+        archived_cv_count = session.scalar(
+            select(func.count()).select_from(CvDocument).where(CvDocument.session_id.is_not(None))
+        ) or 0
+        active_job_count = session.scalar(
+            select(func.count()).select_from(JobDocument).where(JobDocument.session_id.is_(None))
+        ) or 0
+        archived_job_count = session.scalar(
+            select(func.count()).select_from(JobDocument).where(JobDocument.session_id.is_not(None))
+        ) or 0
+
+        # Score tiers among currently-active matches only, using the same
+        # thresholds as the "Fort"/"Moyen"/"À vérifier" chips shown on every
+        # match card (frontend's scoreTone()) -- so the dashboard's summary
+        # is never inconsistent with what a recruiter sees when they click
+        # into Correspondances.
+        active_match_rows = session.execute(
+            select(MatchResult.score)
+            .select_from(MatchResult)
+            .join(CvDocument, MatchResult.cv_id == CvDocument.id)
+            .join(JobDocument, MatchResult.job_id == JobDocument.id)
+            .where(CvDocument.session_id.is_(None), JobDocument.session_id.is_(None))
+        ).scalars().all()
+    score_high = sum(1 for s in active_match_rows if s >= 80)
+    score_mid = sum(1 for s in active_match_rows if 60 <= s < 80)
+    score_low = sum(1 for s in active_match_rows if s < 60)
+
     return {
         "uptime_seconds": uptime,
         "event_count": int(events or 0),
         "extraction_count": int(extractions or 0),
         "score_count": int(scores or 0),
+        "active_cv_count": int(active_cv_count),
+        "archived_cv_count": int(archived_cv_count),
+        "active_job_count": int(active_job_count),
+        "archived_job_count": int(archived_job_count),
+        "active_match_count": len(active_match_rows),
+        "score_high_count": score_high,
+        "score_mid_count": score_mid,
+        "score_low_count": score_low,
         "redis_available": bool(queue_status.get("redis_available", False)),
         "redis_queue_length": int(queue_status.get("redis_queue_length", 0)),
         "memory_queue_length": int(queue_status.get("memory_queue_length", 0)),
