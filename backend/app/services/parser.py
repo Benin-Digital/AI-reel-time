@@ -365,14 +365,28 @@ _ONGOING_RE = re.compile(_ONGOING, re.IGNORECASE)
 
 def _merge_intervals(intervals: list[tuple[int, int]]) -> int:
     """Total number of years covered by a set of [start, end] year intervals,
-    merging overlaps so parallel jobs are not double-counted."""
+    merging overlaps so parallel jobs are not double-counted.
+
+    The regex feeding this only captures calendar years, not months, so a
+    mission entirely within one year (e.g. "01/2018 - 07/2018") becomes the
+    zero-length interval (2018, 2018). A consulting CV built from many such
+    short back-to-back missions -- common in French IT/finance CVs -- used
+    to compute a total near 0 or 1 year on a ~20-year career: consecutive
+    single-year missions like (2017,2017) and (2018,2018) don't overlap and
+    aren't "contiguous" by a strict start <= previous_end check (2018 >
+    2017), so each contributed 0 to the sum instead of merging into a
+    running total. Treating a 1-year gap as still-contiguous fixes this: it
+    slightly over-merges genuine one-year employment gaps, but that's a far
+    smaller error than collapsing a decade of continuous short missions
+    to ~0.
+    """
     if not intervals:
         return 0
     ordered = sorted(intervals)
     merged: list[list[int]] = [list(ordered[0])]
     for start, end in ordered[1:]:
         last = merged[-1]
-        if start <= last[1]:          # overlap or contiguous
+        if start <= last[1] + 1:      # overlap, contiguous, or a 1-year gap
             last[1] = max(last[1], end)
         else:
             merged.append([start, end])
