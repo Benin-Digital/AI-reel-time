@@ -196,3 +196,52 @@ def test_self_match_scores_near_perfect_with_realistic_semantic(monkeypatch):
     assert result.score >= 80, (
         f"self-match avec cross-encoder realiste attendu >= 80, obtenu {result.score}"
     )
+
+
+def test_low_skill_coverage_caps_score_even_with_perfect_semantic(monkeypatch):
+    """Trouve en production sur une offre "Data Analyst Expert SAS" : trois
+    CV ne recoupant qu'une minorite des competences requises (l'outil nomme
+    par l'offre, SAS, absent des trois -- SQL absent de deux d'entre eux)
+    ont quand meme obtenu un score de 93%+ ("Fort"), l'explication du match
+    admettant elle-meme ces competences comme manquantes. Cause : semantic
+    (poids 0.40) et les autres composantes (experience/education/langues/
+    contrat, ici toutes favorables) compensaient une couverture de
+    competences a ~57%.
+
+    Isole le cas au maximum : semantique forcee a 1.0 (similarite parfaite)
+    et toutes les autres composantes forcees a leur valeur la plus
+    favorable, pour verifier qu'une couverture de competences a 4/7 ne peut
+    plus a elle seule produire un score "Fort".
+    """
+    monkeypatch.setattr(matcher, "_cross_encode", lambda query, document: 1.0)
+    cv = parser.ParsedDocument(
+        kind="cv",
+        domain="general",
+        raw_text="",
+        cleaned_text="",
+        skill_terms=["Reporting", "Documentation technique", "Service client", "Communication"],
+        experience_years=3,
+        education_text="Bac+5",
+        language_terms=["francais"],
+        contract_type="CDI",
+    )
+    job = parser.ParsedDocument(
+        kind="job",
+        domain="general",
+        raw_text="",
+        cleaned_text="",
+        required_skill_terms=[
+            "SAS (logiciel)", "SQL", "Controle qualite", "Reporting",
+            "Documentation technique", "Service client", "Communication",
+        ],
+        experience_years=3,
+        education_text="Bac+5",
+        language_terms=["francais"],
+        contract_type="CDI",
+    )
+    result = matcher.match_parsed_documents(cv, job)
+    assert result.score_skills < 0.6, "4 competences requises sur 7 recoupees seulement"
+    assert result.score < 80, (
+        f"couverture de competences a 4/7 meme avec semantique et tout le "
+        f"reste parfaits doit rester sous le seuil 'Fort', obtenu {result.score}"
+    )
