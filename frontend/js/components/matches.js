@@ -87,6 +87,21 @@ export function initMatches() {
     _load();
   });
 
+  // Fired after saving an offer's priority keywords (job-library.js): that
+  // save queues the exact same kind of background rescoring as "Relancer
+  // l'IA", but from a different page, so give it the same visible banner +
+  // live polling instead of leaving this page looking frozen until a manual
+  // refresh happens to land after the backend finishes.
+  window.addEventListener("matches-rescoring", (e) => {
+    const msg = $("#matchesRecomputeMsg");
+    setBanner(
+      msg,
+      e.detail?.message || "Recalcul en cours… les scores se mettront à jour au fur et à mesure.",
+      "info"
+    );
+    _pollAfterRecompute();
+  });
+
   // Dashboard "meilleure correspondance active" widget -- same card, same
   // actions (voir CV/offre, analyser, évaluer) as the Correspondances page,
   // wired through the same handlers via delegation on its own container.
@@ -261,9 +276,13 @@ function _pollAfterRecompute() {
   let ticks = 0;
   const tick = () => {
     ticks++;
+    // Keep ticking even while another panel is open (e.g. the recruiter
+    // triggered this from the offer's priority-keywords save, not from this
+    // page) -- only skip the reload itself when it wouldn't be visible, so
+    // the list is already fresh whenever they come back to Correspondances.
     const stillOnThisPanel = !document.querySelector('.view[data-panel="matches"]')?.hidden;
     if (stillOnThisPanel) _load();
-    if (ticks < _RECOMPUTE_POLL_TICKS && stillOnThisPanel) setTimeout(tick, _RECOMPUTE_POLL_MS);
+    if (ticks < _RECOMPUTE_POLL_TICKS) setTimeout(tick, _RECOMPUTE_POLL_MS);
   };
   setTimeout(tick, _RECOMPUTE_POLL_MS);
 }
