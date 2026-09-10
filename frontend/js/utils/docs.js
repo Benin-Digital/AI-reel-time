@@ -143,18 +143,44 @@ export function renderDocDetail(doc, kind) {
     : "";
 
   const previewId = `docPreview-${kind}-${escapeHtml(String(doc.id))}`;
+  const docId = escapeHtml(String(doc.id));
+
+  // Recruiter-curated priority keywords -- job offers only (see
+  // JobDocument.priority_keywords). Real offers observed in production
+  // each come with a hand-picked shortlist of the terms that matter most
+  // for that specific offer, often acronyms the general skill taxonomy
+  // doesn't recognize at all (LOD2, DORA, TRM) -- see matcher.py's
+  // _apply_priority_keywords for how these feed into scoring.
+  const priorityKeywordsHtml = kind === "job" ? `
+  <div class="card card--flat" style="padding:var(--space-4)">
+    <div class="card__title text-sm" style="margin-bottom:var(--space-2)">Mots-clés prioritaires</div>
+    <p class="text-xs text-muted" style="margin-bottom:var(--space-3)">
+      Un mot-clé par ligne. Ils comptent comme compétences requises au même titre
+      que celles détectées automatiquement, même s'ils ne figurent pas dans le
+      dictionnaire de compétences (ex. sigles métier).
+    </p>
+    <textarea id="priorityKeywords-${docId}" rows="5" class="input" style="resize:vertical"
+      placeholder="Un mot-clé par ligne…">${escapeHtml(doc.priority_keywords ?? "")}</textarea>
+    <div style="display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-3);flex-wrap:wrap">
+      <button class="btn btn--primary btn--sm" data-action="save-priority-keywords" data-doc-id="${docId}">Enregistrer</button>
+      <button class="btn btn--ghost btn--sm" data-action="import-priority-keywords" data-doc-id="${docId}">Importer un fichier</button>
+      <input type="file" accept=".pdf,.docx,.txt" hidden id="priorityKeywordsFile-${docId}" data-doc-id="${docId}" />
+      <span class="text-xs text-muted" id="priorityKeywordsMsg-${docId}"></span>
+    </div>
+  </div>` : "";
 
   return `
 <div class="stack" style="gap:var(--space-4)">
   <div style="display:flex;justify-content:flex-end;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1);flex-wrap:wrap">
     ${structuringBadge}
-    <button class="btn btn--ghost btn--sm" data-action="preview-pdf" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}">${pdfSvg}Aperçu PDF</button>
-    <button class="btn btn--ghost btn--sm" data-action="preview-parsed-pdf" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}">${structuredSvg}PDF structuré</button>
-    <button class="btn btn--ghost btn--sm" data-action="deep-structure" data-doc-id="${escapeHtml(String(doc.id))}" data-kind="${kind}" ${structuringDisabled}>${deepStructureSvg}${structuringLabel}</button>
+    <button class="btn btn--ghost btn--sm" data-action="preview-pdf" data-doc-id="${docId}" data-kind="${kind}">${pdfSvg}Aperçu PDF</button>
+    <button class="btn btn--ghost btn--sm" data-action="preview-parsed-pdf" data-doc-id="${docId}" data-kind="${kind}">${structuredSvg}PDF structuré</button>
+    <button class="btn btn--ghost btn--sm" data-action="deep-structure" data-doc-id="${docId}" data-kind="${kind}" ${structuringDisabled}>${deepStructureSvg}${structuringLabel}</button>
   </div>
   ${structuringErrorHtml}
   ${structuringWaitHtml}
   ${errorHtml}
+  ${priorityKeywordsHtml}
   <div class="doc-preview" id="${previewId}">
     <div class="skeleton doc-preview__frame"></div>
   </div>

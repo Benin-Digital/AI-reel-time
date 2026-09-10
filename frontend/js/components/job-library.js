@@ -200,6 +200,18 @@ async function _loadDetail(id) {
         }
       });
     }
+
+    // wire priority-keywords save/import (see renderDocDetail, job side only)
+    const savePriorityBtn = detail.querySelector("[data-action='save-priority-keywords']");
+    if (savePriorityBtn) {
+      savePriorityBtn.addEventListener("click", () => _savePriorityKeywords(id));
+    }
+    const importPriorityBtn = detail.querySelector("[data-action='import-priority-keywords']");
+    const priorityFileInput = document.getElementById(`priorityKeywordsFile-${id}`);
+    if (importPriorityBtn && priorityFileInput) {
+      importPriorityBtn.addEventListener("click", () => priorityFileInput.click());
+      priorityFileInput.addEventListener("change", () => _extractPriorityKeywords(id, priorityFileInput));
+    }
   } catch (err) {
     if (err.name !== "AuthError") {
       detail.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${err.message}</div></div>`;
@@ -351,5 +363,74 @@ async function _handleDelete(filename) {
     setTimeout(() => window.dispatchEvent(new CustomEvent("load-matches")), 2000);
   } catch (err) {
     setBanner($("#uploadJobStatus"), err.message, "error");
+  }
+}
+
+// Inline status text next to the save/import buttons -- a plain <span>,
+// not a .banner block (setBanner would overwrite its layout classes).
+function _setPriorityKeywordsMsg(el, text, tone = "muted") {
+  if (!el) return;
+  el.textContent = text;
+  el.className = `text-xs text-${tone}`;
+}
+
+async function _savePriorityKeywords(id) {
+  const textarea = document.getElementById(`priorityKeywords-${id}`);
+  const btn      = document.querySelector(`[data-action='save-priority-keywords'][data-doc-id="${id}"]`);
+  const msg      = document.getElementById(`priorityKeywordsMsg-${id}`);
+  if (!textarea) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = "Enregistrement…"; }
+  _setPriorityKeywordsMsg(msg, "");
+  try {
+    await safeFetch(`/job-documents/${id}/priority-keywords`, {
+      method: "PATCH",
+      body: JSON.stringify({ keywords: textarea.value }),
+      json: true,
+    });
+    _setPriorityKeywordsMsg(msg, "Enregistré — les scores de cette offre se recalculent.", "success");
+    // Refresh so the sidebar/list badges (feedback count, etc.) reflect the
+    // rescoring this save just triggered, same as after "Relancer l'IA".
+    window.dispatchEvent(new CustomEvent("load-matches"));
+  } catch (err) {
+    _setPriorityKeywordsMsg(msg, err.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Enregistrer"; }
+  }
+}
+
+async function _extractPriorityKeywords(id, fileInput) {
+  const file = fileInput.files?.[0];
+  fileInput.value = ""; // allow re-selecting the same file later
+  if (!file) return;
+
+  const textarea = document.getElementById(`priorityKeywords-${id}`);
+  const msg      = document.getElementById(`priorityKeywordsMsg-${id}`);
+  if (!textarea) return;
+
+  const ext = `.${file.name.split(".").pop().toLowerCase()}`;
+  if (!SUPPORTED.includes(ext)) {
+    _setPriorityKeywordsMsg(msg, `Format non supporté (${SUPPORTED.join(", ")})`, "error");
+    return;
+  }
+  if (file.size > MAX_MB * 1024 * 1024) {
+    _setPriorityKeywordsMsg(msg, `Fichier trop volumineux (max ${MAX_MB} Mo)`, "error");
+    return;
+  }
+
+  _setPriorityKeywordsMsg(msg, `Lecture de ${file.name}…`);
+  try {
+    const fd = new FormData();
+    fd.append("upload", file, file.name);
+    const result = await safeFetch(`/job-documents/${id}/priority-keywords/extract`, {
+      method: "POST",
+      body: fd,
+    });
+    // Pre-fills the textarea only -- the recruiter reviews/edits, then
+    // clicks "Enregistrer" themselves. Nothing is saved by this call.
+    textarea.value = result.keywords;
+    _setPriorityKeywordsMsg(msg, "Relisez la liste puis cliquez sur Enregistrer.");
+  } catch (err) {
+    _setPriorityKeywordsMsg(msg, err.message, "error");
   }
 }
