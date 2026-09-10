@@ -841,6 +841,22 @@ select:disabled {
   animation: spin 0.7s linear infinite;
 }
 
+/* Same spinner, but for inline text (a compact status line next to a
+   button) that doesn't warrant the full block/border/background of a
+   .banner -- e.g. the priority-keywords save confirmation in the job
+   detail pane. */
+.spinner-inline {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: var(--space-2);
+  vertical-align: -1px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }

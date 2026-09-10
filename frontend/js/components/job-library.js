@@ -1,5 +1,5 @@
 import { safeFetch, fetchBlob } from "../api.js";
-import { $, setBanner, openModal } from "../utils/dom.js";
+import { $, setBanner, openModal, escapeHtml } from "../utils/dom.js";
 import { store, setStore } from "../store.js";
 import { navigateTo } from "../router.js";
 import { openDeleteConfirm } from "../utils/upload.js";
@@ -370,8 +370,13 @@ async function _handleDelete(filename) {
 // not a .banner block (setBanner would overwrite its layout classes).
 function _setPriorityKeywordsMsg(el, text, tone = "muted") {
   if (!el) return;
-  el.textContent = text;
   el.className = `text-xs text-${tone}`;
+  // "info" means a background rescore just got queued -- a spinner makes
+  // that state read as "working" instead of looking identical to a plain
+  // static confirmation (see the same treatment on .banner--info).
+  el.innerHTML = tone === "info"
+    ? `<span class="spinner-inline"></span>${escapeHtml(text)}`
+    : escapeHtml(text);
 }
 
 async function _savePriorityKeywords(id) {
@@ -388,10 +393,21 @@ async function _savePriorityKeywords(id) {
       body: JSON.stringify({ keywords: textarea.value }),
       json: true,
     });
-    _setPriorityKeywordsMsg(msg, "Enregistré — les scores de cette offre se recalculent.", "success");
+    _setPriorityKeywordsMsg(msg, "Enregistré — recalcul des scores en cours…", "info");
     // Refresh so the sidebar/list badges (feedback count, etc.) reflect the
     // rescoring this save just triggered, same as after "Relancer l'IA".
     window.dispatchEvent(new CustomEvent("load-matches"));
+    // This queues the same kind of background rescoring as "Relancer l'IA"
+    // (_on_watch_event(..., event_type="rescore")), just from this page --
+    // give it the same live-updating banner + polling on Correspondances
+    // instead of a one-off refresh that only shows whatever had already
+    // finished by the time this PATCH returned.
+    window.dispatchEvent(new CustomEvent("matches-rescoring", {
+      detail: {
+        message: "Mots-clés prioritaires enregistrés — les scores de cette offre se recalculent, "
+          + "ça peut prendre quelques instants.",
+      },
+    }));
   } catch (err) {
     _setPriorityKeywordsMsg(msg, err.message, "error");
   } finally {

@@ -155,9 +155,11 @@ export function renderDocDetail(doc, kind) {
   <div class="card card--flat" style="padding:var(--space-4)">
     <div class="card__title text-sm" style="margin-bottom:var(--space-2)">Mots-clés prioritaires</div>
     <p class="text-xs text-muted" style="margin-bottom:var(--space-3)">
-      Un mot-clé par ligne. Ils comptent comme compétences requises au même titre
-      que celles détectées automatiquement, même s'ils ne figurent pas dans le
-      dictionnaire de compétences (ex. sigles métier).
+      Un mot-clé par ligne. Ils comptent séparément des compétences détectées
+      automatiquement, avec leur propre score ("X/Y mots-clés prioritaires
+      trouvés") affiché sur chaque correspondance — un CV ne peut pas
+      compenser un mot-clé prioritaire manquant avec du vocabulaire générique.
+      Facultatif : sans mot-clé renseigné, le matching fonctionne comme avant.
     </p>
     <textarea id="priorityKeywords-${docId}" rows="5" class="input" style="resize:vertical"
       placeholder="Un mot-clé par ligne…">${escapeHtml(doc.priority_keywords ?? "")}</textarea>
