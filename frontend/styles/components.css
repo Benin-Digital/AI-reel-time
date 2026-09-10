@@ -444,9 +444,6 @@ select:disabled {
 .legend-dot--cv     { background: var(--color-primary); }
 .legend-dot--job    { background: var(--color-info); }
 .legend-dot--muted  { background: var(--border-default); }
-.legend-dot--high   { background: var(--tone-high); }
-.legend-dot--mid    { background: var(--tone-mid); }
-.legend-dot--low    { background: var(--tone-low); }
 .legend-dot--accept { background: var(--color-success); }
 .legend-dot--review { background: var(--color-warning); }
 .legend-dot--reject { background: var(--color-error); }
@@ -499,22 +496,6 @@ select:disabled {
   color: var(--text-muted);
   margin-top: 2px;
 }
-
-/* Score distribution: one bar, three proportional segments */
-.score-distribution__bar {
-  display: flex;
-  height: 28px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--border-subtle);
-}
-.score-distribution__segment {
-  height: 100%;
-  transition: width var(--ease-slow);
-}
-.score-distribution__segment--high { background: var(--tone-high); }
-.score-distribution__segment--mid  { background: var(--tone-mid); }
-.score-distribution__segment--low  { background: var(--tone-low); }
 
 /* Decision distribution: one bar, three proportional segments */
 .decision-bar {

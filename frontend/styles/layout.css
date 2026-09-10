@@ -364,6 +364,10 @@
   .state-grid { grid-template-columns: 1fr; }
 }
 
+.dashboard-best-match {
+  min-width: 0;
+}
+
 /* ---- DOCUMENT WORKSPACE (list + detail side by side) ---- */
 .workspace {
   display: grid;

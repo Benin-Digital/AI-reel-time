@@ -86,21 +86,13 @@ def metrics(request: Request) -> dict[str, float | int | bool | str | None]:
             select(func.count()).select_from(JobDocument).where(JobDocument.session_id.is_not(None))
         ) or 0
 
-        # Score tiers among currently-active matches only, using the same
-        # thresholds as the "Fort"/"Moyen"/"À vérifier" chips shown on every
-        # match card (frontend's scoreTone()) -- so the dashboard's summary
-        # is never inconsistent with what a recruiter sees when they click
-        # into Correspondances.
-        active_match_rows = session.execute(
-            select(MatchResult.score)
+        active_match_count = session.scalar(
+            select(func.count())
             .select_from(MatchResult)
             .join(CvDocument, MatchResult.cv_id == CvDocument.id)
             .join(JobDocument, MatchResult.job_id == JobDocument.id)
             .where(CvDocument.session_id.is_(None), JobDocument.session_id.is_(None))
-        ).scalars().all()
-    score_high = sum(1 for s in active_match_rows if s >= 80)
-    score_mid = sum(1 for s in active_match_rows if 60 <= s < 80)
-    score_low = sum(1 for s in active_match_rows if s < 60)
+        ) or 0
 
     return {
         "uptime_seconds": uptime,
@@ -111,10 +103,7 @@ def metrics(request: Request) -> dict[str, float | int | bool | str | None]:
         "archived_cv_count": int(archived_cv_count),
         "active_job_count": int(active_job_count),
         "archived_job_count": int(archived_job_count),
-        "active_match_count": len(active_match_rows),
-        "score_high_count": score_high,
-        "score_mid_count": score_mid,
-        "score_low_count": score_low,
+        "active_match_count": int(active_match_count),
         "redis_available": bool(queue_status.get("redis_available", False)),
         "redis_queue_length": int(queue_status.get("redis_queue_length", 0)),
         "memory_queue_length": int(queue_status.get("memory_queue_length", 0)),

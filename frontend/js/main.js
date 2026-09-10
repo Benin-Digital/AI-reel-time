@@ -30,8 +30,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   onPanelChange((panel) => {
     if (!store.authUser) return;
-    if (panel === "dashboard") startAutoRefresh();
-    else stopAutoRefresh();
+    if (panel === "dashboard") {
+      startAutoRefresh();
+      window.dispatchEvent(new CustomEvent("load-dashboard"));
+    } else {
+      stopAutoRefresh();
+    }
 
     if (panel === "cv-library")  window.dispatchEvent(new CustomEvent("load-cv-library"));
     if (panel === "job-library") window.dispatchEvent(new CustomEvent("load-job-library"));
