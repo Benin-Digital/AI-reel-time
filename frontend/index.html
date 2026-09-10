@@ -189,52 +189,6 @@
 
           <!-- ── PANEL: Tableau de bord ── -->
           <section class="view" data-panel="dashboard" role="tabpanel">
-            <div class="view__header">
-              <div>
-                <p class="view__subtitle">Vue d'ensemble de la plateforme.</p>
-              </div>
-            </div>
-            <div class="metrics-grid" id="metricsGrid">
-              <div class="metric-card">
-                <div class="metric-card__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.5l2 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-                <div class="metric-card__label">Disponibilité</div>
-                <div class="metric-card__value uptime-status" id="metricUptime">
-                  <span class="uptime-dot"></span>
-                  <span class="uptime-label">Système opérationnel</span>
-                </div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-card__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M9 2L4 9h4.5L7 14 12 7H7.5L9 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
-                <div class="metric-card__label">Événements</div>
-                <div class="metric-card__value" id="metricEvents"><span class="skeleton skeleton--metric"></span></div>
-                <div class="metric-card__hint">journaux watcher</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-card__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-                <div class="metric-card__label">Extractions</div>
-                <div class="metric-card__value" id="metricExtractions"><span class="skeleton skeleton--metric"></span></div>
-                <div class="metric-card__hint">fichiers traités</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-card__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="1" fill="currentColor"/></svg></div>
-                <div class="metric-card__label">Scores</div>
-                <div class="metric-card__value" id="metricScores"><span class="skeleton skeleton--metric"></span></div>
-                <div class="metric-card__hint">correspondances</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-card__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.17 3.17l.7.7M12.13 12.13l.7.7M3.17 12.83l.7-.7M12.13 3.87l.7-.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-                <div class="metric-card__label">Worker</div>
-                <div class="metric-card__value" id="metricWorkerStatus"><span class="skeleton skeleton--metric"></span></div>
-                <div class="metric-card__hint">statut traitement</div>
-              </div>
-            </div>
-
-            <div class="view__header" style="margin-top:var(--space-6)">
-              <div>
-                <h2 class="card__title" style="margin:0">État actuel</h2>
-                <p class="view__subtitle">Ce qui est réellement actif sur la plateforme en ce moment.</p>
-              </div>
-            </div>
             <div class="state-grid" id="dashboardStateGrid">
               <div class="chart-card">
                 <div class="chart-card__title">CV</div>
