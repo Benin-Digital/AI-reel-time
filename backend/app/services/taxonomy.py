@@ -535,6 +535,16 @@ def find_skills(text: str) -> list[str]:
         canonical = normalize_skill(skill) or skill
         if canonical.lower() in found_lower:
             continue
+        # difflib's ratio is unreliable below ~4 characters: "git" (3) vs
+        # the business acronym "it" (2, as in "stratégie IT du groupe")
+        # scores exactly the 0.8 cutoff, so any mention of "IT" flagged
+        # Git as a required skill on a business/functional job with no
+        # technical content at all. A skill this short either has an exact
+        # alias in the main taxonomy already (see _SKILLS above) or isn't
+        # specific enough for typo-tolerant matching to be safe -- same
+        # rationale as _ROME_ALIAS_STOPWORDS above, applied to this pass.
+        if len(skill) < 4:
+            continue
         if difflib.get_close_matches(skill.lower(), fuzzy_words, n=1, cutoff=0.8):
             found[canonical] = next_position
             next_position += 1
