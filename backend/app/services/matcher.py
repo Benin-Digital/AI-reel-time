@@ -573,6 +573,21 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     final = weighted_sum / weight_total if weight_total > 0 else 0.5
     final = max(0.0, min(1.0, final))
 
+    # Cap: semantic similarity (0.40, the single highest weight) plus decent
+    # experience/education/language/contract scores can otherwise push a CV
+    # missing MOST of the job's required skills into "Fort" territory on
+    # generic professional vocabulary alone (reporting, communication,
+    # gouvernance...) shared with the job text. Observed in production on a
+    # "Data Analyst Expert SAS" offer: three CVs missing the job's named
+    # core tool -- two of them missing SQL too -- scored 93%+ "Fort" while
+    # the system's own explanation admitted those skills were absent. Skill
+    # coverage is the most literal, least ambiguous signal we have when the
+    # job lists required skills at all, so it sets a ceiling the rest of the
+    # score can approach but never exceed: 50% at zero coverage, up to 100%
+    # at full coverage.
+    if skills_ok:
+        final = min(final, 0.5 + 0.5 * skills)
+
     cv_skills = set(cv.skill_terms)
     job_required = set(job.required_skill_terms or job.skill_terms)
 
