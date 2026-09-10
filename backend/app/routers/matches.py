@@ -178,11 +178,30 @@ def get_match_progress() -> MatchProgressRead:
             .join(JobDocument, MatchResult.job_id == JobDocument.id)
             .where(CvDocument.session_id.is_(None), JobDocument.session_id.is_(None))
         ) or 0
+        # Active matches with no feedback row at all -- feeds the
+        # "Correspondances" sidebar badge, distinct from computed_pairs
+        # above (which is "matching is done", not "a recruiter has looked
+        # at it yet").
+        has_feedback = (
+            select(MatchFeedback.id).where(MatchFeedback.match_id == MatchResult.id).exists()
+        )
+        unreviewed_count = session.scalar(
+            select(func.count())
+            .select_from(MatchResult)
+            .join(CvDocument, MatchResult.cv_id == CvDocument.id)
+            .join(JobDocument, MatchResult.job_id == JobDocument.id)
+            .where(
+                CvDocument.session_id.is_(None),
+                JobDocument.session_id.is_(None),
+                ~has_feedback,
+            )
+        ) or 0
     return MatchProgressRead(
         active_cv_count=active_cv_count,
         active_job_count=active_job_count,
         expected_pairs=active_cv_count * active_job_count,
         computed_pairs=computed_pairs,
+        unreviewed_count=unreviewed_count,
     )
 
 

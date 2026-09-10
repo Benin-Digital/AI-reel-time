@@ -26,6 +26,21 @@ export function renderMetrics(data) {
   _updateDonut("cv",  data.active_cv_count,  data.archived_cv_count);
   _updateDonut("job", data.active_job_count, data.archived_job_count);
   _updateScoreDistribution(data.score_high_count, data.score_mid_count, data.score_low_count);
+  _setSidebarHealth(data.worker_alive ? "up" : "down", data.worker_alive ? "Système opérationnel" : "Worker arrêté");
+}
+
+// Visible on every panel (unlike the metric cards, only rendered on the
+// Dashboard) so a recruiter can tell processing is alive without leaving
+// whatever they're doing. Reuses .uptime-dot/.uptime-label so it looks
+// like the exact same indicator, just smaller.
+function _setSidebarHealth(state, label) {
+  const dot = $("#sidebarHealthDot");
+  const labelEl = $("#sidebarHealthLabel");
+  if (dot) dot.classList.toggle("uptime-dot--down", state === "down");
+  if (labelEl) {
+    labelEl.classList.toggle("uptime-label--down", state === "down");
+    labelEl.textContent = label;
+  }
 }
 
 // Circumference of the donut's r=15.9155 circle is ~100, so a percentage
@@ -77,6 +92,7 @@ async function fetchMetrics() {
   } catch (err) {
     if (err.name !== "AuthError") {
       setBanner($("#apiStatusBanner"), `API inaccessible — ${err.message}`, "error");
+      _setSidebarHealth("down", "API inaccessible");
       const next = Math.min(store.autoRefreshDelayMs * BACKOFF_FACTOR, AUTO_REFRESH_MAX_MS);
       setStore({ autoRefreshDelayMs: next });
     }

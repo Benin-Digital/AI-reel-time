@@ -68,12 +68,23 @@ export function initArchives() {
   window.addEventListener("load-archives", () => _loadSessions());
 }
 
+// Derived client-side from the /sessions list this panel already fetches
+// -- no extra request, just like the "Correspondances" badge in matches.js.
+function _updateSidebarArchivesBadge(sessions) {
+  const badge = $("#archivesOpenBadge");
+  if (!badge) return;
+  const openCount = sessions.filter((s) => s.status !== "closed").length;
+  badge.textContent = String(openCount);
+  badge.hidden = openCount === 0;
+}
+
 async function _loadSessions() {
   const list = $("#archiveSessionsList");
   if (!list) return;
 
   try {
     const sessions = await safeFetch("/sessions");
+    _updateSidebarArchivesBadge(sessions);
 
     if (!sessions.length) {
       list.innerHTML = `<div class="empty-state"><div class="empty-state__hint">Aucune archive créée.</div></div>`;

@@ -250,6 +250,7 @@ class MatchProgressRead(BaseModel):
     active_job_count: int
     expected_pairs: int
     computed_pairs: int
+    unreviewed_count: int = 0
 
 
 class MatchFeedbackCreate(BaseModel):

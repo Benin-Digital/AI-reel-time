@@ -120,6 +120,31 @@ def test_match_progress_reflects_active_counts_and_computed_pairs(session_factor
     assert progress.computed_pairs == 1, "le match contre le CV archive ne doit pas etre compte"
 
 
+def test_match_progress_unreviewed_count_excludes_matches_with_feedback(session_factory):
+    """unreviewed_count alimente le badge "Correspondances" de la barre
+    laterale -- ne doit compter que les matches actifs sans AUCUNE ligne
+    de feedback, jamais ceux deja evalues ni ceux contre un document
+    archive."""
+    with session_factory() as session:
+        cv1 = CvDocument(path="/cv/1.pdf", status="ready", session_id=None)
+        cv2 = CvDocument(path="/cv/2.pdf", status="ready", session_id=None)
+        archived_cv = CvDocument(path="/cv/archived.pdf", status="ready", session_id=99)
+        job1 = JobDocument(path="/job/1.pdf", status="ready", session_id=None)
+        session.add_all([cv1, cv2, archived_cv, job1])
+        session.commit()
+        reviewed = MatchResult(cv_id=cv1.id, job_id=job1.id, score=80.0)
+        unreviewed = MatchResult(cv_id=cv2.id, job_id=job1.id, score=70.0)
+        archived_match = MatchResult(cv_id=archived_cv.id, job_id=job1.id, score=60.0)
+        session.add_all([reviewed, unreviewed, archived_match])
+        session.commit()
+        session.add(MatchFeedback(match_id=reviewed.id, decision="accept"))
+        session.commit()
+
+    progress = matches_router.get_match_progress()
+
+    assert progress.unreviewed_count == 1
+
+
 def test_get_match_includes_persisted_feedback(session_factory):
     match_id = _seed_match(session_factory)
     with session_factory() as session:
