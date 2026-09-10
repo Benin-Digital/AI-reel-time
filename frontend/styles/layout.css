@@ -38,7 +38,8 @@
 }
 
 .sidebar__logo {
-  width: 100%;
+  position: relative;
+  display: inline-block;
   height: auto;
   overflow: visible;
 }
@@ -51,20 +52,24 @@
   display: block;
 }
 
+/* Status dot sits in front of the logo, like an online-status badge on an
+   avatar -- the border cuts it out of the logo so it reads as overlapping,
+   not just adjacent. */
+.sidebar__health-dot {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--bg-sidebar);
+}
+
 .sidebar__brand-name {
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
-}
-
-.sidebar__brand-sub {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  color: var(--text-primary);
-  line-height: 1;
-  white-space: nowrap;
 }
 
 /* Nav sections */
@@ -169,22 +174,6 @@
 .nav-item__badge--attention {
   background: var(--color-warning-subtle);
   color: var(--color-warning);
-}
-
-/* Live system-health line under the app name -- reuses .uptime-dot/
-   .uptime-label (same look as the dashboard's own uptime indicator) so a
-   recruiter can tell the worker is alive without navigating there. */
-.sidebar__health {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.sidebar__health .uptime-dot {
-  width: 7px;
-  height: 7px;
-}
-.sidebar__health .uptime-label {
-  font-size: var(--text-xs);
 }
 
 /* Sidebar footer */
