@@ -214,6 +214,48 @@ def _order_lines_by_column(lines: list[dict], page_width: float) -> list[dict]:
     return header + left + right + trailer
 
 
+def _find_tables(page) -> list:
+    """Detect tables on a page via PyMuPDF's built-in geometric table finder
+    (bundled since PyMuPDF 1.23 — no new dependency, no ML model, unlike
+    Docling's per-page layout/table inference that keeps it off the
+    automatic ingestion path, see _extract_and_persist's docstring in
+    main.py). Default strategy requires actual ruling lines/fills, so a
+    plain two-column CV template with no table framing at all (the case
+    _order_lines_by_column below already handles) is correctly left alone.
+    """
+    try:
+        return list(page.find_tables().tables)
+    except Exception as exc:
+        logger.warning("Table detection failed on a page of %s: %s", getattr(page, "number", "?"), exc)
+        return []
+
+
+def _render_table_rows(rows: list[list[str | None]]) -> str:
+    """Render extracted table rows as tab-joined lines, matching the
+    convention already used for DOCX tables (extract_text_from_docx) --
+    keeps each row's category/label cell glued to its own value cell(s)
+    on one line, instead of leaving them to the line-by-line reading-order
+    heuristics below, which have no notion of "these lines are one table
+    row" and can interleave a wrapped cell with an unrelated adjacent row
+    (see extract_text_from_pdf's docstring for the real bug this fixes)."""
+    lines = []
+    for row in rows:
+        cells = [str(c).strip() for c in row if c and str(c).strip()]
+        if cells:
+            lines.append("\t".join(cells))
+    return "\n".join(lines)
+
+
+def _line_center_in_bbox(line_bbox: tuple[float, float, float, float], table_bbox) -> bool:
+    """True if a text line's center point falls inside a table's bounding
+    box -- used to drop the individual lines find_tables() already
+    accounted for, so a table's content isn't emitted twice (once garbled
+    by the line-by-line order, once clean via _render_table_rows)."""
+    cx = (line_bbox[0] + line_bbox[2]) / 2
+    cy = (line_bbox[1] + line_bbox[3]) / 2
+    return table_bbox[0] <= cx <= table_bbox[2] and table_bbox[1] <= cy <= table_bbox[3]
+
+
 def extract_text_from_pdf(path: Path) -> str:
     """Extract PDF text via PyMuPDF with column-aware ordering; OCR fallback for scanned pages.
 
@@ -221,6 +263,22 @@ def extract_text_from_pdf(path: Path) -> str:
     _order_lines_by_column() rather than PyMuPDF's own sort=True, which
     handles single-column and matched-height side-by-side text but not an
     asymmetric sidebar template — see that function's docstring.
+
+    Tables are detected separately via _find_tables() and rendered as clean
+    tab-joined rows, replacing whatever individual lines fell inside them.
+    Real bug this fixes: a CV's "Compétences Techniques" table (a narrow
+    category-label column next to a column of wrapped, multi-line tool
+    lists) read line-by-line as a category label from row N+1 getting
+    glued mid-sentence into row N's wrapped value -- e.g. "SAS (Fundation,
+    Macro, ..., DDE,\nLangages\nSAS to EXCEL), SQL, ...", where "Langages"
+    is actually the NEXT row's label. The cross-encoder semantic score (the
+    single highest-weighted scoring component) then judges that
+    incoherent French much lower than the CV's actual skill coverage
+    warranted -- observed in production on a "Data Analyst Expert SAS"
+    offer, where the strongest candidate's exhaustive, correctly-listed
+    SAS toolset (SAS 6/9.1/9.2/9.4, Entreprise Guide, DDE, Visual
+    Studio...) scored no better semantically than candidates with none of
+    it, purely because of how it read once scrambled.
 
     The OCR threshold is checked per page, not on the document's combined
     text: a handful of real pages easily clear a document-wide threshold on
@@ -236,6 +294,22 @@ def extract_text_from_pdf(path: Path) -> str:
             raw = page.get_text("dict")
             blocks = [b for b in raw.get("blocks", []) if b.get("type") == 0]
             lines = _iter_lines(blocks)
+
+            table_lines = []
+            table_bboxes = []
+            for table in _find_tables(page):
+                rendered = _render_table_rows(table.extract())
+                if rendered:
+                    table_bboxes.append(table.bbox)
+                    table_lines.append({"bbox": table.bbox, "text": rendered})
+
+            if table_bboxes:
+                lines = [
+                    ln for ln in lines
+                    if not any(_line_center_in_bbox(ln["bbox"], tb) for tb in table_bboxes)
+                ]
+            lines.extend(table_lines)
+
             ordered = _order_lines_by_column(lines, raw.get("width") or page.rect.width)
             t = "\n".join(ln["text"] for ln in ordered)
             page_texts.append(t)
