@@ -397,7 +397,7 @@ select:disabled {
 .score-bar__fill--mid  { background: var(--tone-mid); }
 .score-bar__fill--low  { background: var(--tone-low); }
 
-/* ---- DASHBOARD CHART CARDS (donuts + score distribution) ---- */
+/* ---- DASHBOARD & FEEDBACK CHART CARDS (donuts + distribution bars) ---- */
 .chart-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -447,6 +447,9 @@ select:disabled {
 .legend-dot--high   { background: var(--tone-high); }
 .legend-dot--mid    { background: var(--tone-mid); }
 .legend-dot--low    { background: var(--tone-low); }
+.legend-dot--accept { background: var(--color-success); }
+.legend-dot--review { background: var(--color-warning); }
+.legend-dot--reject { background: var(--color-error); }
 
 /* Donut: classic "percentage circle" trick -- circumference of r=15.9155
    is ~100, so stroke-dasharray values map directly to percentages with
@@ -512,6 +515,29 @@ select:disabled {
 .score-distribution__segment--high { background: var(--tone-high); }
 .score-distribution__segment--mid  { background: var(--tone-mid); }
 .score-distribution__segment--low  { background: var(--tone-low); }
+
+/* Decision distribution: one bar, three proportional segments */
+.decision-bar {
+  display: flex;
+  height: 28px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--border-subtle);
+}
+.decision-bar__segment {
+  height: 100%;
+  transition: width var(--ease-slow);
+}
+.decision-bar__segment--accept { background: var(--color-success); }
+.decision-bar__segment--review { background: var(--color-warning); }
+.decision-bar__segment--reject { background: var(--color-error); }
+
+/* Compact per-row variant used in the domain table */
+.decision-bar--mini {
+  height: 8px;
+  border-radius: var(--radius-full);
+  min-width: 72px;
+}
 
 /* ---- FEEDBACK DECISION BUTTONS ---- */
 .feedback-bar {
