@@ -800,6 +800,38 @@
       </div>
     </div>
 
+    <!-- Modal: Mots-clés prioritaires avant import (optionnel) -->
+    <div id="preUploadPriorityKeywordsModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="preUploadPriorityKeywordsTitle">
+      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__card">
+        <div class="modal__header">
+          <h3 class="modal__title" id="preUploadPriorityKeywordsTitle">Mots-clés prioritaires (optionnel)</h3>
+          <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal__body">
+          <p style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:var(--space-3)">
+            Vous pouvez définir les mots-clés prioritaires de cette offre avant même de l'importer,
+            pour que le tout premier calcul des scores en tienne déjà compte — évite un second
+            recalcul juste après. Facultatif : laissez vide pour importer normalement (plusieurs
+            fichiers à la fois possible) et les renseigner plus tard depuis la fiche de l'offre.
+          </p>
+          <textarea id="preUploadPriorityKeywordsInput" rows="5" class="input" style="resize:vertical"
+            placeholder="Un mot-clé par ligne…"></textarea>
+          <div style="display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-3);flex-wrap:wrap">
+            <button class="btn btn--ghost btn--sm" id="preUploadPriorityKeywordsImport" type="button">Importer un fichier</button>
+            <input type="file" accept=".pdf,.docx,.txt" hidden id="preUploadPriorityKeywordsFile" />
+            <span class="text-xs text-muted" id="preUploadPriorityKeywordsMsg"></span>
+          </div>
+        </div>
+        <div class="modal__footer">
+          <button class="btn btn--ghost" data-modal-close>Annuler</button>
+          <button class="btn btn--primary" id="preUploadPriorityKeywordsContinue" type="button">Continuer</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Upload zone drag & drop (overlay global) -->
     <div id="uploadCvZone" data-kind="cv" hidden></div>
     <div id="uploadJobZone" data-kind="job" hidden></div>

@@ -1970,7 +1970,9 @@ def recompute_matches(request: Request) -> dict[str, object]:
     return {"queued": len(queued), "files": queued}
 
 
-def _ensure_pending_document_and_unarchive(model: type, path: Path) -> None:
+def _ensure_pending_document_and_unarchive(
+    model: type, path: Path, priority_keywords: str | None = None
+) -> None:
     """Create a pending document record for a freshly uploaded file, or, if
     one already exists at this path, unarchive it unconditionally.
 
@@ -1984,15 +1986,32 @@ def _ensure_pending_document_and_unarchive(model: type, path: Path) -> None:
     archived file, but wrong here: without this, re-uploading a CV that
     happens to already sit in an archive (same filename, same bytes) stayed
     archived and invisible, with no error shown to the user.
+
+    priority_keywords (job offers only) is applied here, before the ingest
+    watch event below queues extraction + first scoring pass, so that very
+    first pass already sees them -- _score_against_counterparts reads
+    JobDocument.priority_keywords fresh from the row at scoring time.
+    Without this, the recruiter would need a separate PATCH afterward,
+    forcing a second full rescore for a value they already had in hand.
     """
     with SessionLocal() as session:
         existing = session.scalar(select(model).where(model.path == str(path)))
         if existing is None:
-            session.add(model(path=str(path), status="pending"))
+            new_doc = model(path=str(path), status="pending")
+            if priority_keywords is not None:
+                new_doc.priority_keywords = priority_keywords
+            session.add(new_doc)
             session.commit()
-        elif existing.session_id is not None:
-            existing.session_id = None
-            session.commit()
+        else:
+            changed = False
+            if existing.session_id is not None:
+                existing.session_id = None
+                changed = True
+            if priority_keywords is not None:
+                existing.priority_keywords = priority_keywords
+                changed = True
+            if changed:
+                session.commit()
 
 
 @app.post("/ingest")
@@ -2000,9 +2019,12 @@ def ingest_file(
     folder: str = Form(...),
     upload: UploadFile = File(...),
     filename: str | None = Form(None),
+    priority_keywords: str | None = Form(None),
 ) -> dict[str, str]:
     if folder not in {"cv", "job"}:
         raise HTTPException(status_code=400, detail="Invalid folder")
+    if priority_keywords is not None and folder != "job":
+        raise HTTPException(status_code=400, detail="priority_keywords is only valid for job offers")
 
     target_dir = Path(settings.watch_cv_dir if folder == "cv" else settings.watch_job_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -2037,7 +2059,9 @@ def ingest_file(
         raise
 
     _ensure_pending_document_and_unarchive(
-        CvDocument if folder == "cv" else JobDocument, target_path
+        CvDocument if folder == "cv" else JobDocument,
+        target_path,
+        priority_keywords=(priority_keywords or "").strip() or None,
     )
 
     _on_watch_event(
@@ -2953,17 +2977,11 @@ def update_job_priority_keywords(doc_id: int, payload: JobPriorityKeywordsUpdate
     return get_job_document_details(doc_id)
 
 
-@app.post("/job-documents/{doc_id}/priority-keywords/extract", response_model=JobPriorityKeywordsExtracted)
-def extract_job_priority_keywords(doc_id: int, upload: UploadFile = File(...)) -> JobPriorityKeywordsExtracted:
-    """Extract text from an uploaded PDF/DOCX/TXT for the recruiter to
-    review and edit before saving -- this endpoint never writes to the
-    database or the watched storage dirs, it's purely a convenience to
-    pre-fill the priority-keywords textarea. PATCH above is the only save
-    path."""
-    with SessionLocal() as session:
-        if session.get(JobDocument, doc_id) is None:
-            raise HTTPException(status_code=404, detail="JOB document not found")
-
+def _extract_priority_keywords_text(upload: UploadFile) -> str:
+    """Shared by both priority-keywords extract endpoints below: this never
+    writes to the database or the watched storage dirs, it's purely a
+    convenience to pre-fill a textarea for the recruiter to review and edit
+    before saving."""
     raw_name = upload.filename or ""
     safe_name = Path(raw_name).name or "upload"
     suffix = Path(safe_name).suffix.lower()
@@ -2991,7 +3009,30 @@ def extract_job_priority_keywords(doc_id: int, upload: UploadFile = File(...)) -
     if not text or not text.strip():
         raise HTTPException(status_code=422, detail="Aucun texte n'a pu être extrait de ce fichier")
 
-    return JobPriorityKeywordsExtracted(keywords=text.strip())
+    return text.strip()
+
+
+@app.post("/job-documents/{doc_id}/priority-keywords/extract", response_model=JobPriorityKeywordsExtracted)
+def extract_job_priority_keywords(doc_id: int, upload: UploadFile = File(...)) -> JobPriorityKeywordsExtracted:
+    """Extract text from an uploaded PDF/DOCX/TXT for the recruiter to
+    review and edit before saving -- this endpoint never writes to the
+    database or the watched storage dirs, it's purely a convenience to
+    pre-fill the priority-keywords textarea. PATCH above is the only save
+    path."""
+    with SessionLocal() as session:
+        if session.get(JobDocument, doc_id) is None:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+
+    return JobPriorityKeywordsExtracted(keywords=_extract_priority_keywords_text(upload))
+
+
+@app.post("/priority-keywords/extract-preview", response_model=JobPriorityKeywordsExtracted)
+def extract_priority_keywords_preview(upload: UploadFile = File(...)) -> JobPriorityKeywordsExtracted:
+    """Same extraction as above, but usable before the offer's JobDocument
+    even exists -- backs the pre-upload dialog where the recruiter can set
+    priority keywords before importing the offer file itself, so the first
+    scoring pass already uses them (see /ingest's priority_keywords field)."""
+    return JobPriorityKeywordsExtracted(keywords=_extract_priority_keywords_text(upload))
 
 
 @app.get("/extractions/path", response_model=ExtractedTextRead)
