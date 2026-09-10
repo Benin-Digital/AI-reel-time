@@ -282,7 +282,15 @@ function _pollAfterRecompute() {
     // the list is already fresh whenever they come back to Correspondances.
     const stillOnThisPanel = !document.querySelector('.view[data-panel="matches"]')?.hidden;
     if (stillOnThisPanel) _load();
-    if (ticks < _RECOMPUTE_POLL_TICKS) setTimeout(tick, _RECOMPUTE_POLL_MS);
+    if (ticks < _RECOMPUTE_POLL_TICKS) {
+      setTimeout(tick, _RECOMPUTE_POLL_MS);
+    } else {
+      // The recompute/rescore should be done well within this window --
+      // without this, the "en cours" banner stayed on screen forever
+      // (even once every score had already updated) until a full page
+      // reload, since nothing else ever clears it.
+      setBanner($("#matchesRecomputeMsg"), "", "info");
+    }
   };
   setTimeout(tick, _RECOMPUTE_POLL_MS);
 }
