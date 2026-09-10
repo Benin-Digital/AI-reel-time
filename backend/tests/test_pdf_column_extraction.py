@@ -99,6 +99,62 @@ def test_name_in_right_sidebar_is_not_buried_behind_a_long_left_body(tmp_path):
     )
 
 
+def test_narrow_sidebar_does_not_swallow_short_main_body_lines(tmp_path):
+    """Regression reelle (production) : sidebar ETROITE (~25% de la page,
+    pas ~50%) a gauche, corps principal qui demarre bien avant le milieu
+    exact de page.
+
+    Contre un split fixe a page_width/2, une ligne courte du corps
+    principal (un intitule de poste, une etiquette d'une ou deux lignes)
+    qui se termine avant ce milieu se retrouve classee "colonne gauche" et
+    entrelacee par y avec la vraie sidebar -- entrelacant deux sections
+    sans rapport en plein milieu du corps, alors meme que la ligne
+    appartient au corps principal, pas a la sidebar. Vu sur un CV a
+    template riche (sidebar certifications/outils + corps experience) :
+    le texte extrait melangeait des fragments d'outils avec des bouts de
+    phrases de descriptions de poste.
+
+    _detect_column_gutter() doit placer la coupure au vrai gouffre entre
+    les deux colonnes (~175, entre la fin de la sidebar a ~150 et le debut
+    du corps a 200) plutot qu'au milieu fixe de la page (297.5), pour que
+    cette ligne courte du corps principal reste classee a droite."""
+    path = tmp_path / "narrow_sidebar_cv.pdf"
+    inserts = [
+        ((40, 60), "Jean DUPONT"),
+        ((40, 90), "Certifications"),
+        ((40, 120), "SAFe PO"),
+        ((40, 150), "Scrum PSPO"),
+        ((200, 60), "Chef de Projet MOA"),
+        (
+            (200, 90),
+            "Pilotage de projets SI en environnement multi-pays avec coordination "
+            "des equipes metiers et IT sur les evolutions applicatives",
+        ),
+        ((200, 120), "APIs - recette"),
+        ((200, 150), "Animation des ceremonies Agile Sprint Planning Reviews Retrospectives"),
+    ]
+    _make_pdf(path, inserts)
+
+    result = extract_text_from_pdf(path)
+    lines = result.splitlines()
+
+    sidebar = ["Jean DUPONT", "Certifications", "SAFe PO", "Scrum PSPO"]
+    sidebar_positions = [lines.index(l) for l in sidebar]
+    body_first = lines.index("Chef de Projet MOA")
+    body_tag = lines.index("APIs - recette")
+
+    assert max(sidebar_positions) < body_first, (
+        f"'APIs - recette' et le reste du corps principal ne doivent jamais "
+        f"s'intercaler dans la sidebar, obtenu sidebar={sidebar_positions} "
+        f"corps={lines[body_first:]!r}"
+    )
+    assert body_first < body_tag, (
+        "les lignes du corps principal, y compris les courtes comme "
+        "'APIs - recette', doivent rester groupees ensemble dans leur "
+        f"ordre naturel, obtenu {lines!r}"
+    )
+
+
 def test_single_column_with_right_aligned_date_is_not_split_into_columns(tmp_path):
     """Une date alignee a droite sur un CV mono-colonne (tres courant :
     intitule de poste a gauche, dates a droite sur la meme ligne) ne doit

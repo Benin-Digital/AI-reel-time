@@ -102,6 +102,45 @@ def _iter_lines(blocks: list[dict]) -> list[dict]:
     return result
 
 
+def _detect_column_gutter(lines: list[dict], page_width: float) -> float:
+    """Find the vertical gap between text columns instead of assuming it
+    sits at the page's exact horizontal midpoint.
+
+    A fixed page_width/2 split works for a sidebar roughly as wide as the
+    main body, but many real CV templates use a NARROW sidebar (~25-30% of
+    the page) with the main body starting well left of 50%. Against a fixed
+    midpoint, any short main-body line ending before that midpoint (a job
+    title, a one-line bullet) gets bucketed as sidebar content and
+    interleaved with the real sidebar by y-position -- producing exactly
+    the kind of mid-sentence fragment-mixing this whole module exists to
+    prevent, just shifted from "whole blocks" (the bug _order_lines_by_column
+    already fixed) to "short lines relative to the wrong split point".
+
+    Projects every line's horizontal span onto the page width, merges
+    overlapping/touching spans, and returns the midpoint of the widest gap
+    between them -- the actual gutter between two real columns. Falls back
+    to page_width/2 when no gap is wide enough to be a real gutter (single-
+    column text, or text that happens to straddle wherever the split would
+    fall), so plain single-column CVs are unaffected.
+    """
+    spans = sorted((ln["bbox"][0], ln["bbox"][2]) for ln in lines)
+    merged: list[list[float]] = []
+    for x0, x1 in spans:
+        if merged and x0 <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], x1)
+        else:
+            merged.append([x0, x1])
+
+    best_gap, best_mid = 0.0, page_width / 2
+    for (_, prev_end), (next_start, _) in zip(merged, merged[1:]):
+        gap = next_start - prev_end
+        if gap > best_gap:
+            best_gap, best_mid = gap, (prev_end + next_start) / 2
+
+    min_gutter = page_width * 0.04  # require a real gap, not noise between close words
+    return best_mid if best_gap >= min_gutter else page_width / 2
+
+
 def _order_lines_by_column(lines: list[dict], page_width: float) -> list[dict]:
     """Reorder text lines to read a two-column layout column-by-column
     instead of interleaving by y-position.
@@ -141,7 +180,7 @@ def _order_lines_by_column(lines: list[dict], page_width: float) -> list[dict]:
     if not lines:
         return []
 
-    mid = page_width / 2
+    mid = _detect_column_gutter(lines, page_width)
     left, right, full = [], [], []
     for ln in lines:
         x0, _, x1, _ = ln["bbox"]
