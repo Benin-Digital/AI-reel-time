@@ -98,12 +98,12 @@ _SKILLS: dict[str, list[str]] = {
     "Deep Learning": ["deep learning", "dl", "apprentissage profond", "reseau de neurones", "neural network"],
     "NLP": ["nlp", "natural language processing", "traitement du langage naturel", "traitement du langage"],
     "Data Science": ["data science", "datascience", "science des donnees"],
-    "Data Engineering": ["data engineering", "ingenierie des donnees", "pipeline de donnees", "etl", "elt"],
+    "Data Engineering": ["data engineering", "ingenierie des donnees", "pipeline de donnees", "etl", "elt", "data management"],
     "Power BI": ["power bi", "powerbi"],
     "Tableau": ["tableau", "tableau software"],
     "SAP": ["sap", "sap erp", "sap hana", "sap r3", "sap r/3"],
     "Salesforce": ["salesforce", "sfdc", "crm salesforce"],
-    "Cybersécurité": ["cybersecurite", "cybersecurity", "securite informatique", "pentest", "securite reseau", "soc", "siem", "owasp", "csrf", "xss"],
+    "Cybersécurité": ["cybersecurite", "cybersecurity", "securite informatique", "pentest", "securite reseau", "soc", "siem", "owasp", "csrf", "xss", "vulnerabilites", "vulnerabilite"],
     "ISO 27001": ["iso 27001", "iso27001", "norme iso 27001"],
     "ISO 27005": ["iso 27005", "iso27005"],
     "ISO 42001": ["iso 42001", "iso42001"],
@@ -136,7 +136,7 @@ _SKILLS: dict[str, list[str]] = {
     "Datadog": ["datadog"],
     "Sentry": ["sentry"],
     "SonarQube": ["sonarqube", "sonar", "sonarcloud", "code quality", "code coverage", "qualite du code"],
-    "API REST": ["api", "rest", "restful", "api rest", "web services", "json"],
+    "API REST": ["api", "rest", "restful", "api rest", "web services", "webservices", "json"],
     "SOAP/XML Web Services": ["soap", "wsdl"],
     "Microservices": ["microservices", "microservice", "architecture microservices"],
     "GraphQL": ["graphql", "apollo", "apollo server", "apollo client"],
@@ -156,12 +156,17 @@ _SKILLS: dict[str, list[str]] = {
                           "qa", "istqb", "uat", "assurance qualite logicielle",
                           "tests de recette"],
     "Business Intelligence": ["bi", "business intelligence", "informatique decisionnelle"],
+    "Data Analyst": ["data analyst", "analyste de donnees", "analyste donnees"],
+    "ORM": ["orm", "object-relational mapping", "object relational mapping"],
+    "Développeur Full Stack": ["full stack", "fullstack", "full-stack"],
+    "Frontend": ["frontend", "front-end", "front end"],
+    "Back-office": ["backoffice", "back-office", "back office"],
     "ERP": ["erp", "enterprise resource planning", "progiciel de gestion integre", "pgi"],
     "UML": ["uml", "unified modeling language"],
     "UX/UI Design": ["ux", "ui", "ux design", "ui design", "user experience", "user interface",
                       "ihm", "interface homme machine"],
     "TMA": ["tma", "tierce maintenance applicative"],
-    "SGBD": ["sgbd", "systeme de gestion de base de donnees", "dbms"],
+    "SGBD": ["sgbd", "systeme de gestion de base de donnees", "dbms", "base de donnees", "bases de donnees"],
     "J2EE": ["j2ee", "jee", "java ee", "java enterprise edition"],
     "JPA": ["jpa", "java persistence api"],
     "JSF": ["jsf", "java server faces"],
@@ -198,7 +203,7 @@ _SKILLS: dict[str, list[str]] = {
     "Prince2": ["prince2", "prince 2"],
     "PMP": ["pmp", "project management professional"],
     "Budget": ["budget", "gestion budgetaire", "budget management", "controle budgetaire"],
-    "Reporting": ["reporting", "tableau de bord", "kpi", "indicateurs de performance", "dashboard"],
+    "Reporting": ["reporting", "tableau de bord", "tableaux de bord", "kpi", "indicateurs de performance", "dashboard"],
     "Planification": ["planification", "planning", "ordonnancement", "gantt", "planner"],
     "Coordination": ["coordination", "coordination d equipe", "coordination de projet"],
     "Communication": ["communication", "communication professionnelle", "communication orale", "communication ecrite"],
@@ -209,6 +214,8 @@ _SKILLS: dict[str, list[str]] = {
     "Formation": ["developpement des competences", "animation de formation", "plan de formation professionnelle"],
     "Stratégie": ["strategic planning", "planification strategique", "vision strategique", "plan strategique"],
     "Gouvernance": ["gouvernance", "governance", "pilotage", "controle interne"],
+    "Parties prenantes": ["parties prenantes", "stakeholders", "stakeholder management", "gestion des parties prenantes"],
+    "Cycle en V": ["cycle en v", "v-model", "v model"],
 
     # ── COMMERCIAL & VENTE ────────────────────────────────────────────────
     "Développement commercial": ["developpement commercial", "business development", "bizdev", "developpement des affaires", "business developer"],
@@ -273,10 +280,56 @@ _SKILLS: dict[str, list[str]] = {
     "Droit des affaires": ["droit des affaires", "business law", "droit commercial", "droit des societes"],
     "Propriété intellectuelle": ["propriete intellectuelle", "pi", "brevets", "marques", "droits d auteur", "pi"],
     "Droit public": ["droit public", "droit administratif", "droit constitutionnel", "droit de la commande publique"],
-    "Compliance": ["compliance", "conformite", "conformite reglementaire", "rgpd", "gdpr", "lcb ft"],
+    "Compliance": ["compliance", "conformite", "conformite reglementaire", "projet reglementaire", "rgpd", "gdpr", "lcb ft"],
     "Contentieux": ["contentieux", "procedure judiciaire", "litige", "plaidoirie"],
     "Droit pénal": ["droit penal", "droit criminel", "procedure penale"],
     "Droit immobilier": ["droit immobilier", "droit de l urbanisme", "droit de la construction"],
+
+    # ── ASSURANCE, RISQUE & CONFORMITÉ ──────────────────────────────────────
+    # Found empirically: every real job offer sampled from production came
+    # with a recruiter-curated "Mots Clés.docx" -- several of its terms had
+    # zero taxonomy presence at all (this whole section), which meant a
+    # candidate's real domain fit here (assurance/IARD/risque) never
+    # entered the skill-coverage score no matter how relevant they were.
+    "IARD": ["iard"],
+    # Bare "assurance" excluded: also means "confidence" in everyday French
+    # ("avoir de l assurance") and is already covered separately as
+    # "assurance qualite logicielle" (software QA) -- same false-positive
+    # class as bare "recette"/"sas" above. Only qualified, unambiguous
+    # phrases are included; a bare "Assurance" mention is still usable via
+    # a job's own priority-keywords (see matcher.py::_apply_priority_keywords).
+    "Assurance": ["secteur de l assurance", "compagnie d assurance", "assureur",
+                  "assurance dommages", "assurance vie", "assurance iard"],
+    "Gestion des sinistres": ["gestion des sinistres", "gestion de sinistre", "sinistres",
+                              "sinistralite", "cycle de vie d un sinistre"],
+    "Gestion des risques": ["gestion des risques", "gestion du risque", "analyse des risques",
+                            "cartographie des risques", "indicateurs de risques", "risk management",
+                            "risques it", "gestion des risques it"],
+    "GRC (gouvernance, risques, conformité)": ["grc", "governance risk compliance",
+                                               "gouvernance risques conformite"],
+    # LOD = "lines of defense", the 3-line banking/insurance risk-governance
+    # model -- bare LOD1/LOD2/LOD3 are unambiguous acronyms in this context.
+    "Lignes de défense (LOD)": ["lod1", "lod2", "lod3", "ligne de defense", "lignes de defense",
+                                "line of defense", "1st line of defense", "2nd line of defense",
+                                "3lod"],
+    "NIST": ["nist", "nist framework", "nist csf"],
+    # "Banque"/"Finance" deliberately NOT added as bare sector words: a
+    # sector mentioned in a CV/job is not itself a skill (see
+    # test_generic_sector_words_are_not_skills, a pre-existing invariant
+    # from the ROME import bugfix -- "Finance"/"Informatique"/etc. must
+    # never resolve as a competency). A recruiter who wants a job's sector
+    # tracked as a requirement can still do so per-offer via
+    # priority-keywords, which is exactly how the two real production jobs
+    # that listed bare "Banque"/"Finance" as priorities handle it today.
+    "Analyse des besoins": ["analyse des besoins", "besoins metiers", "recueil des besoins",
+                            "expression de besoin", "expression des besoins"],
+    "Outils bureautiques": ["outils bureautiques", "pack office", "suite office",
+                            "microsoft office", "bureautique"],
+    # Bare "RUN" (IT operations/production-support, vs. "BUILD" project
+    # work) and "TRM" (ambiguous acronym -- third-party/technology risk
+    # management, but also unrelated meanings elsewhere) excluded: too
+    # generic/ambiguous for the global dictionary, same reasoning as
+    # "recette" above. Usable per-offer via priority-keywords instead.
 
     # ── LOGISTIQUE & SUPPLY CHAIN ──────────────────────────────────────────
     "Supply Chain": ["supply chain", "chaine d approvisionnement", "chaine logistique", "supply chain management"],
