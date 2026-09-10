@@ -26,10 +26,9 @@
 
 .sidebar__brand {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: var(--space-2);
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   padding: var(--space-4) var(--space-5);
   min-height: var(--topbar-height);
   height: auto;
@@ -38,8 +37,6 @@
 }
 
 .sidebar__logo {
-  position: relative;
-  display: inline-block;
   height: auto;
   overflow: visible;
 }
@@ -52,16 +49,13 @@
   display: block;
 }
 
-/* Status dot sits in front of the logo, like an online-status badge on an
-   avatar -- the border cuts it out of the logo so it reads as overlapping,
-   not just adjacent. */
+/* Status dot lives in the free space after the logo, not on top of it --
+   vertically centered on the brand row, pushed away to the other side by
+   justify-content: space-between above. */
 .sidebar__health-dot {
-  position: absolute;
-  bottom: -3px;
-  right: -3px;
   width: 11px;
   height: 11px;
-  border: 2px solid var(--bg-sidebar);
+  flex-shrink: 0;
 }
 
 .sidebar__brand-name {
