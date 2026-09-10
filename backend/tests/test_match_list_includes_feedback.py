@@ -94,6 +94,32 @@ def test_list_matches_uses_the_most_recent_feedback_row(session_factory):
     assert results[0].feedback_comment == "Finalement excellent"
 
 
+def test_match_progress_reflects_active_counts_and_computed_pairs(session_factory):
+    """GET /matches/progress lets the frontend show 'calcul en cours' instead
+    of 'aucune correspondance' while documents are "ready" but their
+    matching loop hasn't finished (status flips to ready before matching
+    runs -- see _score_against_counterparts in main.py)."""
+    with session_factory() as session:
+        cv1 = CvDocument(path="/cv/1.pdf", status="ready", session_id=None)
+        cv2 = CvDocument(path="/cv/2.pdf", status="ready", session_id=None)
+        archived_cv = CvDocument(path="/cv/archived.pdf", status="ready", session_id=99)
+        job1 = JobDocument(path="/job/1.pdf", status="ready", session_id=None)
+        session.add_all([cv1, cv2, archived_cv, job1])
+        session.commit()
+        # Seulement 1 des 2 paires actives attendues a ete matchee.
+        session.add(MatchResult(cv_id=cv1.id, job_id=job1.id, score=80.0))
+        # Un match contre un CV archive ne doit pas compter dans le calcul.
+        session.add(MatchResult(cv_id=archived_cv.id, job_id=job1.id, score=50.0))
+        session.commit()
+
+    progress = matches_router.get_match_progress()
+
+    assert progress.active_cv_count == 2
+    assert progress.active_job_count == 1
+    assert progress.expected_pairs == 2
+    assert progress.computed_pairs == 1, "le match contre le CV archive ne doit pas etre compte"
+
+
 def test_get_match_includes_persisted_feedback(session_factory):
     match_id = _seed_match(session_factory)
     with session_factory() as session:

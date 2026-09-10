@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from ..db import SessionLocal
 from ..models import CvDocument, ExtractedText, JobDocument, MatchFeedback, MatchResult
@@ -88,6 +88,7 @@ def _to_match_read(
 from ..schemas import (
     AnalyzeRequest,
     MatchExplainRead,
+    MatchProgressRead,
     MatchRead,
 )
 from ..services import deserialize_keywords
@@ -146,6 +147,43 @@ def list_matches_for_job(doc_id: int, limit: int = 50) -> list[MatchRead]:
         cv_labels, job_labels = _build_labels(session, rows)
         feedback_map = _build_feedback_map(session, rows)
         return [_to_match_read(row, cv_labels, job_labels, feedback_map) for row in rows]
+
+
+@router.get("/matches/progress", response_model=MatchProgressRead)
+def get_match_progress() -> MatchProgressRead:
+    """Lets the frontend distinguish "nothing to match yet" from "matching
+    is still being computed" -- CvDocument/JobDocument.status flips to
+    "ready" as soon as extraction succeeds, BEFORE _score_against_
+    counterparts()'s matching loop runs (see main.py), so a document can
+    show "Prêt" while its matches against the active library are still
+    trickling in one by one with no indication anything is happening.
+    Correspondances rendered "Aucune correspondance" (the same empty state
+    as "you haven't imported anything yet") for that whole window, then
+    matches appeared with no explanation. expected_pairs is an upper bound
+    (every active CV against every active job) -- some pairs are legitimately
+    never scored (a failed extraction), so 100% is not always reachable,
+    but it's enough to know "more are still coming" vs "this is everything".
+    """
+    with SessionLocal() as session:
+        active_cv_count = session.scalar(
+            select(func.count()).select_from(CvDocument).where(CvDocument.session_id.is_(None))
+        ) or 0
+        active_job_count = session.scalar(
+            select(func.count()).select_from(JobDocument).where(JobDocument.session_id.is_(None))
+        ) or 0
+        computed_pairs = session.scalar(
+            select(func.count())
+            .select_from(MatchResult)
+            .join(CvDocument, MatchResult.cv_id == CvDocument.id)
+            .join(JobDocument, MatchResult.job_id == JobDocument.id)
+            .where(CvDocument.session_id.is_(None), JobDocument.session_id.is_(None))
+        ) or 0
+    return MatchProgressRead(
+        active_cv_count=active_cv_count,
+        active_job_count=active_job_count,
+        expected_pairs=active_cv_count * active_job_count,
+        computed_pairs=computed_pairs,
+    )
 
 
 @router.get("/matches", response_model=list[MatchRead])
