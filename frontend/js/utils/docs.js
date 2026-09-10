@@ -139,7 +139,7 @@ export function renderDocDetail(doc, kind) {
     ? `<p class="text-xs text-error">${escapeHtml(doc.structuring_error)}</p>`
     : "";
   const structuringWaitHtml = structuringStatus === "pending"
-    ? `<p class="text-xs text-muted" id="structuringWait-${escapeHtml(String(doc.id))}">Structuration en cours… Pour un document long, cela peut prendre plusieurs minutes — merci de patienter.</p>`
+    ? `<p class="text-xs text-muted" id="structuringWait-${escapeHtml(String(doc.id))}">Structuration en cours… Pour un document long, cela peut prendre plusieurs minutes, merci de patienter.</p>`
     : "";
 
   const previewId = `docPreview-${kind}-${escapeHtml(String(doc.id))}`;

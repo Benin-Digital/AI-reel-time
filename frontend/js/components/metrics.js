@@ -58,7 +58,7 @@ async function fetchMetrics() {
     setStore({ autoRefreshDelayMs: AUTO_REFRESH_MS });
   } catch (err) {
     if (err.name !== "AuthError") {
-      setBanner($("#apiStatusBanner"), `API inaccessible — ${err.message}`, "error");
+      setBanner($("#apiStatusBanner"), `API inaccessible : ${err.message}`, "error");
       _setSidebarHealth("down", "API inaccessible");
       const next = Math.min(store.autoRefreshDelayMs * BACKOFF_FACTOR, AUTO_REFRESH_MAX_MS);
       setStore({ autoRefreshDelayMs: next });

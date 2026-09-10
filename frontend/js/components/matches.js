@@ -192,7 +192,7 @@ async function _load() {
         ? `<div class="empty-state">
             <div class="empty-state__icon empty-state__icon--spin"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="60 40"/></svg></div>
             <div class="empty-state__title">Calcul des correspondances en cours…</div>
-            <div class="empty-state__hint">Les CV et offres sont prêts, le rapprochement des scores démarre — cette liste se mettra à jour automatiquement.</div>
+            <div class="empty-state__hint">Les CV et offres sont prêts, le rapprochement des scores démarre, cette liste se mettra à jour automatiquement.</div>
           </div>`
         : `<div class="empty-state">
             <div class="empty-state__icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M10 16h12M16 10l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="1.5"/></svg></div>
@@ -261,7 +261,7 @@ async function _recomputeMatches() {
     const result = await safeFetch("/matches/recompute", { method: "POST" });
     setBanner(
       msg,
-      `Réextraction et recalcul lancés pour ${result.queued} CV — les scores ci-dessous se mettront à jour au fur et à mesure. Pour une grosse bibliothèque, revenez sur cette page un peu plus tard si tout n'a pas fini de se mettre à jour.`,
+      `Réextraction et recalcul lancés pour ${result.queued} CV, les scores ci-dessous se mettront à jour au fur et à mesure. Pour une grosse bibliothèque, revenez sur cette page un peu plus tard si tout n'a pas fini de se mettre à jour.`,
       "info"
     );
     _pollAfterRecompute();
@@ -406,7 +406,7 @@ async function _loadExplain(matchId) {
     const el = content.querySelector("#explainWait");
     if (!el) return;
     const elapsed = Math.round((Date.now() - waitStartedAt) / 1000);
-    const hint = elapsed > 15 ? " — première analyse après une pause, ça peut prendre un peu plus longtemps" : "";
+    const hint = elapsed > 15 ? ". Première analyse après une pause, ça peut prendre un peu plus longtemps" : "";
     el.textContent = `Analyse en cours… (${elapsed}s)${hint}`;
   }, 1000);
 
@@ -699,7 +699,7 @@ function _wireFeedbackForm(matchId) {
 function _buildExplainText(data) {
   const score    = clampScore(data.score);
   const tone     = scoreTone(score);
-  const lines    = [`Score : ${score}% — ${tone.label}`];
+  const lines    = [`Score : ${score}% (${tone.label})`];
   if (data.summary) lines.push("", data.summary);
 
   const keywords = (data.common_keywords ?? data.top_keywords ?? []).filter(Boolean).slice(0, 12);
