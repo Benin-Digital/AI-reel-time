@@ -463,17 +463,48 @@ def _upsert_match_result(
         )
 
 
-def _match_count_for_document(doc_id: int, role: str) -> int:
+def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
+    """True if `doc_id` (a CV or a job) already has a MatchResult against
+    every currently-active (non-archived) counterpart.
+
+    Used to decide whether re-processing an unchanged, already-"ready"
+    document can safely skip the matching loop entirely. A naive version of
+    this check (counting ANY match regardless of the counterpart's archive
+    status) would count matches against counterparts that are now archived
+    -- so a CV reactivated from an archive (same content hash, still
+    "ready", but with old matches from before it was archived) looked like
+    it "already had matches" and got skipped even when a brand new,
+    never-matched job was sitting in the active library. Real production
+    case: re-importing an archived CV made it turn "ready" quickly
+    (extraction cache hit) but it then never appeared in Correspondances
+    against a newly added job, while genuinely new CVs matched normally.
+    """
     with SessionLocal() as session:
         if role == "cv":
-            count = session.scalar(
-                select(func.count()).select_from(MatchResult).where(MatchResult.cv_id == doc_id)
-            )
+            active_counterpart_count = session.scalar(
+                select(func.count()).select_from(JobDocument).where(JobDocument.session_id.is_(None))
+            ) or 0
+            if active_counterpart_count == 0:
+                return True
+            matched_active_count = session.scalar(
+                select(func.count(func.distinct(MatchResult.job_id)))
+                .select_from(MatchResult)
+                .join(JobDocument, MatchResult.job_id == JobDocument.id)
+                .where(MatchResult.cv_id == doc_id, JobDocument.session_id.is_(None))
+            ) or 0
         else:
-            count = session.scalar(
-                select(func.count()).select_from(MatchResult).where(MatchResult.job_id == doc_id)
-            )
-    return int(count or 0)
+            active_counterpart_count = session.scalar(
+                select(func.count()).select_from(CvDocument).where(CvDocument.session_id.is_(None))
+            ) or 0
+            if active_counterpart_count == 0:
+                return True
+            matched_active_count = session.scalar(
+                select(func.count(func.distinct(MatchResult.cv_id)))
+                .select_from(MatchResult)
+                .join(CvDocument, MatchResult.cv_id == CvDocument.id)
+                .where(MatchResult.job_id == doc_id, CvDocument.session_id.is_(None))
+            ) or 0
+    return matched_active_count >= active_counterpart_count
 
 
 def _upsert_cv_embedding(
@@ -1359,12 +1390,11 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
         if not changed_result.extraction_success:
             return
 
-        existing_match_count = _match_count_for_document(cv_doc.id, "cv")
         if (
             previous_hash
             and changed_result.content_hash == previous_hash
             and previous_status == "ready"
-            and existing_match_count > 0
+            and _matched_all_active_counterparts(cv_doc.id, "cv")
         ):
             return
 
@@ -1463,7 +1493,7 @@ def _score_against_counterparts(changed_path: Path, role: str) -> None:
             previous_hash
             and changed_result.content_hash == previous_hash
             and previous_status == "ready"
-            and _match_count_for_document(job_doc.id, "job") > 0
+            and _matched_all_active_counterparts(job_doc.id, "job")
         ):
             return
 
