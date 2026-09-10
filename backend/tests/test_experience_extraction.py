@@ -96,6 +96,37 @@ def test_since_with_month_name_is_handled():
 # donc des plages de dates de formation (ex: "Master 2015-2017") s'ajoutaient
 # a la vraie experience professionnelle des qu'une section Experience existait.
 
+# ── De nombreuses missions courtes consecutives ne doivent pas s'annuler ────
+# Trouve en production : un CV de consultant IT/finance batie sur ~15
+# missions courtes (quelques mois chacune), toutes datees en "MM/YYYY -
+# MM/YYYY", donnait "Experience: 1 ans" pour une carriere reelle d'environ
+# 20 ans. Cause : la regex de plage ne capture que l'annee, donc une
+# mission entierement dans une seule annee civile (ex: "01/2018 - 07/2018")
+# devient l'intervalle de duree nulle (2018, 2018) ; des missions
+# consecutives sur des annees civiles differentes (2017, puis 2018) ne se
+# fusionnaient pas non plus (2018 <= 2017 est faux), donc chacune
+# contribuait 0 au total au lieu de s'enchainer.
+
+def test_many_short_consecutive_missions_are_not_undercounted():
+    cv_text = (
+        "Experience\n"
+        "11/2022 – 08/2023\nMission A\n"
+        "10/2021 – 06/2022\nMission B\n"
+        "10/2020 – 07/2021\nMission C\n"
+        "08/2019 – 07/2020\nMission D\n"
+        "01/2019 – 06/2019\nMission E\n"
+        "08/2018 – 11/2018\nMission F\n"
+        "01/2018 – 07/2018\nMission G\n"
+        "08/2017 – 11/2017\nMission H\n"
+        "01/2017 – 04/2017\nMission I\n"
+    )
+    years = _extract_years(cv_text)
+    assert years >= 6, (
+        f"9 missions courtes s'enchainant sans interruption de 2017 a 2023 "
+        f"(couverture reelle ~6-7 ans) ne doivent pas s'annuler a ~0, obtenu {years}"
+    )
+
+
 def test_education_date_ranges_are_not_counted_as_experience():
     cv_text = (
         "Formation\n"
