@@ -3,7 +3,7 @@
 Contexte : chaque offre reelle observee en production est accompagnee d'un
 "Mots Cles.docx" -- une liste courte de termes que le recruteur a
 manuellement juges prioritaires en relisant l'offre, souvent des acronymes
-metier (LOD2, DORA, TRM) absents du dictionnaire de competences (taxonomy.py).
+metier (DORA, TRM) absents du dictionnaire de competences (taxonomy.py).
 
 Ces mots-cles ont leur PROPRE composante de score (score_priority_keywords,
 poids dedie dans _DEFAULT_W), distincte de la couverture generale de
@@ -45,13 +45,15 @@ def test_taxonomy_recognized_keyword_normalizes_to_canonical():
 
 
 def test_taxonomy_unknown_keyword_is_matched_via_literal_cv_text_scan():
-    """"LOD2" n'existe dans aucun dictionnaire de competences -- trouve en
-    production sur une offre "Consultant Chef de projet DORA". Doit quand
-    meme etre reconnu si le CV contient litteralement le mot."""
-    cv = "Consultant risques bancaires. Experience LOD2 et LOD1 en conformite."
+    """"TRM" n'existe dans aucun dictionnaire de competences (exclu
+    deliberement de taxonomy.py, acronyme trop ambigu pour le dictionnaire
+    global) -- trouve en production sur une offre "Consultant Chef de projet
+    DORA". Doit quand meme etre reconnu si le CV contient litteralement le
+    mot."""
+    cv = "Consultant risques bancaires. Experience TRM et gestion des tiers en conformite."
     job = "Poste: Analyste risque. Competences requises: gouvernance."
-    result = match_cv_to_job(cv, job, priority_keywords="LOD2")
-    assert "LOD2" in result.priority_keywords_matched
+    result = match_cv_to_job(cv, job, priority_keywords="TRM")
+    assert "TRM" in result.priority_keywords_matched
     assert result.score_priority_keywords == 1.0
 
 

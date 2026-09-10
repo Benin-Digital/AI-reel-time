@@ -56,14 +56,14 @@ def test_explanation_surfaces_priority_keywords_distinctly():
     separement de la couverture generale de competences (ex: "2/3 trouves"),
     et lister ceux qui manquent en vigilance -- cote a cote avec la
     composante score_priority_keywords calculee par matcher.py."""
-    cv = "Consultant gouvernance et LOD2, tres experimente."
+    cv = "Consultant gouvernance et TRM, tres experimente."
     job = "Poste: Analyste risque. Competences requises: gouvernance."
-    priority_keywords = "gouvernance\nLOD2\nISO 27001"
+    priority_keywords = "gouvernance\nTRM\nISO 27001"
 
     match = match_cv_to_job(cv, job, priority_keywords)
     details = build_match_explanation(cv, job, match.score, match.common_skills, priority_keywords)
 
-    assert set(details["priority_keywords_matched"]) == {"Gouvernance", "LOD2"}
+    assert set(details["priority_keywords_matched"]) == {"Gouvernance", "TRM"}
     assert details["priority_keywords_missing"] == ["ISO 27001"]
 
     why_match_text = " ".join(details["why_match"])
