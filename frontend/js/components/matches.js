@@ -106,6 +106,8 @@ async function _load() {
     const prevBtn = $("#matchesPrev");
     if (prevBtn) prevBtn.disabled = _page <= 1;
 
+    _updateSidebarReviewBadge(progress);
+
     const incomplete = !!progress && progress.expected_pairs > progress.computed_pairs;
     // The empty-state below already explains "calcul en cours" on its own
     // when there's nothing to show yet -- only surface the banner once
@@ -151,6 +153,19 @@ async function _load() {
       list.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${err.message}</div></div>`;
     }
   }
+}
+
+// Piggybacks on the /matches/progress fetch _load() already makes -- no
+// extra request, so the "Correspondances" sidebar badge stays current
+// every time this panel is visited, without a background poll running
+// while the user is elsewhere (that pattern is exactly what caused a real
+// rate-limit outage during a bulk upload earlier -- see cv-library.js).
+function _updateSidebarReviewBadge(progress) {
+  const badge = $("#matchesReviewBadge");
+  if (!badge) return;
+  const count = progress?.unreviewed_count ?? 0;
+  badge.textContent = String(count);
+  badge.hidden = count === 0;
 }
 
 function _renderProgressBanner(progress, incomplete) {

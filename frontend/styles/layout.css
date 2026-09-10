@@ -164,6 +164,29 @@
   justify-content: center;
 }
 
+/* "Needs attention" variant: unreviewed matches waiting on a decision,
+   as opposed to the neutral count badges (CV/offres library size). */
+.nav-item__badge--attention {
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+}
+
+/* Live system-health line under the app name -- reuses .uptime-dot/
+   .uptime-label (same look as the dashboard's own uptime indicator) so a
+   recruiter can tell the worker is alive without navigating there. */
+.sidebar__health {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sidebar__health .uptime-dot {
+  width: 7px;
+  height: 7px;
+}
+.sidebar__health .uptime-label {
+  font-size: var(--text-xs);
+}
+
 /* Sidebar footer */
 .sidebar__footer {
   padding: var(--space-4) var(--space-2);
