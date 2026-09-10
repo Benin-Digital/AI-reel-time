@@ -44,6 +44,7 @@ function _render(data, activeWeights) {
 
   return `
     ${_renderSummaryCards(data)}
+    <div style="margin-top:var(--space-4)">${_renderDecisionDistribution(data)}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-top:var(--space-4)">
       ${_renderWeightHints(data.weight_hints)}
       ${_renderDecisionScores(data)}
@@ -93,6 +94,27 @@ function _renderSummaryCards(data) {
       <div class="metric-card__value">${globalRating} / 5</div>
       <div class="metric-card__hint">sur les évaluations notées</div>
     </div>` : ""}
+  </div>`;
+}
+
+function _renderDecisionDistribution(data) {
+  const dec    = data.by_decision ?? {};
+  const accept = dec.accept ?? { count: 0, pct: 0 };
+  const review = dec.review ?? { count: 0, pct: 0 };
+  const reject = dec.reject ?? { count: 0, pct: 0 };
+
+  return `<div class="chart-card">
+    <div class="chart-card__title">Répartition des décisions</div>
+    <div class="decision-bar">
+      ${accept.pct ? `<div class="decision-bar__segment decision-bar__segment--accept" style="width:${accept.pct}%"></div>` : ""}
+      ${review.pct ? `<div class="decision-bar__segment decision-bar__segment--review" style="width:${review.pct}%"></div>` : ""}
+      ${reject.pct ? `<div class="decision-bar__segment decision-bar__segment--reject" style="width:${reject.pct}%"></div>` : ""}
+    </div>
+    <div class="chart-card__legend">
+      <span class="legend-item"><span class="legend-dot legend-dot--accept"></span>Acceptés — <strong>${accept.count}</strong> (${accept.pct}%)</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--review"></span>À revoir — <strong>${review.count}</strong> (${review.pct}%)</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--reject"></span>Rejetés — <strong>${reject.count}</strong> (${reject.pct}%)</span>
+    </div>
   </div>`;
 }
 
@@ -204,12 +226,24 @@ function _renderDomainTable(domains) {
   const rows = domains.map((d) => {
     const rate = d.total > 0 ? Math.round((d.accept / d.total) * 100) : 0;
     const tone = scoreTone(rate).key;
+    const acceptPct = d.total > 0 ? (d.accept / d.total) * 100 : 0;
+    const reviewPct = d.total > 0 ? (d.review / d.total) * 100 : 0;
+    const rejectPct = d.total > 0 ? (d.reject / d.total) * 100 : 0;
     return `<tr>
       <td style="padding:var(--space-2) var(--space-3)" class="text-sm text-secondary">${escapeHtml(d.domain)}</td>
       <td style="padding:var(--space-2) var(--space-3)" class="text-sm">${d.total}</td>
-      <td style="padding:var(--space-2) var(--space-3)" class="text-sm" style="color:var(--color-success)">${d.accept}</td>
-      <td style="padding:var(--space-2) var(--space-3)" class="text-sm" style="color:var(--color-error)">${d.reject}</td>
-      <td style="padding:var(--space-2) var(--space-3)" class="text-sm" style="color:var(--color-warning)">${d.review}</td>
+      <td style="padding:var(--space-2) var(--space-3)">
+        <div style="display:flex;align-items:center;gap:var(--space-2)">
+          <div class="decision-bar decision-bar--mini" style="flex:1" title="${d.accept} acceptés / ${d.review} à revoir / ${d.reject} rejetés">
+            ${acceptPct ? `<div class="decision-bar__segment decision-bar__segment--accept" style="width:${acceptPct}%"></div>` : ""}
+            ${reviewPct ? `<div class="decision-bar__segment decision-bar__segment--review" style="width:${reviewPct}%"></div>` : ""}
+            ${rejectPct ? `<div class="decision-bar__segment decision-bar__segment--reject" style="width:${rejectPct}%"></div>` : ""}
+          </div>
+          <span class="text-xs text-muted" style="white-space:nowrap">
+            <span style="color:var(--color-success)">${d.accept}</span>/<span style="color:var(--color-warning)">${d.review}</span>/<span style="color:var(--color-error)">${d.reject}</span>
+          </span>
+        </div>
+      </td>
       <td style="padding:var(--space-2) var(--space-3)">
         <span class="score-chip score-chip--${tone}" style="font-size:var(--text-xs)">${rate}%</span>
       </td>
@@ -225,9 +259,7 @@ function _renderDomainTable(domains) {
           <tr style="border-bottom:1px solid var(--border-subtle)">
             <th class="text-xs text-muted" style="text-align:left;padding:var(--space-2) var(--space-3)">Domaine</th>
             <th class="text-xs text-muted" style="padding:var(--space-2) var(--space-3)">Total</th>
-            <th class="text-xs" style="color:var(--color-success);padding:var(--space-2) var(--space-3)">✓</th>
-            <th class="text-xs" style="color:var(--color-error);padding:var(--space-2) var(--space-3)">✗</th>
-            <th class="text-xs" style="color:var(--color-warning);padding:var(--space-2) var(--space-3)">↩</th>
+            <th class="text-xs text-muted" style="padding:var(--space-2) var(--space-3)">Répartition</th>
             <th class="text-xs text-muted" style="padding:var(--space-2) var(--space-3)">Taux accept.</th>
             <th class="text-xs text-muted" style="padding:var(--space-2) var(--space-3)">Score moy.</th>
           </tr>
