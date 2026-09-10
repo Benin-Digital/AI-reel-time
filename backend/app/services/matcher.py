@@ -15,6 +15,7 @@ import logging
 import math
 import re
 import threading
+import time
 import unicodedata
 from dataclasses import dataclass, field
 
@@ -26,30 +27,62 @@ logger = logging.getLogger(__name__)
 # ── Cross-encoder ─────────────────────────────────────────────────────────────
 
 _cross_encoder = None
+_cross_encoder_disabled = False  # settings.crossencoder_enabled == False -- permanent, deliberate
+_cross_encoder_last_failure: float | None = None  # time.monotonic() of the last load attempt that failed
+_CROSS_ENCODER_RETRY_COOLDOWN_S = 300
 _ce_lock = threading.Lock()
 
 
 def _get_cross_encoder():
-    global _cross_encoder
-    if _cross_encoder is None:
-        with _ce_lock:
-            if _cross_encoder is None:
-                from ..settings import get_settings
+    """Lazily load the cross-encoder, retrying a failed load after a cooldown
+    instead of caching failure forever.
 
-                settings = get_settings()
-                if not settings.crossencoder_enabled:
-                    _cross_encoder = "unavailable"
-                    return None
-                model_name = settings.crossencoder_model_name
-                try:
-                    from sentence_transformers import CrossEncoder
-                    logger.info("Loading cross-encoder: %s", model_name)
-                    _cross_encoder = CrossEncoder(model_name)
-                    logger.info("Cross-encoder ready")
-                except Exception as exc:
-                    logger.warning("Cross-encoder unavailable (%s) — semantic score = 0.5", exc)
-                    _cross_encoder = "unavailable"
-    return None if _cross_encoder == "unavailable" else _cross_encoder
+    Observed in production: the model import chain (sentence_transformers ->
+    transformers -> torch -> sympy) is heavy enough that a transient hiccup
+    at the very first scoring call (cold-start CPU/memory contention, a slow
+    disk) can make it raise once -- the same import succeeds fine moments
+    later. The previous version cached that single failure as a permanent
+    "unavailable" sentinel for the process's entire lifetime, silently
+    flattening every match's semantic component (40% of the total weight) to
+    a neutral 0.5 until someone noticed and restarted the API. A bounded
+    retry means it self-heals instead.
+    """
+    global _cross_encoder, _cross_encoder_disabled, _cross_encoder_last_failure
+    if _cross_encoder is not None:
+        return _cross_encoder
+    if _cross_encoder_disabled:
+        return None
+    with _ce_lock:
+        if _cross_encoder is not None:
+            return _cross_encoder
+        if _cross_encoder_disabled:
+            return None
+        from ..settings import get_settings
+
+        settings = get_settings()
+        if not settings.crossencoder_enabled:
+            _cross_encoder_disabled = True
+            return None
+        now = time.monotonic()
+        if (
+            _cross_encoder_last_failure is not None
+            and now - _cross_encoder_last_failure < _CROSS_ENCODER_RETRY_COOLDOWN_S
+        ):
+            return None
+        model_name = settings.crossencoder_model_name
+        try:
+            from sentence_transformers import CrossEncoder
+            logger.info("Loading cross-encoder: %s", model_name)
+            _cross_encoder = CrossEncoder(model_name)
+            _cross_encoder_last_failure = None
+            logger.info("Cross-encoder ready")
+        except Exception as exc:
+            _cross_encoder_last_failure = now
+            logger.warning(
+                "Cross-encoder unavailable (%s) — semantic score = 0.5, retrying in %ss",
+                exc, _CROSS_ENCODER_RETRY_COOLDOWN_S,
+            )
+    return _cross_encoder
 
 
 def _cross_encode(query: str, document: str) -> float:
