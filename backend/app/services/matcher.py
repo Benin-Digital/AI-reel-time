@@ -19,6 +19,7 @@ import unicodedata
 from dataclasses import dataclass, field
 
 from .parser import ParsedDocument, parse_document
+from .taxonomy import normalize_skill
 
 logger = logging.getLogger(__name__)
 
@@ -495,20 +496,72 @@ def _semantic_repr(doc: ParsedDocument) -> str:
     return combined[:12000]
 
 
-def match_cv_to_job(cv_text: str, job_text: str) -> MatchScore:
+def match_cv_to_job(cv_text: str, job_text: str, priority_keywords: str | None = None) -> MatchScore:
     """
     Full CV↔Job match using cross-encoder + structured scoring.
 
     Args:
         cv_text: Raw or pre-extracted CV text
         job_text: Raw or pre-extracted job offer text
+        priority_keywords: Raw text of the job's recruiter-curated priority
+            keywords (JobDocument.priority_keywords, one per line) — see
+            _apply_priority_keywords for how these are folded in.
 
     Returns:
         MatchScore with all component scores and final 0-100 score
     """
     cv = parse_document(cv_text, kind="cv")
     job = parse_document(job_text, kind="job")
+    job.priority_keyword_terms = split_priority_keywords(priority_keywords)
     return match_parsed_documents(cv, job)
+
+
+def split_priority_keywords(raw: str | None) -> list[str]:
+    """Parse a recruiter-edited priority-keywords text (one per line, as
+    saved from the "Mots-clés prioritaires" textarea) into a clean list of
+    terms. Blank lines are dropped; a leading "Mots Clés :"-style header
+    line (copy-pasted from a "Mots Clés.docx") is dropped too."""
+    if not raw:
+        return []
+    terms = []
+    for line in raw.splitlines():
+        term = line.strip().strip(":,;").strip()
+        if not term:
+            continue
+        if _fold(term) in {"mots cles", "mots-cles", "keywords"}:
+            continue
+        terms.append(term)
+    return terms
+
+
+def _apply_priority_keywords(cv: ParsedDocument, job: ParsedDocument) -> None:
+    """Fold a job's recruiter-curated priority keywords into its required
+    skills, bypassing find_skills() for terms it doesn't recognize.
+
+    Some of these terms (e.g. "LOD2", "DORA", "TRM" -- real examples from
+    production) have no taxonomy entry at all, so no amount of them
+    appearing in either text would ever make find_skills() extract them as
+    a skill. For each keyword: normalize to a taxonomy canonical when one
+    exists (so it lines up with whatever find_skills() already extracted
+    from the CV, e.g. "assurance" -> the same canonical the CV's own text
+    would produce); otherwise use the raw keyword as its own canonical
+    term, and scan the CV's own text for it directly -- it can never end
+    up in cv.skill_terms any other way, since find_skills() won't produce
+    a term it doesn't know.
+
+    Mutates both cv and job in place so the existing set-intersection
+    coverage logic in _skill_score() picks these up with no changes there.
+    """
+    cv_text_folded = _fold(cv.cleaned_text)
+    for raw_term in job.priority_keyword_terms:
+        canonical = normalize_skill(raw_term)
+        term = canonical or raw_term
+        if term not in job.required_skill_terms:
+            job.required_skill_terms.append(term)
+        if canonical:
+            continue  # already extractable from CV text via find_skills() like any other skill
+        if term not in cv.skill_terms and re.search(rf"\b{re.escape(_fold(term))}\b", cv_text_folded):
+            cv.skill_terms.append(term)
 
 
 def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScore:
@@ -519,6 +572,9 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     CV against a shortlist of jobs) so the side that doesn't change across
     the loop is parsed once instead of once per pair.
     """
+    if job.priority_keyword_terms:
+        _apply_priority_keywords(cv, job)
+
     # Domain is still detected and returned as a display label (MatchScore.domain)
     # but no longer selects a weight profile — see the comment above _DOMAIN_W.
     domain = job.domain if job.domain != "general" else cv.domain
@@ -607,10 +663,10 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     )
 
 
-def score_texts(cv_text: str, job_text: str) -> tuple[float, list[str]]:
+def score_texts(cv_text: str, job_text: str, priority_keywords: str | None = None) -> tuple[float, list[str]]:
     """
     Drop-in replacement for the legacy score_texts() in scoring.py.
     Returns (score_0_to_100, common_keywords).
     """
-    result = match_cv_to_job(cv_text, job_text)
+    result = match_cv_to_job(cv_text, job_text, priority_keywords)
     return result.score, result.common_skills

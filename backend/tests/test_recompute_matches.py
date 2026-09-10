@@ -90,7 +90,7 @@ def _setup(session_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(app_main.settings, "watch_cv_dir", str(cv_dir))
     monkeypatch.setattr(app_main.settings, "embedding_enabled", False)
     monkeypatch.setattr(app_main, "_extract_and_persist", fake_extract_and_persist)
-    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text: (91.0, ["Python"]))
+    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text, priority_keywords=None: (91.0, ["Python"]))
 
     return cv_path, job_path, extract_calls
 

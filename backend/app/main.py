@@ -53,6 +53,8 @@ from .schemas import (
     CvDocumentDetailRead,
     JobDocumentRead,
     JobDocumentDetailRead,
+    JobPriorityKeywordsUpdate,
+    JobPriorityKeywordsExtracted,
     AnalysisSessionCreate,
     AnalysisSessionRead,
     AnalysisSessionDetailRead,
@@ -108,7 +110,7 @@ from .services import (
     warn_if_esco_missing,
 )
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
-from .services.matcher import match_cv_to_job, match_parsed_documents
+from .services.matcher import match_cv_to_job, match_parsed_documents, split_priority_keywords
 from .services.parser import parse_document
 from .services.explain import build_match_explanation
 from dataclasses import asdict
@@ -1036,6 +1038,7 @@ def _vector_match_cv(
             select(
                 JobEmbedding.job_id,
                 JobDocument.path,
+                JobDocument.priority_keywords,
                 ExtractedText.extracted_text,
                 distance,
             )
@@ -1060,6 +1063,7 @@ def _vector_match_cv(
         job_text = (row.extracted_text or "").strip()
         if job_text:
             job_parsed = parse_document(job_text, kind="job")
+            job_parsed.priority_keyword_terms = split_priority_keywords(row.priority_keywords)
             match_result = match_parsed_documents(cv_parsed, job_parsed)
             score = match_result.score
             common = match_result.common_skills
@@ -1182,6 +1186,7 @@ def _vector_match_job(
         else text_value
     )
     job_parsed = parse_document(job_repr, kind="job")
+    job_parsed.priority_keyword_terms = split_priority_keywords(job_doc.priority_keywords)
 
     matched_cv_ids: set[int] = set()
     for row in top_rows:
@@ -1444,7 +1449,9 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                 score = _vector_score(job_distances[job_doc.id])
                 common: list[str] = []
             else:
-                score, common = score_texts(changed_text, job_result.extracted_text or "")
+                score, common = score_texts(
+                    changed_text, job_result.extracted_text or "", job_doc.priority_keywords
+                )
             _insert_score_result(changed_path, job_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common)
     else:
@@ -1540,7 +1547,9 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                 score = _vector_score(cv_distances[cv_doc.id])
                 common: list[str] = []
             else:
-                score, common = score_texts(cv_result.extracted_text or "", changed_text)
+                score, common = score_texts(
+                    cv_result.extracted_text or "", changed_text, job_doc.priority_keywords
+                )
             _insert_score_result(cv_path, changed_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common)
 
@@ -2750,6 +2759,7 @@ def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRe
             last_error=doc.last_error,
             structuring_status=doc.structuring_status,
             structuring_error=doc.structuring_error,
+            priority_keywords=doc.priority_keywords,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
             match_count=match_count,
@@ -2876,6 +2886,70 @@ def structure_job_document(doc_id: int) -> dict:
 
     _on_watch_event(WatchEvent(path=doc_path, event_type="structure", observed_at=time()))
     return {"status": "queued"}
+
+
+@app.patch("/job-documents/{doc_id}/priority-keywords", response_model=JobDocumentDetailRead)
+def update_job_priority_keywords(doc_id: int, payload: JobPriorityKeywordsUpdate) -> JobDocumentDetailRead:
+    """Save the recruiter's edited priority-keywords text (typed directly,
+    or pre-filled from an uploaded file via the /extract endpoint below --
+    either way, this is the only path that persists anything).
+
+    Immediately re-queues this offer for rescoring (not re-extraction: the
+    file on disk hasn't changed) so the recruiter sees the new keywords'
+    effect on scores without a separate "Relancer l'IA" click. See the
+    "rescore" watch-event type in _process_watch_event.
+    """
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+        doc.priority_keywords = payload.keywords.strip() or None
+        session.commit()
+        doc_path = Path(doc.path)
+
+    _on_watch_event(WatchEvent(path=doc_path, event_type="rescore", observed_at=time()))
+    return get_job_document_details(doc_id)
+
+
+@app.post("/job-documents/{doc_id}/priority-keywords/extract", response_model=JobPriorityKeywordsExtracted)
+def extract_job_priority_keywords(doc_id: int, upload: UploadFile = File(...)) -> JobPriorityKeywordsExtracted:
+    """Extract text from an uploaded PDF/DOCX/TXT for the recruiter to
+    review and edit before saving -- this endpoint never writes to the
+    database or the watched storage dirs, it's purely a convenience to
+    pre-fill the priority-keywords textarea. PATCH above is the only save
+    path."""
+    with SessionLocal() as session:
+        if session.get(JobDocument, doc_id) is None:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+
+    raw_name = upload.filename or ""
+    safe_name = Path(raw_name).name or "upload"
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in SUPPORTED_SUFFIXES:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+    temp_dir = Path(tempfile.gettempdir())
+    temp_path: Path | None = None
+    try:
+        raw_temp = _write_upload_to_temp(upload, temp_dir, safe_name)
+        # extract_text() dispatches on suffix -- _write_upload_to_temp's
+        # NamedTemporaryFile name doesn't end in .pdf/.docx/.txt, so append
+        # it rather than relying on the random temp name.
+        temp_path = raw_temp.with_name(raw_temp.name + suffix)
+        raw_temp.rename(temp_path)
+        text = extract_text(temp_path)
+    finally:
+        try:
+            upload.file.close()
+        except Exception:
+            pass
+        if temp_path and temp_path.exists():
+            temp_path.unlink()
+
+    if not text or not text.strip():
+        raise HTTPException(status_code=422, detail="Aucun texte n'a pu être extrait de ce fichier")
+
+    return JobPriorityKeywordsExtracted(keywords=text.strip())
 
 
 @app.get("/extractions/path", response_model=ExtractedTextRead)
