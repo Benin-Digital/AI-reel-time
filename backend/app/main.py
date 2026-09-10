@@ -1304,6 +1304,15 @@ def _extract_and_persist(path: Path, force_docling: bool = False, force: bool = 
     fix (e.g. the PDF column-layout ordering) only changes how a file is
     *read*, never its bytes on disk, so the ordinary content-hash cache
     would otherwise keep serving the stale pre-fix text forever.
+
+    force=True never downgrades a document that was already deliberately
+    upgraded to Docling for this exact content back to the fast plain-text
+    path -- it re-runs Docling instead, so the "refresh with current
+    extraction code" behavior above and a prior on-demand "Structurer
+    (approfondi)" request don't fight each other. Without this, a
+    recruiter who explicitly paid for the richer extraction on a CV would
+    silently lose it the next time anything triggered a recompute (the
+    priority-keywords save flow, "Relancer l'IA", re-ingesting the job...).
     """
     if not path.exists():
         logger.warning("File not found for extraction: %s", path)
@@ -1321,15 +1330,25 @@ def _extract_and_persist(path: Path, force_docling: bool = False, force: bool = 
         existing = session.scalar(
             select(ExtractedText).where(ExtractedText.file_path == str(path))
         )
-        if not force and existing and existing.content_hash == content_hash and existing.extraction_success:
-            already_docling = (existing.extraction_method or "").startswith("pdf-docling") or \
-                              (existing.extraction_method or "").startswith("docling")
+        content_unchanged = bool(
+            existing and existing.content_hash == content_hash and existing.extraction_success
+        )
+        already_docling = content_unchanged and (
+            (existing.extraction_method or "").startswith("pdf-docling")
+            or (existing.extraction_method or "").startswith("docling")
+        )
+        if not force and content_unchanged:
             # Automatic (force_docling=False) calls always trust the cache
             # once content matches, regardless of which method produced it.
             # A forced structuring request only needs a real Docling pass if
             # the cache isn't already a Docling extraction of this content.
             if not force_docling or already_docling:
                 return ExtractedTextRead.model_validate(existing)
+        elif force and already_docling and not force_docling:
+            # See the docstring above: force=True is for refreshing against
+            # new extraction *code*, not for undoing a prior deliberate
+            # Docling upgrade of unchanged content.
+            force_docling = True
 
     try:
         method = path.suffix.lower().lstrip(".") or "unknown"

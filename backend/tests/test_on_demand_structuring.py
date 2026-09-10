@@ -93,6 +93,39 @@ def test_cached_docling_result_is_reused_without_setting(cv_file, monkeypatch, s
     assert calls["n"] == 1
 
 
+def test_force_recompute_never_downgrades_an_already_docling_extraction(cv_file, monkeypatch, session_factory):
+    """POST /matches/recompute calls _extract_and_persist(path, force=True) on
+    every active document to refresh scoring against whatever extraction
+    code is deployed -- content-hash cache bypassed on purpose. Reproduces a
+    real production bug: a recruiter ran "Structurer (approfondi)" (Docling)
+    on several CVs, then a later recompute silently re-ran the fast
+    plain-text path over the SAME unchanged files and clobbered the Docling
+    text back to the lower-fidelity version, discarding the recruiter's
+    explicit request with no error or warning."""
+    calls = {"n": 0}
+
+    def _fake_convert(path):
+        calls["n"] += 1
+        from app.services.conversion import ConvertedDocument
+        return ConvertedDocument(full_text="richer structured text", sections={"skills": "Python"})
+
+    monkeypatch.setattr(conversion, "convert_document", _fake_convert)
+
+    structured = app_main._extract_and_persist(cv_file, force_docling=True)
+    assert structured.extraction_method == "docling"
+    assert calls["n"] == 1
+
+    # force=True, force_docling=False (exactly what /matches/recompute does)
+    # on the same unchanged file must NOT revert to the fast plain-text path.
+    recomputed = app_main._extract_and_persist(cv_file, force=True)
+    assert recomputed.extraction_method == "docling", (
+        "force=True must re-run Docling (not the fast path) when the cached "
+        "extraction for this unchanged content was already a Docling one"
+    )
+    assert recomputed.extracted_text == "richer structured text"
+    assert calls["n"] == 2, "force=True should still re-run extraction (fresh code), just via Docling"
+
+
 def test_forcing_docling_over_a_plain_text_cache_invalidates_parsed_profile(cv_file, monkeypatch, session_factory):
     # First, a normal fast extraction (simulates automatic ingestion).
     plain = app_main._extract_and_persist(cv_file)
