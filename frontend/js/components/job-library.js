@@ -467,7 +467,7 @@ async function _savePriorityKeywords(id) {
     // finished by the time this PATCH returned.
     window.dispatchEvent(new CustomEvent("matches-rescoring", {
       detail: {
-        message: "Mots-clés prioritaires enregistrés — les scores de cette offre se recalculent, "
+        message: "Mots-clés prioritaires enregistrés, les scores de cette offre se recalculent, "
           + "ça peut prendre quelques instants.",
       },
     }));

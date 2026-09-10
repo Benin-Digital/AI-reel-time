@@ -157,7 +157,7 @@ export function renderDocDetail(doc, kind) {
     <p class="text-xs text-muted" style="margin-bottom:var(--space-3)">
       Un mot-clé par ligne. Ils comptent séparément des compétences détectées
       automatiquement, avec leur propre score ("X/Y mots-clés prioritaires
-      trouvés") affiché sur chaque correspondance — un CV ne peut pas
+      trouvés") affiché sur chaque correspondance, un CV ne peut pas
       compenser un mot-clé prioritaire manquant avec du vocabulaire générique.
       Facultatif : sans mot-clé renseigné, le matching fonctionne comme avant.
     </p>
