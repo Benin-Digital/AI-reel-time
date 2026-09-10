@@ -247,6 +247,7 @@ async function _pollStructuring(id, maxWaitMs = 1800000) {
 
 async function _handleUpload(files) {
   const statusEl = $("#uploadCvStatus");
+  const pending = [];
   for (const file of files) {
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!SUPPORTED.includes(ext)) {
@@ -264,16 +265,26 @@ async function _handleUpload(files) {
       fd.append("upload", file, file.name);
       fd.append("filename", file.name);
       await safeFetch("/ingest", { method: "POST", body: fd });
-      setBanner(statusEl, `${file.name} — analyse en cours…`, "info");
-      await _load();
-      _pollUntilReady(statusEl, file.name);
+      pending.push(file.name);
     } catch (err) {
       setBanner(statusEl, `${file.name} — ${err.message}`, "error");
     }
   }
+  if (pending.length) {
+    await _load();
+    _pollBatchUntilReady(statusEl, pending);
+  }
 }
 
-async function _pollUntilReady(statusEl, filename, maxWaitMs = 1800000) {
+async function _pollBatchUntilReady(statusEl, filenames, maxWaitMs = 1800000) {
+  // One shared polling loop for the whole batch, not one independent loop
+  // per file: uploading N documents at once used to start N concurrent
+  // loops, each doing 2 GET requests every 3s (one from _load(), one to
+  // check status) — with N=16 that's over 600 requests/minute, enough to
+  // trip AI_REALTIME_RATE_LIMIT_MAX_REQUESTS (300/60s) and make the CV list
+  // itself return 429 mid-upload. A single loop makes exactly one status
+  // check per tick regardless of batch size.
+  //
   // Poll every 3s for the first 5 minutes (typical case), then fall back to
   // a slower 15s check for up to 30 minutes total — a document that takes
   // longer isn't broken, so we keep genuinely watching instead of telling
@@ -283,32 +294,46 @@ async function _pollUntilReady(statusEl, filename, maxWaitMs = 1800000) {
   const slowInterval = 15000;
   const startedAt = Date.now();
   const deadline = startedAt + maxWaitMs;
+  const basenames = filenames.map((f) => f.replace(/\\/g, "/").split("/").pop());
+  const remaining = new Set(basenames);
+  let readyCount = 0;
+  let failedCount = 0;
 
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && remaining.size) {
     const elapsedBefore = Date.now() - startedAt;
     await new Promise((r) => setTimeout(r, elapsedBefore < fastPhaseMs ? fastInterval : slowInterval));
+    const docs = await safeFetch("/cv-documents").catch(() => []);
+    for (const basename of Array.from(remaining)) {
+      const doc = docs.find((d) => (d.path || "").endsWith(basename));
+      if (!doc) continue;
+      if (doc.status === "ready") {
+        readyCount++;
+        remaining.delete(basename);
+      } else if (doc.status === "failed") {
+        failedCount++;
+        remaining.delete(basename);
+      }
+    }
     await _load();
-    const docs = (await safeFetch("/cv-documents").catch(() => []));
-    const basename = filename.replace(/\\/g, "/").split("/").pop();
-    const doc = docs.find((d) => (d.path || "").endsWith(basename));
-    if (!doc) continue;
-    if (doc.status === "ready") {
-      setBanner(statusEl, `${filename} prêt`, "success");
-      return;
-    }
-    if (doc.status === "failed") {
-      setBanner(statusEl, `${filename} — échec de l'analyse`, "error");
-      return;
-    }
+    if (!remaining.size) break;
     const elapsed = Math.round((Date.now() - startedAt) / 1000);
     const hint = elapsed > 30 ? " — ça prend plus de temps que d'habitude, merci de patienter" : "";
-    setBanner(statusEl, `${filename} — analyse en cours… (${elapsed}s)${hint}`, "info");
+    const progress = basenames.length > 1 ? `${readyCount + failedCount}/${basenames.length} traités, ` : "";
+    setBanner(statusEl, `${progress}${remaining.size} en cours… (${elapsed}s)${hint}`, "info");
   }
-  setBanner(
-    statusEl,
-    `${filename} — le traitement prend anormalement longtemps. Rafraîchissez la page dans quelques minutes pour vérifier.`,
-    "warning"
-  );
+
+  if (!remaining.size) {
+    const summary = failedCount
+      ? `${readyCount} prêt(s), ${failedCount} échec(s)`
+      : basenames.length > 1 ? `${readyCount} CV prêts` : "Prêt";
+    setBanner(statusEl, summary, failedCount ? "error" : "success");
+  } else {
+    setBanner(
+      statusEl,
+      `${remaining.size} document(s) prennent anormalement longtemps. Rafraîchissez la page dans quelques minutes pour vérifier.`,
+      "warning"
+    );
+  }
 }
 
 async function _handleDelete(filename) {
