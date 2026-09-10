@@ -9,6 +9,7 @@ import {
   scoreTone,
 } from "../utils/format.js";
 import { buildParams, setPage } from "../utils/docs.js";
+import { canManageUsers } from "../auth.js";
 
 let _page = 1;
 // Local cache: matchId → decision ("accept" | "reject" | "review")
@@ -25,6 +26,15 @@ let _progressPollAttempts = 0;
 // the recruiter that a calculation was still running.
 const _PROGRESS_POLL_MS = 5000;
 const _PROGRESS_POLL_MAX_ATTEMPTS = 120; // ~10 minutes at 5s/tick
+
+// After a forced recompute, every active MatchResult row already exists
+// (it's an in-place upsert, not a delete+recreate) -- so computed_pairs
+// already equals expected_pairs before the recompute even finishes, and
+// the ordinary progress poll above never sees anything "incomplete" to
+// react to. Poll the list directly on a fixed schedule instead, so scores
+// visibly update as the backend works through the queue.
+const _RECOMPUTE_POLL_MS = 5000;
+const _RECOMPUTE_POLL_TICKS = 18; // ~90s -- now re-extracts (PyMuPDF/OCR) every file, not just rescoring
 
 export function initMatches() {
   $("#applyFilters")?.addEventListener("click", () => { _page = 1; _load(); });
@@ -69,7 +79,13 @@ export function initMatches() {
     }
   });
 
-  window.addEventListener("load-matches", () => _load());
+  $("#matchesRecomputeBtn")?.addEventListener("click", () => _recomputeMatches());
+
+  window.addEventListener("load-matches", () => {
+    const action = $("#matchesRecomputeAction");
+    if (action) action.hidden = !canManageUsers();
+    _load();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +193,38 @@ function _renderProgressBanner(progress, incomplete) {
     `Calcul des correspondances en cours… ${progress.computed_pairs}/${progress.expected_pairs} déjà disponibles.`,
     "info"
   );
+}
+
+async function _recomputeMatches() {
+  const btn = $("#matchesRecomputeBtn");
+  const msg = $("#matchesRecomputeMsg");
+  setBanner(msg, "");
+  if (btn) { btn.disabled = true; btn.textContent = "Relance en cours…"; }
+
+  try {
+    const result = await safeFetch("/matches/recompute", { method: "POST" });
+    setBanner(
+      msg,
+      `Réextraction et recalcul lancés pour ${result.queued} CV — les scores ci-dessous se mettront à jour au fur et à mesure. Pour une grosse bibliothèque, revenez sur cette page un peu plus tard si tout n'a pas fini de se mettre à jour.`,
+      "info"
+    );
+    _pollAfterRecompute();
+  } catch (err) {
+    setBanner(msg, err.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Relancer l'IA"; }
+  }
+}
+
+function _pollAfterRecompute() {
+  let ticks = 0;
+  const tick = () => {
+    ticks++;
+    const stillOnThisPanel = !document.querySelector('.view[data-panel="matches"]')?.hidden;
+    if (stillOnThisPanel) _load();
+    if (ticks < _RECOMPUTE_POLL_TICKS && stillOnThisPanel) setTimeout(tick, _RECOMPUTE_POLL_MS);
+  };
+  setTimeout(tick, _RECOMPUTE_POLL_MS);
 }
 
 function _scheduleProgressPoll(incomplete) {

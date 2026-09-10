@@ -86,7 +86,7 @@ def test_archived_job_is_excluded_when_a_new_cv_is_added(session_factory, tmp_pa
     monkeypatch.setattr(app_main.settings, "watch_cv_dir", str(cv_dir))
     monkeypatch.setattr(app_main.settings, "embedding_enabled", False)
 
-    def fake_extract_and_persist(path, force_docling=False):
+    def fake_extract_and_persist(path, force_docling=False, force=False):
         # Le job archive garde exactement le meme hash pour que l'upsert ne
         # le desarchive pas malgre lui (voir le commentaire de
         # _upsert_job_document sur content_changed).
@@ -133,7 +133,7 @@ def test_archived_cv_is_excluded_when_a_new_job_is_added(session_factory, tmp_pa
     monkeypatch.setattr(app_main.settings, "embedding_enabled", False)
     monkeypatch.setattr(app_main.settings, "auto_create_job_offer", False)
 
-    def fake_extract_and_persist(path, force_docling=False):
+    def fake_extract_and_persist(path, force_docling=False, force=False):
         content_hash = "same-hash" if path == archived_cv_path else "hash-new"
         return _fake_extraction(path, content_hash)
 

@@ -107,7 +107,7 @@ def test_reactivated_cv_still_matches_a_brand_new_job(session_factory, tmp_path,
     monkeypatch.setattr(app_main.settings, "watch_cv_dir", str(cv_dir))
     monkeypatch.setattr(app_main.settings, "embedding_enabled", False)
 
-    def fake_extract_and_persist(path, force_docling=False):
+    def fake_extract_and_persist(path, force_docling=False, force=False):
         content_hash = "same-hash" if path == reactivated_cv_path else "hash-new"
         return _fake_extraction(path, content_hash)
 
@@ -160,7 +160,7 @@ def test_reactivated_job_still_matches_a_brand_new_cv(session_factory, tmp_path,
     monkeypatch.setattr(app_main.settings, "embedding_enabled", False)
     monkeypatch.setattr(app_main.settings, "auto_create_job_offer", False)
 
-    def fake_extract_and_persist(path, force_docling=False):
+    def fake_extract_and_persist(path, force_docling=False, force=False):
         content_hash = "same-hash" if path == reactivated_job_path else "hash-new"
         return _fake_extraction(path, content_hash)
 
