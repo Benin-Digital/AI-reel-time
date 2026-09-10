@@ -423,6 +423,9 @@ def _upsert_match_result(
         score_languages=cs.get("languages"),
         score_contract=cs.get("contract"),
         match_domain=cs.get("domain"),
+        score_priority_keywords=cs.get("priority_keywords"),
+        priority_keywords_matched_count=cs.get("priority_keywords_matched_count"),
+        priority_keywords_total=cs.get("priority_keywords_total"),
     )
     # A cheap vector-only rescore (no component breakdown) must not blank out
     # a previously-computed detailed breakdown for this pair.
@@ -440,6 +443,9 @@ def _upsert_match_result(
             score_languages=cs.get("languages"),
             score_contract=cs.get("contract"),
             match_domain=cs.get("domain"),
+            score_priority_keywords=cs.get("priority_keywords"),
+            priority_keywords_matched_count=cs.get("priority_keywords_matched_count"),
+            priority_keywords_total=cs.get("priority_keywords_total"),
         )
 
     with SessionLocal() as session:
@@ -1075,6 +1081,9 @@ def _vector_match_cv(
                 "languages": match_result.score_languages,
                 "contract": match_result.score_contract,
                 "domain": match_result.domain,
+                "priority_keywords": match_result.score_priority_keywords,
+                "priority_keywords_matched_count": len(match_result.priority_keywords_matched),
+                "priority_keywords_total": match_result.priority_keywords_total,
             }
         else:
             vector_score = _vector_score(float(row.distance))
@@ -1204,6 +1213,9 @@ def _vector_match_job(
                 "languages": match_result.score_languages,
                 "contract": match_result.score_contract,
                 "domain": match_result.domain,
+                "priority_keywords": match_result.score_priority_keywords,
+                "priority_keywords_matched_count": len(match_result.priority_keywords_matched),
+                "priority_keywords_total": match_result.priority_keywords_total,
             }
         else:
             vector_score = _vector_score(float(row.distance))
@@ -1448,12 +1460,27 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                 # library for every single upload.
                 score = _vector_score(job_distances[job_doc.id])
                 common: list[str] = []
+                cs: dict = {}
             else:
-                score, common = score_texts(
+                match_result = match_cv_to_job(
                     changed_text, job_result.extracted_text or "", job_doc.priority_keywords
                 )
+                score = match_result.score
+                common = match_result.common_skills
+                cs = {
+                    "semantic": match_result.score_semantic,
+                    "skills": match_result.score_skills,
+                    "experience": match_result.score_experience,
+                    "education": match_result.score_education,
+                    "languages": match_result.score_languages,
+                    "contract": match_result.score_contract,
+                    "domain": match_result.domain,
+                    "priority_keywords": match_result.score_priority_keywords,
+                    "priority_keywords_matched_count": len(match_result.priority_keywords_matched),
+                    "priority_keywords_total": match_result.priority_keywords_total,
+                }
             _insert_score_result(changed_path, job_path, score, common)
-            _upsert_match_result(cv_doc.id, job_doc.id, score, common)
+            _upsert_match_result(cv_doc.id, job_doc.id, score, common, cs)
     else:
         previous_hash = None
         with SessionLocal() as session:
@@ -1546,12 +1573,27 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                 # library for every single job upload.
                 score = _vector_score(cv_distances[cv_doc.id])
                 common: list[str] = []
+                cs: dict = {}
             else:
-                score, common = score_texts(
+                match_result = match_cv_to_job(
                     cv_result.extracted_text or "", changed_text, job_doc.priority_keywords
                 )
+                score = match_result.score
+                common = match_result.common_skills
+                cs = {
+                    "semantic": match_result.score_semantic,
+                    "skills": match_result.score_skills,
+                    "experience": match_result.score_experience,
+                    "education": match_result.score_education,
+                    "languages": match_result.score_languages,
+                    "contract": match_result.score_contract,
+                    "domain": match_result.domain,
+                    "priority_keywords": match_result.score_priority_keywords,
+                    "priority_keywords_matched_count": len(match_result.priority_keywords_matched),
+                    "priority_keywords_total": match_result.priority_keywords_total,
+                }
             _insert_score_result(cv_path, changed_path, score, common)
-            _upsert_match_result(cv_doc.id, job_doc.id, score, common)
+            _upsert_match_result(cv_doc.id, job_doc.id, score, common, cs)
 
 
 def _structure_document(path: Path, role: str) -> None:

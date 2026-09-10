@@ -238,6 +238,9 @@ class MatchRead(BaseModel):
     score_education: float | None = None
     score_languages: float | None = None
     score_contract: float | None = None
+    score_priority_keywords: float | None = None
+    priority_keywords_matched_count: int | None = None
+    priority_keywords_total: int | None = None
     match_domain: str | None = None
     feedback_decision: str | None = None
     feedback_rating: int | None = None
@@ -424,6 +427,9 @@ class MatchExplainRead(BaseModel):
     score_education: float | None = None
     score_languages: float | None = None
     score_contract: float | None = None
+    score_priority_keywords: float | None = None
+    priority_keywords_matched: list[str] = []
+    priority_keywords_missing: list[str] = []
     match_domain: str | None = None
 
 

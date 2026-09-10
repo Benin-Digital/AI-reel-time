@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from ..settings import get_settings
+from .matcher import _apply_priority_keywords, _resolve_priority_keywords, split_priority_keywords
 from .parser import parse_document
 from .structured import fold_text
 
@@ -54,6 +55,7 @@ def build_match_explanation(
     job_text: str,
     score: float,
     keywords: list[str],
+    priority_keywords: str | None = None,
 ) -> dict[str, object]:
     # Use the exact same parsing pipeline as matcher.py (the engine that
     # actually computed and persisted `score`), so the narrative below is
@@ -61,6 +63,9 @@ def build_match_explanation(
     # the number it's explaining.
     cv_profile = parse_document(cv_text or "", kind="cv")
     job_profile = parse_document(job_text or "", kind="job")
+    job_profile.priority_keyword_terms = split_priority_keywords(priority_keywords)
+    if job_profile.priority_keyword_terms:
+        _apply_priority_keywords(cv_profile, job_profile)
 
     cv_skill_terms = set(cv_profile.skill_terms)
     required_terms = set(job_profile.required_skill_terms or job_profile.skill_terms)
@@ -70,6 +75,12 @@ def build_match_explanation(
     matched_nice = [term for term in job_profile.nice_skill_terms if term in cv_skill_terms]
     missing_required = sorted(required_terms - cv_skill_terms)
 
+    priority_matched: list[str] = []
+    priority_all: list[str] = []
+    if job_profile.priority_keyword_terms:
+        priority_matched, priority_all = _resolve_priority_keywords(cv_profile, job_profile)
+    priority_missing = sorted(set(priority_all) - set(priority_matched))
+
     summary = (
         f"Score {round(score, 2)}% construit sur des sections structurees: "
         f"competences, experience, langues, contrat et signaux lexicaux. "
@@ -78,6 +89,19 @@ def build_match_explanation(
 
     why_match: list[str] = []
     vigilance: list[str] = []
+
+    # Surfaced first and separately from the general "competences requises
+    # alignees" line below: these are specifically what the recruiter
+    # flagged as priority for this offer, not just whatever find_skills()
+    # happened to auto-detect (see matcher.py's priority_keywords scoring
+    # component).
+    if priority_all:
+        why_match.append(
+            f"Mots-cles prioritaires du recruteur : {len(priority_matched)}/{len(priority_all)} "
+            f"trouves ({_format_keywords(sorted(priority_matched))})."
+        )
+        if priority_missing:
+            vigilance.append(f"Mots-cles prioritaires manquants : {_format_keywords(priority_missing)}.")
 
     if matched_required:
         why_match.append(f"Competences requises alignees: {_format_keywords(matched_required)}.")
@@ -137,4 +161,6 @@ def build_match_explanation(
         "vigilance": vigilance,
         "evidence": evidence,
         "keyword_hits": keyword_hits,
+        "priority_keywords_matched": sorted(priority_matched),
+        "priority_keywords_missing": priority_missing,
     }

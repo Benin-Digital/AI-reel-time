@@ -49,3 +49,34 @@ def test_explanation_missing_skills_match_persisted_score():
             f"'{skill}' compte comme competence manquante par matcher.py "
             f"mais absent de la section 'vigilance' de l'explication"
         )
+
+
+def test_explanation_surfaces_priority_keywords_distinctly():
+    """L'explication doit afficher la couverture des mots-cles prioritaires
+    separement de la couverture generale de competences (ex: "2/3 trouves"),
+    et lister ceux qui manquent en vigilance -- cote a cote avec la
+    composante score_priority_keywords calculee par matcher.py."""
+    cv = "Consultant gouvernance et LOD2, tres experimente."
+    job = "Poste: Analyste risque. Competences requises: gouvernance."
+    priority_keywords = "gouvernance\nLOD2\nISO 27001"
+
+    match = match_cv_to_job(cv, job, priority_keywords)
+    details = build_match_explanation(cv, job, match.score, match.common_skills, priority_keywords)
+
+    assert set(details["priority_keywords_matched"]) == {"Gouvernance", "LOD2"}
+    assert details["priority_keywords_missing"] == ["ISO 27001"]
+
+    why_match_text = " ".join(details["why_match"])
+    assert "2/3" in why_match_text, f"attendu '2/3' dans le why_match, obtenu: {why_match_text!r}"
+    vigilance_text = " ".join(details["vigilance"])
+    assert "ISO 27001" in vigilance_text
+
+
+def test_explanation_without_priority_keywords_omits_the_section():
+    cv = "Développeur Python, Django."
+    job = "Poste: Développeur. Compétences requises: Python."
+    match = match_cv_to_job(cv, job)
+    details = build_match_explanation(cv, job, match.score, match.common_skills)
+    assert details["priority_keywords_matched"] == []
+    assert details["priority_keywords_missing"] == []
+    assert "mots-cles prioritaires" not in " ".join(details["why_match"]).lower()
