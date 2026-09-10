@@ -1602,6 +1602,66 @@ async def lifespan(app: FastAPI):
                 logger.warning("Docling warm-up failed (will retry lazily on first document): %s", exc)
 
         threading.Thread(target=_warm_up_docling, name="docling-warmup", daemon=True).start()
+
+    # Warm up the other lazily-loaded ML models too. Without this, the FIRST
+    # real document processed after a container (re)start pays the full cold
+    # -load cost of every model it happens to touch -- NER, both embedders,
+    # the cross-encoder, and the ESCO FAISS index (itself a multi-minute
+    # build, see esco_taxonomy.py) -- serially, in the request path. Observed
+    # in production: a single CV took 150+ seconds this way, well past the
+    # frontend's request timeouts. Each warm-up runs in its own daemon
+    # thread so they overlap instead of stacking, and a failure here only
+    # logs a warning -- the same model loads lazily (and correctly) on first
+    # real use, this is purely a latency optimization.
+    if settings.ner_enabled and getattr(settings, "ner_backend", "spacy") == "camembert":
+        def _warm_up_ner() -> None:
+            try:
+                from .services.ner_camembert import _get_pipeline
+                _get_pipeline()
+            except Exception as exc:
+                logger.warning("NER warm-up failed (will retry lazily on first document): %s", exc)
+
+        threading.Thread(target=_warm_up_ner, name="ner-warmup", daemon=True).start()
+
+    if settings.embedding_enabled:
+        def _warm_up_embedder() -> None:
+            try:
+                from .services.embeddings import get_embedder
+                get_embedder()
+            except Exception as exc:
+                logger.warning("Embedding model warm-up failed (will retry lazily on first document): %s", exc)
+
+        threading.Thread(target=_warm_up_embedder, name="embedder-warmup", daemon=True).start()
+
+    if settings.skill_embedding_enabled:
+        def _warm_up_skill_embedder() -> None:
+            try:
+                from .services.embeddings import _embed_one
+                _embed_one("Python")
+            except Exception as exc:
+                logger.warning("Skill embedding model warm-up failed (will retry lazily on first document): %s", exc)
+
+        threading.Thread(target=_warm_up_skill_embedder, name="skill-embedder-warmup", daemon=True).start()
+
+    if settings.crossencoder_enabled:
+        def _warm_up_cross_encoder() -> None:
+            try:
+                from .services.matcher import _get_cross_encoder
+                _get_cross_encoder()
+            except Exception as exc:
+                logger.warning("Cross-encoder warm-up failed (will retry lazily on first document): %s", exc)
+
+        threading.Thread(target=_warm_up_cross_encoder, name="crossencoder-warmup", daemon=True).start()
+
+    if settings.esco_enrich_skills:
+        def _warm_up_esco() -> None:
+            try:
+                from .services.esco_taxonomy import get_esco_index
+                get_esco_index()
+            except Exception as exc:
+                logger.warning("ESCO index warm-up failed (will retry lazily on first document): %s", exc)
+
+        threading.Thread(target=_warm_up_esco, name="esco-warmup", daemon=True).start()
     try:
         yield
     finally:
