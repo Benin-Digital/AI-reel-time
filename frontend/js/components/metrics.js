@@ -9,20 +9,6 @@ const BACKOFF_FACTOR      = 1.8;
 let _timer = null;
 
 export function renderMetrics(data) {
-  const set = (id, val) => { const el = $(id); if (el) el.textContent = val ?? "—"; };
-  const uptimeEl = $("#metricUptime");
-  if (uptimeEl) {
-    const dot   = uptimeEl.querySelector(".uptime-dot");
-    const label = uptimeEl.querySelector(".uptime-label");
-    const up    = data.uptime_seconds != null && data.uptime_seconds >= 0;
-    if (dot)   { dot.classList.toggle("uptime-dot--down",   !up); }
-    if (label) { label.classList.toggle("uptime-label--down", !up); label.textContent = up ? "Système opérationnel" : "Système hors ligne"; }
-  }
-  set("#metricEvents",       data.event_count);
-  set("#metricExtractions",  data.extraction_count);
-  set("#metricScores",       data.score_count);
-  set("#metricWorkerStatus", data.worker_alive ? "Actif" : "Arrêté");
-
   _updateDonut("cv",  data.active_cv_count,  data.archived_cv_count);
   _updateDonut("job", data.active_job_count, data.archived_job_count);
   _updateScoreDistribution(data.score_high_count, data.score_mid_count, data.score_low_count);
