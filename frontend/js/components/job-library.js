@@ -1,5 +1,5 @@
 import { safeFetch, fetchBlob } from "../api.js";
-import { $, setBanner, openModal, escapeHtml } from "../utils/dom.js";
+import { $, setBanner, openModal, closeModal, escapeHtml } from "../utils/dom.js";
 import { store, setStore } from "../store.js";
 import { navigateTo } from "../router.js";
 import { openDeleteConfirm } from "../utils/upload.js";
@@ -11,16 +11,39 @@ const SUPPORTED = [".pdf", ".docx", ".txt"];
 // module-local state
 let _selectedId = null;
 let _page = 1;
+// Set right before opening the native file picker, from the pre-upload
+// priority-keywords modal below -- carried into _handleUpload so /ingest
+// can set it on the JobDocument before the first scoring pass runs.
+let _pendingJobPriorityKeywords = null;
 
 export function initJobLibrary() {
-  // Upload via button
+  // Upload via button -- goes through the optional priority-keywords modal
+  // first (see below) instead of opening the file picker directly.
   const btn   = $("#uploadJobButton");
   const input = $("#uploadJobInput");
-  btn?.addEventListener("click", () => input?.click());
+  btn?.addEventListener("click", () => _openPreUploadKeywordsModal());
   input?.addEventListener("change", () => {
-    if (input.files?.length) _handleUpload(Array.from(input.files));
+    if (input.files?.length) _handleUpload(Array.from(input.files), _pendingJobPriorityKeywords);
     input.value = "";
+    input.multiple = true;
+    _pendingJobPriorityKeywords = null;
   });
+
+  // Priority keywords only make sense tied to a single offer, so
+  // "Continuer" with any typed forces a single-file selection; leaving the
+  // field empty keeps the normal unrestricted multi-file import.
+  $("#preUploadPriorityKeywordsContinue")?.addEventListener("click", () => {
+    const textarea = $("#preUploadPriorityKeywordsInput");
+    const value = (textarea?.value || "").trim();
+    _pendingJobPriorityKeywords = value || null;
+    if (input) input.multiple = !value;
+    closeModal($("#preUploadPriorityKeywordsModal"));
+    input?.click();
+  });
+
+  const preUploadFileInput = $("#preUploadPriorityKeywordsFile");
+  $("#preUploadPriorityKeywordsImport")?.addEventListener("click", () => preUploadFileInput?.click());
+  preUploadFileInput?.addEventListener("change", () => _extractPreUploadPriorityKeywords(preUploadFileInput));
 
   // Filters & pagination
   $("#applyJobFilters")?.addEventListener("click", () => { _page = 1; _load(); });
@@ -257,7 +280,46 @@ async function _pollStructuring(id, maxWaitMs = 1800000) {
   }
 }
 
-async function _handleUpload(files) {
+async function _openPreUploadKeywordsModal() {
+  const textarea = $("#preUploadPriorityKeywordsInput");
+  const msg = $("#preUploadPriorityKeywordsMsg");
+  if (textarea) textarea.value = "";
+  _setPriorityKeywordsMsg(msg, "");
+  openModal($("#preUploadPriorityKeywordsModal"));
+}
+
+async function _extractPreUploadPriorityKeywords(fileInput) {
+  const file = fileInput.files?.[0];
+  fileInput.value = "";
+  if (!file) return;
+
+  const textarea = $("#preUploadPriorityKeywordsInput");
+  const msg = $("#preUploadPriorityKeywordsMsg");
+  if (!textarea) return;
+
+  const ext = `.${file.name.split(".").pop().toLowerCase()}`;
+  if (!SUPPORTED.includes(ext)) {
+    _setPriorityKeywordsMsg(msg, `Format non supporté (${SUPPORTED.join(", ")})`, "error");
+    return;
+  }
+  if (file.size > MAX_MB * 1024 * 1024) {
+    _setPriorityKeywordsMsg(msg, `Fichier trop volumineux (max ${MAX_MB} Mo)`, "error");
+    return;
+  }
+
+  _setPriorityKeywordsMsg(msg, `Lecture de ${file.name}…`);
+  try {
+    const fd = new FormData();
+    fd.append("upload", file, file.name);
+    const result = await safeFetch("/priority-keywords/extract-preview", { method: "POST", body: fd });
+    textarea.value = result.keywords;
+    _setPriorityKeywordsMsg(msg, "Relisez la liste puis cliquez sur Continuer.");
+  } catch (err) {
+    _setPriorityKeywordsMsg(msg, err.message, "error");
+  }
+}
+
+async function _handleUpload(files, priorityKeywords = null) {
   const statusEl = $("#uploadJobStatus");
   const pending = [];
   for (const file of files) {
@@ -276,6 +338,7 @@ async function _handleUpload(files) {
       fd.append("folder", "job");
       fd.append("upload", file, file.name);
       fd.append("filename", file.name);
+      if (priorityKeywords) fd.append("priority_keywords", priorityKeywords);
       await safeFetch("/ingest", { method: "POST", body: fd });
       pending.push(file.name);
     } catch (err) {
