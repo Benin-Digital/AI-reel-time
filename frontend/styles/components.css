@@ -757,6 +757,15 @@ select:disabled {
   opacity: 0.5;
 }
 
+/* For an empty state that means "still working", not "there's nothing
+   here" (e.g. Correspondances while matches are still being computed) --
+   reuses the same spin keyframe as the info banner spinner above so a
+   loading state looks the same everywhere in the app. */
+.empty-state__icon--spin svg {
+  animation: spin 1.1s linear infinite;
+  transform-origin: center;
+}
+
 .empty-state__title {
   font-size: var(--text-md);
   font-weight: var(--weight-semibold);

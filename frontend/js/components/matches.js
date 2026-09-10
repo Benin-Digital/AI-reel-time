@@ -116,7 +116,7 @@ async function _load() {
     if (!data.length) {
       list.innerHTML = incomplete
         ? `<div class="empty-state">
-            <div class="empty-state__icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="1.5"/><path d="M16 9v7l5 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="empty-state__icon empty-state__icon--spin"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="60 40"/></svg></div>
             <div class="empty-state__title">Calcul des correspondances en cours…</div>
             <div class="empty-state__hint">Les CV et offres sont prêts, le rapprochement des scores démarre — cette liste se mettra à jour automatiquement.</div>
           </div>`
