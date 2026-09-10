@@ -245,6 +245,13 @@ class MatchRead(BaseModel):
     updated_at: datetime
 
 
+class MatchProgressRead(BaseModel):
+    active_cv_count: int
+    active_job_count: int
+    expected_pairs: int
+    computed_pairs: int
+
+
 class MatchFeedbackCreate(BaseModel):
     decision: Literal["accept", "reject", "review"]
     rating: int | None = None

@@ -13,6 +13,18 @@ import { buildParams, setPage } from "../utils/docs.js";
 let _page = 1;
 // Local cache: matchId → decision ("accept" | "reject" | "review")
 const _feedbackCache = new Map();
+let _progressPollTimer = null;
+let _progressPollAttempts = 0;
+// Documents flip to "ready" as soon as extraction succeeds, before
+// _score_against_counterparts()'s matching loop runs against every active
+// counterpart (see main.py) -- so "ready" CVs/offers can sit for a while
+// with matches trickling in one at a time. Without polling, the page only
+// updated on a manual filter change or a full reload, and in the meantime
+// showed either a stale list or "Aucune correspondance" (the exact same
+// empty state as "you haven't imported anything"), with nothing telling
+// the recruiter that a calculation was still running.
+const _PROGRESS_POLL_MS = 5000;
+const _PROGRESS_POLL_MAX_ATTEMPTS = 120; // ~10 minutes at 5s/tick
 
 export function initMatches() {
   $("#applyFilters")?.addEventListener("click", () => { _page = 1; _load(); });
@@ -70,6 +82,7 @@ async function _load() {
   list.innerHTML = `
     <div class="skeleton skeleton--card"></div>
     <div class="skeleton skeleton--card"></div>`;
+  if (_progressPollTimer) { clearTimeout(_progressPollTimer); _progressPollTimer = null; }
   try {
     const includeArchived = $("#includeArchived")?.checked ?? false;
     const params = buildParams({
@@ -83,44 +96,84 @@ async function _load() {
       search:           $("#matchSearch")?.value,
       unassigned_only:  includeArchived ? null : "true",
     });
-    const data = await safeFetch(`/matches${params}`);
+    const [data, progress] = await Promise.all([
+      safeFetch(`/matches${params}`),
+      safeFetch("/matches/progress").catch(() => null),
+    ]);
 
     const pageEl  = $("#matchesPage");
     if (pageEl) setPage(pageEl, _page);
     const prevBtn = $("#matchesPrev");
     if (prevBtn) prevBtn.disabled = _page <= 1;
 
+    const incomplete = !!progress && progress.expected_pairs > progress.computed_pairs;
+    // The empty-state below already explains "calcul en cours" on its own
+    // when there's nothing to show yet -- only surface the banner once
+    // there's an actual list underneath it, to avoid saying the same thing
+    // twice.
+    _renderProgressBanner(progress, incomplete && data.length > 0);
+
     if (!data.length) {
-      list.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state__icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M10 16h12M16 10l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="1.5"/></svg></div>
-          <div class="empty-state__title">Aucune correspondance</div>
-          <div class="empty-state__hint">Importez des CV et des offres, puis attendez le traitement.</div>
-        </div>`;
-      return;
-    }
-    // Seed the feedback cache from the server's own persisted state: without
-    // this, a saved evaluation only showed up in the card list while its
-    // decision happened to already be in this in-memory cache (set when the
-    // user picked it, or when the "Analyser" modal was opened for that exact
-    // match in this page load) -- any other page load, including a plain
-    // refresh, showed every match as unevaluated even though the feedback
-    // was sitting untouched in the database the whole time.
-    for (const match of data) {
-      if (match.feedback_decision) {
-        _feedbackCache.set(String(match.id), {
-          decision: match.feedback_decision,
-          rating: match.feedback_rating ?? 0,
-          comment: match.feedback_comment ?? null,
-        });
+      list.innerHTML = incomplete
+        ? `<div class="empty-state">
+            <div class="empty-state__icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="1.5"/><path d="M16 9v7l5 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="empty-state__title">Calcul des correspondances en cours…</div>
+            <div class="empty-state__hint">Les CV et offres sont prêts, le rapprochement des scores démarre — cette liste se mettra à jour automatiquement.</div>
+          </div>`
+        : `<div class="empty-state">
+            <div class="empty-state__icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M10 16h12M16 10l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="16" r="13.5" stroke="currentColor" stroke-width="1.5"/></svg></div>
+            <div class="empty-state__title">Aucune correspondance</div>
+            <div class="empty-state__hint">Importez des CV et des offres, puis attendez le traitement.</div>
+          </div>`;
+    } else {
+      // Seed the feedback cache from the server's own persisted state:
+      // without this, a saved evaluation only showed up in the card list
+      // while its decision happened to already be in this in-memory cache
+      // (set when the user picked it, or when the "Analyser" modal was
+      // opened for that exact match in this page load) -- any other page
+      // load, including a plain refresh, showed every match as unevaluated
+      // even though the feedback was sitting untouched in the database.
+      for (const match of data) {
+        if (match.feedback_decision) {
+          _feedbackCache.set(String(match.id), {
+            decision: match.feedback_decision,
+            rating: match.feedback_rating ?? 0,
+            comment: match.feedback_comment ?? null,
+          });
+        }
       }
+      list.innerHTML = data.map(_renderMatchCard).join("");
     }
-    list.innerHTML = data.map(_renderMatchCard).join("");
+
+    _scheduleProgressPoll(incomplete);
   } catch (err) {
     if (err.name !== "AuthError") {
       list.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${err.message}</div></div>`;
     }
   }
+}
+
+function _renderProgressBanner(progress, incomplete) {
+  const el = $("#matchProgressStatus");
+  if (!el) return;
+  if (!incomplete) { setBanner(el, ""); return; }
+  setBanner(
+    el,
+    `Calcul des correspondances en cours… ${progress.computed_pairs}/${progress.expected_pairs} déjà disponibles.`,
+    "info"
+  );
+}
+
+function _scheduleProgressPoll(incomplete) {
+  if (!incomplete) { _progressPollAttempts = 0; return; }
+  const section = document.querySelector('.view[data-panel="matches"]');
+  if (section?.hidden) { _progressPollAttempts = 0; return; }
+  if (_progressPollAttempts >= _PROGRESS_POLL_MAX_ATTEMPTS) { _progressPollAttempts = 0; return; }
+  _progressPollAttempts++;
+  _progressPollTimer = setTimeout(() => {
+    const stillOnThisPanel = !document.querySelector('.view[data-panel="matches"]')?.hidden;
+    if (stillOnThisPanel) _load();
+  }, _PROGRESS_POLL_MS);
 }
 
 const _CV_ICON  = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="3" y="1.5" width="10" height="13" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
