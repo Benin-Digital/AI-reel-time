@@ -157,6 +157,17 @@ def _cross_encode_best(query: str, document: str) -> float:
 _DEFAULT_W = {
     "semantic": 0.40,
     "skills": 0.30,
+    # Only counted when the job has priority keywords (see has_signal on
+    # _priority_keyword_score) -- absent for the common case (a recruiter
+    # who never filled this in), so it changes nothing there. When present,
+    # it's excluded from neither semantic's nor skills' weight: adding a
+    # 7th component to the weighted average proportionally dilutes every
+    # other component's effective share instead (weight_total grows from
+    # 1.00 to 1.20), which is what actually fixes bug 1 -- a CV can no
+    # longer make up for missing exactly what the recruiter flagged as
+    # priority by scoring well on generic semantic similarity, because
+    # that similarity's share of the total shrinks too, not just skills'.
+    "priority_keywords": 0.20,
     "experience": 0.12,
     "education": 0.08,
     "languages": 0.05,
@@ -440,6 +451,14 @@ class MatchScore:
     common_skills: list[str]   # Skills in both CV and job
     missing_skills: list[str]  # Required skills absent from CV
     weights: dict[str, float]  # Weights used for this match
+    # Recruiter-curated priority keywords (job.priority_keyword_terms), a
+    # component distinct from the general skills score -- see
+    # _priority_keyword_score. None (not 0.0) when the job has no priority
+    # keywords at all, so a recruiter/UI can tell "no priorities set" apart
+    # from "priorities set, none found in this CV".
+    score_priority_keywords: float | None = None
+    priority_keywords_matched: list[str] = field(default_factory=list)
+    priority_keywords_total: int = 0
     # Components whose score is a neutral/default value driven by MISSING
     # information rather than a real comparison (e.g. no language requirement
     # in the job, or an education section that couldn't be extracted). Lets a
@@ -535,33 +554,71 @@ def split_priority_keywords(raw: str | None) -> list[str]:
 
 
 def _apply_priority_keywords(cv: ParsedDocument, job: ParsedDocument) -> None:
-    """Fold a job's recruiter-curated priority keywords into its required
-    skills, bypassing find_skills() for terms it doesn't recognize.
+    """Make a job's recruiter-curated priority keywords detectable on the
+    CV side, bypassing find_skills() for terms it doesn't recognize --
+    WITHOUT folding them into job.required_skill_terms (that used to be
+    the whole mechanism, before priority keywords got their own scoring
+    component: see _priority_keyword_score and the priority_keywords
+    weight in _DEFAULT_W). Mixing them into the general required-skills
+    set meant they only ever pulled the *generic* skills score up or down
+    by whatever fraction they made of the total -- a CV missing exactly
+    what the recruiter flagged as priority could still score well by
+    covering enough *other*, auto-detected skills instead. A dedicated
+    component with its own weight can't be compensated for that way.
 
     Some of these terms (e.g. "LOD2", "DORA", "TRM" -- real examples from
     production) have no taxonomy entry at all, so no amount of them
-    appearing in either text would ever make find_skills() extract them as
-    a skill. For each keyword: normalize to a taxonomy canonical when one
-    exists (so it lines up with whatever find_skills() already extracted
-    from the CV, e.g. "assurance" -> the same canonical the CV's own text
-    would produce); otherwise use the raw keyword as its own canonical
-    term, and scan the CV's own text for it directly -- it can never end
-    up in cv.skill_terms any other way, since find_skills() won't produce
-    a term it doesn't know.
-
-    Mutates both cv and job in place so the existing set-intersection
-    coverage logic in _skill_score() picks these up with no changes there.
+    appearing in the CV would ever make find_skills() extract them as a
+    skill on its own. For each keyword: normalize to a taxonomy canonical
+    when one exists (so it lines up with whatever find_skills() already
+    extracted from the CV, e.g. "assurance" -> the same canonical the CV's
+    own text would produce); otherwise scan the CV's own text for the raw
+    term directly -- it can never end up in cv.skill_terms any other way.
+    Either way, mutates cv.skill_terms only (never job.required_skill_terms),
+    purely so the term shows up in the CV's detected competences for
+    transparency; _resolve_priority_keywords() below is what actually
+    scores coverage.
     """
     cv_text_folded = _fold(cv.cleaned_text)
     for raw_term in job.priority_keyword_terms:
         canonical = normalize_skill(raw_term)
-        term = canonical or raw_term
-        if term not in job.required_skill_terms:
-            job.required_skill_terms.append(term)
         if canonical:
-            continue  # already extractable from CV text via find_skills() like any other skill
+            continue  # already detectable via find_skills() like any other skill
+        term = raw_term
         if term not in cv.skill_terms and re.search(rf"\b{re.escape(_fold(term))}\b", cv_text_folded):
             cv.skill_terms.append(term)
+
+
+def _resolve_priority_keywords(cv: ParsedDocument, job: ParsedDocument) -> tuple[list[str], list[str]]:
+    """(matched, all_terms): the job's priority keywords resolved to their
+    taxonomy canonical (or left as the raw term when the taxonomy doesn't
+    recognize it), and which of those are present in cv.skill_terms
+    (already enriched for unknown terms by _apply_priority_keywords).
+    Shared by _priority_keyword_score (the weighted component) and
+    match_parsed_documents (which exposes the raw counts on MatchScore for
+    the UI, e.g. "6/9 mots-clés prioritaires trouvés")."""
+    all_terms = [normalize_skill(t) or t for t in job.priority_keyword_terms]
+    cv_skills = set(cv.skill_terms)
+    matched = [t for t in all_terms if t in cv_skills]
+    return matched, all_terms
+
+
+def _priority_keyword_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
+    """Coverage of the job's recruiter-curated priority keywords, as its
+    own scoring component distinct from the general skills coverage (see
+    _DEFAULT_W's priority_keywords weight) -- so a CV missing exactly what
+    the recruiter flagged as priority can't be made up for by scoring well
+    on generic vocabulary/skills elsewhere.
+
+    has_signal is False when the job has no priority keywords at all (the
+    common case: most recruiters never fill this in), so it's excluded
+    from the weighted average entirely for that job rather than diluting
+    every score with a neutral placeholder value.
+    """
+    if not job.priority_keyword_terms:
+        return 0.5, False
+    matched, all_terms = _resolve_priority_keywords(cv, job)
+    return (len(matched) / len(all_terms) if all_terms else 0.5), True
 
 
 def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScore:
@@ -596,6 +653,7 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     semantic = _cross_encode_best(job_repr, cv_repr)
 
     skills, skills_ok = _skill_score(cv, job)
+    priority_kw_score, priority_kw_ok = _priority_keyword_score(cv, job)
     experience, experience_ok = _experience_score(cv, job)
     education, education_ok = _education_score(cv, job)
     languages, languages_ok = _language_score(cv, job)
@@ -603,6 +661,7 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
 
     structured = (
         ("skills", skills, skills_ok),
+        ("priority_keywords", priority_kw_score, priority_kw_ok),
         ("experience", experience, experience_ok),
         ("education", education, education_ok),
         ("languages", languages, languages_ok),
@@ -643,9 +702,19 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     # at full coverage.
     if skills_ok:
         final = min(final, 0.5 + 0.5 * skills)
+    # Same reasoning, applied to the recruiter's own priorities specifically:
+    # a weight alone still lets the other ~80% of the score compensate for
+    # missing exactly what the recruiter flagged as most important. The cap
+    # makes that non-negotiable, the same way the skills cap above does for
+    # the general required-skills set.
+    if priority_kw_ok:
+        final = min(final, 0.5 + 0.5 * priority_kw_score)
 
     cv_skills = set(cv.skill_terms)
     job_required = set(job.required_skill_terms or job.skill_terms)
+    priority_matched, priority_all = (
+        _resolve_priority_keywords(cv, job) if job.priority_keyword_terms else ([], [])
+    )
 
     return MatchScore(
         score=round(final * 100, 2),
@@ -660,6 +729,9 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
         missing_skills=sorted(job_required - cv_skills),
         weights=w,
         low_confidence_components=low_confidence,
+        score_priority_keywords=round(priority_kw_score, 4) if priority_kw_ok else None,
+        priority_keywords_matched=sorted(priority_matched),
+        priority_keywords_total=len(priority_all),
     )
 
 

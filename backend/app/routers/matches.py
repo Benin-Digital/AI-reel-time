@@ -79,6 +79,9 @@ def _to_match_read(
         job_label=job_labels.get(row.job_id),
         score=row.score,
         common_keywords=deserialize_keywords(row.common_keywords),
+        score_priority_keywords=row.score_priority_keywords,
+        priority_keywords_matched_count=row.priority_keywords_matched_count,
+        priority_keywords_total=row.priority_keywords_total,
         feedback_decision=fb.decision if fb else None,
         feedback_rating=fb.rating if fb else None,
         feedback_comment=fb.comment if fb else None,
@@ -302,7 +305,9 @@ def explain_match(match_id: int) -> MatchExplainRead:
         job_text = job_extract.extracted_text if job_extract else ""
         keywords = deserialize_keywords(match.common_keywords)
 
-        details = build_match_explanation(cv_text, job_text, match.score, keywords)
+        details = build_match_explanation(
+            cv_text, job_text, match.score, keywords, job_doc.priority_keywords
+        )
         return MatchExplainRead(
             match_id=match.id,
             score=match.score,
@@ -317,5 +322,8 @@ def explain_match(match_id: int) -> MatchExplainRead:
             score_education=match.score_education,
             score_languages=match.score_languages,
             score_contract=match.score_contract,
+            score_priority_keywords=match.score_priority_keywords,
+            priority_keywords_matched=list(details["priority_keywords_matched"]),
+            priority_keywords_missing=list(details["priority_keywords_missing"]),
             match_domain=match.match_domain,
         )

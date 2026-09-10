@@ -288,6 +288,16 @@ function _renderMatchCard(match) {
   const tone     = scoreTone(score);
   const keywords = (match.common_keywords ?? []).filter(Boolean).slice(0, 6);
   const domain   = match.match_domain ? `<span class="badge badge--primary">${escapeHtml(match.match_domain)}</span>` : "";
+  // Distinct from the general skills coverage below -- specifically what
+  // the recruiter flagged as priority for this offer (see the "Mots-clés
+  // prioritaires" card on the offer's detail page). Only rendered when the
+  // job actually has any set.
+  const priorityBadge = match.priority_keywords_total
+    ? `<span class="badge badge--${match.priority_keywords_matched_count === match.priority_keywords_total ? "success" : "warning"}"
+        title="Mots-clés prioritaires trouvés dans ce CV">
+        ${match.priority_keywords_matched_count}/${match.priority_keywords_total} mots-clés prioritaires
+      </span>`
+    : "";
   const current  = _feedbackCache.get(String(match.id)) ?? null;
   const cvLabel  = escapeHtml(match.cv_label || `CV ${match.cv_id}`);
   const jobLabel = escapeHtml(match.job_label || `Offre ${match.job_id}`);
@@ -315,6 +325,7 @@ function _renderMatchCard(match) {
   <div class="match-card__body">
     <p class="text-xs text-muted">Match #${escapeHtml(String(match.id))}</p>
     ${renderScoreBar(score)}
+    ${priorityBadge ? `<div>${priorityBadge}</div>` : ""}
     ${_renderComponentScores(match)}
     <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
     ${_renderFeedbackBar(match.id, current)}
@@ -470,12 +481,13 @@ function _renderExplainContent(data) {
 }
 
 const _SCORE_COMPONENTS = [
-  { key: "score_skills",     label: "Compétences" },
-  { key: "score_semantic",   label: "Sémantique" },
-  { key: "score_experience", label: "Expérience" },
-  { key: "score_education",  label: "Formation" },
-  { key: "score_languages",  label: "Langues" },
-  { key: "score_contract",   label: "Contrat" },
+  { key: "score_skills",            label: "Compétences" },
+  { key: "score_priority_keywords", label: "Mots-clés prioritaires" },
+  { key: "score_semantic",          label: "Sémantique" },
+  { key: "score_experience",        label: "Expérience" },
+  { key: "score_education",         label: "Formation" },
+  { key: "score_languages",         label: "Langues" },
+  { key: "score_contract",          label: "Contrat" },
 ];
 
 function _renderComponentScores(match) {

@@ -248,6 +248,16 @@ class MatchResult(Base):
     score_education: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_languages: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_contract: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Recruiter-curated priority keywords (see JobDocument.priority_keywords),
+    # a component distinct from score_skills -- see matcher.py's
+    # _priority_keyword_score. NULL when the job has none set. Only the
+    # counts are persisted (for the match card, which lists many rows at
+    # once); the full matched/missing term lists are only ever computed
+    # live by GET /matches/{id}/explain, which already re-parses both
+    # documents from scratch.
+    score_priority_keywords: Mapped[float | None] = mapped_column(Float, nullable=True)
+    priority_keywords_matched_count: Mapped[int | None] = mapped_column(nullable=True)
+    priority_keywords_total: Mapped[int | None] = mapped_column(nullable=True)
     match_domain: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -4,11 +4,14 @@ Contexte : chaque offre reelle observee en production est accompagnee d'un
 "Mots Cles.docx" -- une liste courte de termes que le recruteur a
 manuellement juges prioritaires en relisant l'offre, souvent des acronymes
 metier (LOD2, DORA, TRM) absents du dictionnaire de competences (taxonomy.py).
-Injecter ces termes tels quels dans le texte de l'offre ne suffit pas :
-find_skills() ne les reconnaitrait toujours pas comme competence, quel que
-soit le nombre de fois qu'ils apparaissent. Ces mots-cles doivent donc etre
-ajoutes DIRECTEMENT a required_skill_terms, en contournant la taxonomie pour
-les termes qu'elle ne connait pas.
+
+Ces mots-cles ont leur PROPRE composante de score (score_priority_keywords,
+poids dedie dans _DEFAULT_W), distincte de la couverture generale de
+competences (score_skills) -- pas simplement ajoutes a required_skill_terms.
+Premiere version (melangee a required_skill_terms) laissait un CV compenser
+des mots-cles prioritaires manquants en couvrant suffisamment d'AUTRES
+competences auto-detectees ; une composante a part, plafonnee comme
+score_skills, rend ca impossible.
 """
 from __future__ import annotations
 
@@ -34,7 +37,11 @@ def test_taxonomy_recognized_keyword_normalizes_to_canonical():
     cv = "Développeur backend avec une solide expérience en Python."
     job = "Poste: Développeur. Compétences requises: gestion de projet."
     result = match_cv_to_job(cv, job, priority_keywords="python")
-    assert "Python" in result.common_skills
+    assert "Python" in result.priority_keywords_matched
+    assert result.score_priority_keywords == 1.0
+    # La composante generale de competences reste independante : "Python"
+    # n'est jamais ajoute a required_skill_terms.
+    assert "Python" not in result.common_skills
 
 
 def test_taxonomy_unknown_keyword_is_matched_via_literal_cv_text_scan():
@@ -44,32 +51,44 @@ def test_taxonomy_unknown_keyword_is_matched_via_literal_cv_text_scan():
     cv = "Consultant risques bancaires. Experience LOD2 et LOD1 en conformite."
     job = "Poste: Analyste risque. Competences requises: gouvernance."
     result = match_cv_to_job(cv, job, priority_keywords="LOD2")
-    assert "LOD2" in result.common_skills
+    assert "LOD2" in result.priority_keywords_matched
+    assert result.score_priority_keywords == 1.0
 
 
-def test_taxonomy_unknown_keyword_absent_from_cv_is_flagged_missing():
+def test_taxonomy_unknown_keyword_absent_from_cv_lowers_the_dedicated_score():
     cv = "Chef de projet generaliste, aucune mention de conformite bancaire."
     job = "Poste: Analyste risque. Competences requises: gouvernance."
     result = match_cv_to_job(cv, job, priority_keywords="DORA")
-    assert "DORA" in result.missing_skills
-    assert "DORA" not in result.common_skills
+    assert "DORA" not in result.priority_keywords_matched
+    assert result.score_priority_keywords == 0.0
+    assert result.priority_keywords_total == 1
 
 
-def test_priority_keywords_widen_required_skill_set_and_can_lower_coverage():
-    """Une offre qui, sans mots-cles prioritaires, semble parfaitement
-    couverte doit refleter une couverture plus stricte une fois les
-    priorites du recruteur prises en compte -- exactement le trou de score
-    trouve en production (bug 1) sur des competences metier absentes de la
-    taxonomie generale."""
-    cv = "Consultant gouvernance et conformite bancaire, tres experimente."
+def test_missing_priority_keywords_cap_the_final_score():
+    """Meme raisonnement que le plafond de score_skills (bug 1) : un CV qui
+    rate la majorite des mots-cles prioritaires ne doit pas pouvoir
+    compenser avec le reste (semantique, competences generales...)."""
+    cv = "Consultant gouvernance et conformite bancaire, tres experimente, excellent communicant."
     job = "Poste: Analyste risque. Competences requises: gouvernance, conformite."
     without = match_cv_to_job(cv, job)
-    with_priority = match_cv_to_job(cv, job, priority_keywords="gouvernance\nISO 27001\nLOD2")
-    assert without.score_skills == 1.0, "sans mots-cles prioritaires, couverture deja totale"
-    assert with_priority.score_skills < without.score_skills, (
-        "ISO 27001 et LOD2, absents du CV, doivent faire baisser la couverture "
-        f"une fois pris en compte, obtenu {with_priority.score_skills}"
+    with_priority = match_cv_to_job(cv, job, priority_keywords="gouvernance\nISO 27001\nLOD2\nTRM")
+    assert with_priority.score < without.score, (
+        "3 mots-cles prioritaires sur 4 absents du CV doivent faire baisser "
+        f"le score final, obtenu sans={without.score} avec={with_priority.score}"
     )
+    assert with_priority.score <= 62.5, (
+        f"1/4 de couverture prioritaire doit plafonner le score (0.5 + 0.5*0.25 = 62.5%), "
+        f"obtenu {with_priority.score}"
+    )
+
+
+def test_priority_keywords_score_is_none_without_any_keyword():
+    cv = "Développeur Python, Django, PostgreSQL."
+    job = "Poste: Développeur Backend. Compétences requises: Python, Django."
+    result = match_cv_to_job(cv, job)
+    assert result.score_priority_keywords is None
+    assert result.priority_keywords_matched == []
+    assert result.priority_keywords_total == 0
 
 
 def test_no_priority_keywords_is_a_no_op():

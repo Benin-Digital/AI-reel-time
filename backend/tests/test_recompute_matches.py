@@ -11,7 +11,7 @@ deja calcules sans re-uploader chaque document.
 
 _score_against_counterparts(force=True) contourne ce saut -- et le
 raccourci d'embedding (top-K vectoriel) -- pour que chaque paire repasse
-par le pipeline complet score_texts(), peu importe si le contenu ou le
+par le pipeline complet match_cv_to_job(), peu importe si le contenu ou le
 statut de matching n'a pas change.
 """
 from __future__ import annotations
@@ -24,6 +24,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.models import Base, CvDocument, JobDocument, MatchResult, ScoreResult
 from app.schemas import ExtractedTextRead
+from app.services.matcher import MatchScore
 import app.main as app_main
 
 
@@ -90,7 +91,15 @@ def _setup(session_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(app_main.settings, "watch_cv_dir", str(cv_dir))
     monkeypatch.setattr(app_main.settings, "embedding_enabled", False)
     monkeypatch.setattr(app_main, "_extract_and_persist", fake_extract_and_persist)
-    monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text, priority_keywords=None: (91.0, ["Python"]))
+    fake_match_result = MatchScore(
+        score=91.0, score_semantic=0.9, score_skills=0.9, score_experience=0.9,
+        score_education=0.9, score_languages=0.9, score_contract=0.9,
+        domain="tech", common_skills=["Python"], missing_skills=[], weights={},
+    )
+    monkeypatch.setattr(
+        app_main, "match_cv_to_job",
+        lambda cv_text, job_text, priority_keywords=None: fake_match_result,
+    )
 
     return cv_path, job_path, extract_calls
 
