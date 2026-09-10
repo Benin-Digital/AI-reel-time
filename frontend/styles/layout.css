@@ -330,6 +330,17 @@
   .metrics-grid { grid-template-columns: 1fr 1fr; }
 }
 
+/* ---- DASHBOARD STATE GRID (donuts + score distribution) ---- */
+.state-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 900px) {
+  .state-grid { grid-template-columns: 1fr; }
+}
+
 /* ---- DOCUMENT WORKSPACE (list + detail side by side) ---- */
 .workspace {
   display: grid;

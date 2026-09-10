@@ -22,6 +22,48 @@ export function renderMetrics(data) {
   set("#metricExtractions",  data.extraction_count);
   set("#metricScores",       data.score_count);
   set("#metricWorkerStatus", data.worker_alive ? "Actif" : "Arrêté");
+
+  _updateDonut("cv",  data.active_cv_count,  data.archived_cv_count);
+  _updateDonut("job", data.active_job_count, data.archived_job_count);
+  _updateScoreDistribution(data.score_high_count, data.score_mid_count, data.score_low_count);
+}
+
+// Circumference of the donut's r=15.9155 circle is ~100, so a percentage
+// (0-100) can be used directly as the stroke-dasharray's "drawn" length.
+function _updateDonut(prefix, active, archived) {
+  const active_n   = Number(active) || 0;
+  const archived_n = Number(archived) || 0;
+  const total = active_n + archived_n;
+  const pct = total > 0 ? Math.round((active_n / total) * 100) : 0;
+
+  const fillEl = document.querySelector(`#${prefix}StateDonut .donut__fill`);
+  if (fillEl) fillEl.setAttribute("stroke-dasharray", `${pct} ${100 - pct}`);
+
+  const valueEl = $(`#${prefix}StateActiveValue`);
+  if (valueEl) valueEl.textContent = total > 0 ? String(active_n) : "–";
+
+  const activeTextEl = $(`#${prefix}StateActiveText`);
+  if (activeTextEl) activeTextEl.textContent = String(active_n);
+  const archivedTextEl = $(`#${prefix}StateArchivedText`);
+  if (archivedTextEl) archivedTextEl.textContent = String(archived_n);
+}
+
+function _updateScoreDistribution(high, mid, low) {
+  const high_n = Number(high) || 0;
+  const mid_n  = Number(mid)  || 0;
+  const low_n  = Number(low)  || 0;
+  const total  = high_n + mid_n + low_n;
+  const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
+
+  const setWidth = (id, value) => { const el = $(id); if (el) el.style.width = `${value}%`; };
+  setWidth("#scoreDistHigh", pct(high_n));
+  setWidth("#scoreDistMid",  pct(mid_n));
+  setWidth("#scoreDistLow",  pct(low_n));
+
+  const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+  set("#scoreDistHighText", high_n);
+  set("#scoreDistMidText",  mid_n);
+  set("#scoreDistLowText",  low_n);
 }
 
 async function fetchMetrics() {
