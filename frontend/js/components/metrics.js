@@ -5,13 +5,23 @@ import { store, setStore } from "../store.js";
 const AUTO_REFRESH_MS     = 3000;
 const AUTO_REFRESH_MAX_MS = 30000;
 const BACKOFF_FACTOR      = 1.8;
+// A healthy /metrics round-trip is near-instant -- past this, something is
+// dragging (the recruiter's own connection, or the platform under load),
+// worth flagging distinctly from an outright failure below.
+const SLOW_RESPONSE_MS = 1500;
 
 let _timer = null;
 
-export function renderMetrics(data) {
+export function renderMetrics(data, durationMs = 0) {
   _updateDonut("cv",  data.active_cv_count,  data.archived_cv_count);
   _updateDonut("job", data.active_job_count, data.archived_job_count);
-  _setSidebarHealth(data.worker_alive ? "up" : "down", data.worker_alive ? "Système opérationnel" : "Worker arrêté");
+  if (!data.worker_alive) {
+    _setSidebarHealth("down", "Worker arrêté");
+  } else if (durationMs > SLOW_RESPONSE_MS) {
+    _setSidebarHealth("slow", "Connexion lente");
+  } else {
+    _setSidebarHealth("up", "Système opérationnel");
+  }
 }
 
 // Visible on every panel (unlike the metric cards, only rendered on the
@@ -23,10 +33,12 @@ function _setSidebarHealth(state, label) {
   const labelEl = $("#sidebarHealthLabel");
   if (dot) {
     dot.classList.toggle("uptime-dot--down", state === "down");
+    dot.classList.toggle("uptime-dot--slow", state === "slow");
     dot.title = label;
   }
   if (labelEl) {
     labelEl.classList.toggle("uptime-label--down", state === "down");
+    labelEl.classList.toggle("uptime-label--slow", state === "slow");
     labelEl.textContent = label;
   }
 }
@@ -55,8 +67,9 @@ async function fetchMetrics() {
   if (store.autoRefreshInFlight) return;
   setStore({ autoRefreshInFlight: true });
   try {
+    const startedAt = performance.now();
     const data = await safeFetch("/metrics");
-    renderMetrics(data);
+    renderMetrics(data, performance.now() - startedAt);
     setBanner($("#apiStatusBanner"), "");
     setStore({ autoRefreshDelayMs: AUTO_REFRESH_MS });
   } catch (err) {
