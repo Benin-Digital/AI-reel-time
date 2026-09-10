@@ -1266,7 +1266,7 @@ def _peek_docling_sections(content_hash: str | None) -> dict[str, str] | None:
     return _DOCLING_SECTIONS_CACHE.get(content_hash)
 
 
-def _extract_and_persist(path: Path, force_docling: bool = False) -> ExtractedTextRead:
+def _extract_and_persist(path: Path, force_docling: bool = False, force: bool = False) -> ExtractedTextRead:
     """Extract text for `path`.
 
     By default (force_docling=False) this always uses the fast plain-text
@@ -1280,6 +1280,13 @@ def _extract_and_persist(path: Path, force_docling: bool = False) -> ExtractedTe
     "structure this document" action (see _structure_document) — a
     deliberate, one-off, on-demand request to pay that cost for a richer,
     section-aware extraction.
+
+    force=True bypasses the content-hash cache below entirely, so an
+    unchanged file still gets re-extracted with whatever extraction code
+    is currently deployed. Used by POST /matches/recompute: an extraction
+    fix (e.g. the PDF column-layout ordering) only changes how a file is
+    *read*, never its bytes on disk, so the ordinary content-hash cache
+    would otherwise keep serving the stale pre-fix text forever.
     """
     if not path.exists():
         logger.warning("File not found for extraction: %s", path)
@@ -1297,7 +1304,7 @@ def _extract_and_persist(path: Path, force_docling: bool = False) -> ExtractedTe
         existing = session.scalar(
             select(ExtractedText).where(ExtractedText.file_path == str(path))
         )
-        if existing and existing.content_hash == content_hash and existing.extraction_success:
+        if not force and existing and existing.content_hash == content_hash and existing.extraction_success:
             already_docling = (existing.extraction_method or "").startswith("pdf-docling") or \
                               (existing.extraction_method or "").startswith("docling")
             # Automatic (force_docling=False) calls always trust the cache
@@ -1379,10 +1386,14 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
     """force=True bypasses the "content unchanged and already matched"
     skip below, and the embedding-based shortlist shortcut, so every pair
     is rescored through the full score_texts() pipeline regardless of
-    whether anything on disk changed. Used by POST /matches/recompute to
-    let a recruiter see the effect of a matcher.py/parser.py/taxonomy.py
+    whether anything on disk changed. It also forces every document
+    involved through a fresh (non-cached) extraction — see the force
+    parameter on _extract_and_persist — so an extraction-code change
+    (e.g. the PDF column-layout ordering) takes effect too, not just a
+    scoring-code one. Used by POST /matches/recompute to let a recruiter
+    see the effect of a matcher.py/parser.py/extraction.py/taxonomy.py
     deploy on already-computed scores, without touching any document."""
-    changed_result = _extract_and_persist(changed_path)
+    changed_result = _extract_and_persist(changed_path, force=force)
     if role == "cv":
         previous_hash = None
         with SessionLocal() as session:
@@ -1412,7 +1423,7 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
 
         changed_text = changed_result.extracted_text or ""
         for job_path in _list_candidate_files(Path(settings.watch_job_dir)):
-            job_result = _extract_and_persist(job_path)
+            job_result = _extract_and_persist(job_path, force=force)
             job_doc = _upsert_job_document(job_path, job_result)
             if job_doc.session_id is not None:
                 # Archived (assigned to a closed analysis session): stays on
@@ -1512,7 +1523,7 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
 
         changed_text = changed_result.extracted_text or ""
         for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
-            cv_result = _extract_and_persist(cv_path)
+            cv_result = _extract_and_persist(cv_path, force=force)
             cv_doc = _upsert_cv_document(cv_path, cv_result)
             if cv_doc.session_id is not None:
                 # Archived: see the matching guard in the cv branch above.
@@ -1870,22 +1881,26 @@ def admin_reextract(request: Request) -> dict[str, object]:
 
 @app.post("/matches/recompute")
 def recompute_matches(request: Request) -> dict[str, object]:
-    """Force a full rescoring of every active CV against every active job
-    with the current matching code, bypassing the "content unchanged and
-    already matched" optimization that normally skips a document with
-    nothing new to process.
+    """Force a full re-extraction and rescoring of every active CV against
+    every active job with whatever matching/extraction code is currently
+    deployed, bypassing both the extraction content-hash cache and the
+    "content unchanged and already matched" scoring optimization that
+    normally skip a document with nothing new to process.
 
-    Extraction is unaffected -- unchanged files still hit the extraction
-    cache (see _extract_and_persist) -- only the scoring step reruns, and
-    it updates each pair's existing MatchResult row in place (same
+    Re-extraction reruns PyMuPDF (and its OCR fallback) on every active
+    file even though its bytes haven't changed -- necessary because an
+    extraction-code fix (e.g. the PDF column-layout ordering) changes how
+    a file is *read*, not the file itself, so the ordinary hash-based
+    cache would otherwise keep serving pre-fix text forever. Rescoring
+    then updates each pair's existing MatchResult row in place (same
     cv_id/job_id upsert as automatic ingestion), so any feedback already
     left on a match stays attached to it.
 
-    Use this right after deploying a change to matcher.py, parser.py, or
-    taxonomy.py to see its effect on already-computed scores without
-    touching or reuploading any document. Only accessible to admins:
-    rescoring the whole active library runs the cross-encoder on every
-    pair, which is not something to trigger by accident.
+    Use this right after deploying a change to matcher.py, parser.py,
+    extraction.py, or taxonomy.py to see its effect on already-computed
+    scores without touching or reuploading any document. Only accessible
+    to admins: this reruns extraction and the cross-encoder on every
+    active document, which is not something to trigger by accident.
     """
     _require_admin(request)
     with SessionLocal() as session:

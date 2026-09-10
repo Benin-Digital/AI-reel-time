@@ -33,8 +33,8 @@ const _PROGRESS_POLL_MAX_ATTEMPTS = 120; // ~10 minutes at 5s/tick
 // the ordinary progress poll above never sees anything "incomplete" to
 // react to. Poll the list directly on a fixed schedule instead, so scores
 // visibly update as the backend works through the queue.
-const _RECOMPUTE_POLL_MS = 4000;
-const _RECOMPUTE_POLL_TICKS = 10; // ~40s, generous for a modest active library
+const _RECOMPUTE_POLL_MS = 5000;
+const _RECOMPUTE_POLL_TICKS = 18; // ~90s -- now re-extracts (PyMuPDF/OCR) every file, not just rescoring
 
 export function initMatches() {
   $("#applyFilters")?.addEventListener("click", () => { _page = 1; _load(); });
@@ -205,7 +205,7 @@ async function _recomputeMatches() {
     const result = await safeFetch("/matches/recompute", { method: "POST" });
     setBanner(
       msg,
-      `Recalcul lancé pour ${result.queued} CV — les scores ci-dessous se mettront à jour au fur et à mesure.`,
+      `Réextraction et recalcul lancés pour ${result.queued} CV — les scores ci-dessous se mettront à jour au fur et à mesure. Pour une grosse bibliothèque, revenez sur cette page un peu plus tard si tout n'a pas fini de se mettre à jour.`,
       "info"
     );
     _pollAfterRecompute();

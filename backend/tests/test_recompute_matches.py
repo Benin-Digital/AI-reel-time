@@ -80,17 +80,23 @@ def _setup(session_factory, tmp_path, monkeypatch):
         session.add(MatchResult(cv_id=cv.id, job_id=job.id, score=55.0))
         session.commit()
 
+    extract_calls: list[bool] = []
+
+    def fake_extract_and_persist(path, force_docling=False, force=False):
+        extract_calls.append(force)
+        return _fake_extraction(path, "same-hash")
+
     monkeypatch.setattr(app_main.settings, "watch_job_dir", str(job_dir))
     monkeypatch.setattr(app_main.settings, "watch_cv_dir", str(cv_dir))
     monkeypatch.setattr(app_main.settings, "embedding_enabled", False)
-    monkeypatch.setattr(app_main, "_extract_and_persist", lambda path, force_docling=False: _fake_extraction(path, "same-hash"))
+    monkeypatch.setattr(app_main, "_extract_and_persist", fake_extract_and_persist)
     monkeypatch.setattr(app_main, "score_texts", lambda cv_text, job_text: (91.0, ["Python"]))
 
-    return cv_path, job_path
+    return cv_path, job_path, extract_calls
 
 
 def test_unchanged_fully_matched_document_is_skipped_without_force(session_factory, tmp_path, monkeypatch):
-    cv_path, job_path = _setup(session_factory, tmp_path, monkeypatch)
+    cv_path, job_path, extract_calls = _setup(session_factory, tmp_path, monkeypatch)
 
     app_main._score_against_counterparts(cv_path, "cv")
 
@@ -100,7 +106,7 @@ def test_unchanged_fully_matched_document_is_skipped_without_force(session_facto
 
 
 def test_force_recomputes_even_when_unchanged_and_fully_matched(session_factory, tmp_path, monkeypatch):
-    cv_path, job_path = _setup(session_factory, tmp_path, monkeypatch)
+    cv_path, job_path, extract_calls = _setup(session_factory, tmp_path, monkeypatch)
 
     app_main._score_against_counterparts(cv_path, "cv", force=True)
 
@@ -112,11 +118,27 @@ def test_force_recomputes_even_when_unchanged_and_fully_matched(session_factory,
     )
 
 
+def test_force_reextracts_every_document_instead_of_using_the_cache(session_factory, tmp_path, monkeypatch):
+    """Une amelioration du modele d'extraction (ex: l'ordonnancement des
+    colonnes PDF) ne change pas les octets du fichier sur disque -- sans
+    force=True propage jusqu'a _extract_and_persist, le cache par hash de
+    contenu continuerait a servir l'ancien texte extrait indefiniment."""
+    cv_path, job_path, extract_calls = _setup(session_factory, tmp_path, monkeypatch)
+
+    app_main._score_against_counterparts(cv_path, "cv", force=True)
+
+    assert extract_calls, "_extract_and_persist doit avoir ete appele"
+    assert all(extract_calls), (
+        "force=True doit se propager a CHAQUE appel a _extract_and_persist "
+        f"(le CV change et chaque offre active parcourue), obtenu {extract_calls}"
+    )
+
+
 def test_force_preserves_the_match_row_id(session_factory, tmp_path, monkeypatch):
     """Le rescoring force met a jour la ligne MatchResult existante (upsert
     sur cv_id/job_id) plutot que de la supprimer et la recreer -- un
     feedback deja laisse sur ce match doit rester rattache."""
-    cv_path, job_path = _setup(session_factory, tmp_path, monkeypatch)
+    cv_path, job_path, extract_calls = _setup(session_factory, tmp_path, monkeypatch)
 
     with session_factory() as session:
         original_id = session.scalar(select(MatchResult.id))
