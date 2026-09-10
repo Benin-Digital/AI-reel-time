@@ -58,14 +58,9 @@
         <div class="sidebar__brand">
           <div class="sidebar__logo">
             <img src="./cropped-Benin-digital-182.png" alt="Logo Bénin Digital" />
+            <span class="uptime-dot sidebar__health-dot" id="sidebarHealthDot" aria-hidden="true"></span>
           </div>
-          <div>
-            <div class="sidebar__brand-sub">Console RH</div>
-            <div class="sidebar__health" id="sidebarHealth">
-              <span class="uptime-dot" id="sidebarHealthDot"></span>
-              <span class="uptime-label" id="sidebarHealthLabel">…</span>
-            </div>
-          </div>
+          <span class="uptime-label sr-only" id="sidebarHealthLabel">…</span>
         </div>
 
         <nav class="sidebar__nav">
@@ -173,7 +168,7 @@
         <!-- TOPBAR -->
         <header class="topbar" id="topbar">
           <div class="topbar__breadcrumb" id="topbarBreadcrumb" aria-live="polite">
-            <span class="topbar__breadcrumb-current" id="topbarTitle">Tableau de bord</span>
+            <span class="topbar__breadcrumb-current" id="topbarTitle">Console RH</span>
           </div>
           <div class="topbar__actions">
             <div id="apiStatusBanner" class="banner banner--error" hidden role="alert"></div>

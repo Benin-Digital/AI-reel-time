@@ -21,7 +21,10 @@ export function renderMetrics(data) {
 function _setSidebarHealth(state, label) {
   const dot = $("#sidebarHealthDot");
   const labelEl = $("#sidebarHealthLabel");
-  if (dot) dot.classList.toggle("uptime-dot--down", state === "down");
+  if (dot) {
+    dot.classList.toggle("uptime-dot--down", state === "down");
+    dot.title = label;
+  }
   if (labelEl) {
     labelEl.classList.toggle("uptime-label--down", state === "down");
     labelEl.textContent = label;

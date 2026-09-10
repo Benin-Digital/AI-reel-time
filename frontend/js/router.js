@@ -2,7 +2,7 @@ import { $, $$ } from "./utils/dom.js";
 import { setStore, store } from "./store.js";
 
 const PANEL_TITLES = {
-  "dashboard":   "Tableau de bord",
+  "dashboard":   "Console RH",
   "publish-cv":  "Publier un CV",
   "cv-library":  "Bibliothèque CV",
   "publish-job": "Publier une offre",
