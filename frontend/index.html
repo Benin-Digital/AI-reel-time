@@ -224,20 +224,9 @@
                   <span class="legend-item"><i class="legend-dot legend-dot--muted"></i>Archivées : <strong id="jobStateArchivedText">–</strong></span>
                 </div>
               </div>
-              <div class="chart-card chart-card--wide">
-                <div class="chart-card__title">Répartition des scores (correspondances actives)</div>
-                <div class="score-distribution" id="scoreDistributionBar">
-                  <div class="score-distribution__bar">
-                    <div class="score-distribution__segment score-distribution__segment--high" id="scoreDistHigh" style="width:0%"></div>
-                    <div class="score-distribution__segment score-distribution__segment--mid" id="scoreDistMid" style="width:0%"></div>
-                    <div class="score-distribution__segment score-distribution__segment--low" id="scoreDistLow" style="width:0%"></div>
-                  </div>
-                </div>
-                <div class="chart-card__legend">
-                  <span class="legend-item"><i class="legend-dot legend-dot--high"></i>Fort : <strong id="scoreDistHighText">–</strong></span>
-                  <span class="legend-item"><i class="legend-dot legend-dot--mid"></i>Moyen : <strong id="scoreDistMidText">–</strong></span>
-                  <span class="legend-item"><i class="legend-dot legend-dot--low"></i>À vérifier : <strong id="scoreDistLowText">–</strong></span>
-                </div>
+              <div class="dashboard-best-match">
+                <div class="chart-card__title" style="margin-bottom:var(--space-3)">Meilleure correspondance active</div>
+                <div id="dashboardBestMatchCard"></div>
               </div>
             </div>
 

@@ -3,10 +3,9 @@ cumules a vie (event_count, extraction_count, score_count), qui ne
 baissent jamais meme apres archivage -- rendant le Tableau de bord
 incapable de refleter l'etat reel de la plateforme a un instant donne.
 
-Ajoute : compteurs actifs vs archives (CV, offres) et une repartition
-des scores de matching parmi les paires actuellement actives, avec les
-memes seuils que les puces "Fort"/"Moyen"/"A verifier" affichees sur
-chaque carte de correspondance (frontend's scoreTone()).
+Ajoute : compteurs actifs vs archives (CV, offres) et le nombre de
+correspondances actives (excluant tout match impliquant un document
+archive).
 """
 from __future__ import annotations
 
@@ -74,6 +73,3 @@ def test_metrics_reports_active_vs_archived_counts_and_score_tiers(session_facto
     assert result["active_job_count"] == 2
     assert result["archived_job_count"] == 1
     assert result["active_match_count"] == 2, "le match contre un document archive ne doit pas compter"
-    assert result["score_high_count"] == 1
-    assert result["score_mid_count"] == 1
-    assert result["score_low_count"] == 0

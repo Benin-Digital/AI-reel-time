@@ -11,7 +11,6 @@ let _timer = null;
 export function renderMetrics(data) {
   _updateDonut("cv",  data.active_cv_count,  data.archived_cv_count);
   _updateDonut("job", data.active_job_count, data.archived_job_count);
-  _updateScoreDistribution(data.score_high_count, data.score_mid_count, data.score_low_count);
   _setSidebarHealth(data.worker_alive ? "up" : "down", data.worker_alive ? "Système opérationnel" : "Worker arrêté");
 }
 
@@ -47,24 +46,6 @@ function _updateDonut(prefix, active, archived) {
   if (activeTextEl) activeTextEl.textContent = String(active_n);
   const archivedTextEl = $(`#${prefix}StateArchivedText`);
   if (archivedTextEl) archivedTextEl.textContent = String(archived_n);
-}
-
-function _updateScoreDistribution(high, mid, low) {
-  const high_n = Number(high) || 0;
-  const mid_n  = Number(mid)  || 0;
-  const low_n  = Number(low)  || 0;
-  const total  = high_n + mid_n + low_n;
-  const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
-
-  const setWidth = (id, value) => { const el = $(id); if (el) el.style.width = `${value}%`; };
-  setWidth("#scoreDistHigh", pct(high_n));
-  setWidth("#scoreDistMid",  pct(mid_n));
-  setWidth("#scoreDistLow",  pct(low_n));
-
-  const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
-  set("#scoreDistHighText", high_n);
-  set("#scoreDistMidText",  mid_n);
-  set("#scoreDistLowText",  low_n);
 }
 
 async function fetchMetrics() {

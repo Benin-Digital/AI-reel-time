@@ -1,5 +1,5 @@
 import { safeFetch, fetchBlob } from "../api.js";
-import { $, openModal, closeModal, setBanner, escapeHtml } from "../utils/dom.js";
+import { $, openModal, closeModal, setBanner, escapeHtml, renderEmpty } from "../utils/dom.js";
 import {
   renderScoreChip,
   renderScoreBar,
@@ -86,6 +86,47 @@ export function initMatches() {
     if (action) action.hidden = !canManageUsers();
     _load();
   });
+
+  // Dashboard "meilleure correspondance active" widget -- same card, same
+  // actions (voir CV/offre, analyser, évaluer) as the Correspondances page,
+  // wired through the same handlers via delegation on its own container.
+  $("#dashboardBestMatchCard")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-explain]");
+    if (btn) _loadExplain(btn.dataset.explain);
+
+    const fb = e.target.closest("[data-feedback]");
+    if (fb) _submitQuickFeedback(fb);
+
+    const viewBtn = e.target.closest("[data-view-doc]");
+    if (viewBtn) _viewDocumentPdf(viewBtn.dataset.viewDoc, viewBtn.dataset.docId, viewBtn);
+  });
+  window.addEventListener("load-dashboard", () => _loadDashboardBestMatch());
+}
+
+async function _loadDashboardBestMatch() {
+  const container = $("#dashboardBestMatchCard");
+  if (!container) return;
+  container.innerHTML = `<div class="skeleton skeleton--card"></div>`;
+  try {
+    const data = await safeFetch(`/matches?page_size=1&sort_by=score_desc&unassigned_only=true`);
+    if (!data.length) {
+      container.innerHTML = renderEmpty("Aucune correspondance active pour l'instant.");
+      return;
+    }
+    const match = data[0];
+    if (match.feedback_decision) {
+      _feedbackCache.set(String(match.id), {
+        decision: match.feedback_decision,
+        rating: match.feedback_rating ?? 0,
+        comment: match.feedback_comment ?? null,
+      });
+    }
+    container.innerHTML = _renderMatchCard(match);
+  } catch (err) {
+    if (err.name !== "AuthError") {
+      container.innerHTML = `<div class="banner banner--error">${escapeHtml(err.message)}</div>`;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
