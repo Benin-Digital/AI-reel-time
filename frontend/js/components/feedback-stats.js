@@ -111,9 +111,9 @@ function _renderDecisionDistribution(data) {
       ${reject.pct ? `<div class="decision-bar__segment decision-bar__segment--reject" style="width:${reject.pct}%"></div>` : ""}
     </div>
     <div class="chart-card__legend">
-      <span class="legend-item"><span class="legend-dot legend-dot--accept"></span>Acceptés — <strong>${accept.count}</strong> (${accept.pct}%)</span>
-      <span class="legend-item"><span class="legend-dot legend-dot--review"></span>À revoir — <strong>${review.count}</strong> (${review.pct}%)</span>
-      <span class="legend-item"><span class="legend-dot legend-dot--reject"></span>Rejetés — <strong>${reject.count}</strong> (${reject.pct}%)</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--accept"></span>Acceptés : <strong>${accept.count}</strong> (${accept.pct}%)</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--review"></span>À revoir : <strong>${review.count}</strong> (${review.pct}%)</span>
+      <span class="legend-item"><span class="legend-dot legend-dot--reject"></span>Rejetés : <strong>${reject.count}</strong> (${reject.pct}%)</span>
     </div>
   </div>`;
 }
@@ -284,7 +284,7 @@ function _renderWeightLearning(active) {
   const activeSection = active ? `
     <div class="banner banner--success" style="margin-bottom:var(--space-3)">
       Poids précédemment calculés le ${new Date(active.created_at).toLocaleDateString("fr-FR")}
-      — ${active.sample_count} feedbacks — précision ${Math.round(active.accuracy * 100)}%.
+      sur ${active.sample_count} feedbacks, précision ${Math.round(active.accuracy * 100)}%.
       Non appliqués au moteur (voir note ci-dessous).
     </div>
     <div class="score-breakdown" style="flex-direction:column;gap:var(--space-1);margin-bottom:var(--space-3)">
@@ -297,7 +297,7 @@ function _renderWeightLearning(active) {
           <span class="score-breakdown__value">${pct}%</span>
         </div>`;
       }).join("")}
-    </div>` : `<p class="text-sm text-muted" style="margin-bottom:var(--space-3)">Aucun poids appris actif — le moteur utilise les poids par défaut.</p>`;
+    </div>` : `<p class="text-sm text-muted" style="margin-bottom:var(--space-3)">Aucun poids appris actif : le moteur utilise les poids par défaut.</p>`;
 
   return `<div class="card">
     <div class="card__header">
@@ -334,7 +334,7 @@ async function _computeWeights() {
   try {
     const data = await safeFetch("/feedback/compute-weights", { method: "POST" });
     if (result) result.innerHTML = _renderWeightComparison(data);
-    if (msg) { msg.textContent = `Calculé sur ${data.sample_count} feedbacks — précision ${Math.round(data.accuracy * 100)}%`; }
+    if (msg) { msg.textContent = `Calculé sur ${data.sample_count} feedbacks, précision ${Math.round(data.accuracy * 100)}%`; }
   } catch (err) {
     if (msg) { msg.textContent = err.message; msg.style.color = "var(--color-error)"; }
   } finally {

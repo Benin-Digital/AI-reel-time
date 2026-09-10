@@ -140,11 +140,11 @@ async function _loadDetail(sessionId) {
     const _basename = (p) => (p ? p.replace(/\\/g, "/").split("/").pop() : "");
 
     const cvHtml = s.cv_documents?.length
-      ? s.cv_documents.map((d) => `<div class="text-xs text-secondary truncate" title="${escapeHtml(d.path ?? "")}">CV ${d.id} — ${escapeHtml(_basename(d.path))}</div>`).join("")
+      ? s.cv_documents.map((d) => `<div class="text-xs text-secondary truncate" title="${escapeHtml(d.path ?? "")}">CV ${d.id} · ${escapeHtml(_basename(d.path))}</div>`).join("")
       : `<span class="text-xs text-muted">Aucun</span>`;
 
     const jobHtml = s.job_documents?.length
-      ? s.job_documents.map((d) => `<div class="text-xs text-secondary truncate" title="${escapeHtml(d.path ?? "")}">Offre ${d.id} — ${escapeHtml(_basename(d.path))}</div>`).join("")
+      ? s.job_documents.map((d) => `<div class="text-xs text-secondary truncate" title="${escapeHtml(d.path ?? "")}">Offre ${d.id} · ${escapeHtml(_basename(d.path))}</div>`).join("")
       : `<span class="text-xs text-muted">Aucune</span>`;
 
     const matchHtml = matches?.length

@@ -251,11 +251,11 @@ async function _handleUpload(files) {
   for (const file of files) {
     const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
     if (!SUPPORTED.includes(ext)) {
-      setBanner(statusEl, `${file.name} — type non supporté`, "error");
+      setBanner(statusEl, `${file.name} : type non supporté`, "error");
       continue;
     }
     if (file.size > MAX_MB * 1024 * 1024) {
-      setBanner(statusEl, `${file.name} — trop volumineux (max ${MAX_MB} Mo)`, "error");
+      setBanner(statusEl, `${file.name} : trop volumineux (max ${MAX_MB} Mo)`, "error");
       continue;
     }
     try {
@@ -267,7 +267,7 @@ async function _handleUpload(files) {
       await safeFetch("/ingest", { method: "POST", body: fd });
       pending.push(file.name);
     } catch (err) {
-      setBanner(statusEl, `${file.name} — ${err.message}`, "error");
+      setBanner(statusEl, `${file.name} : ${err.message}`, "error");
     }
   }
   if (pending.length) {
@@ -317,7 +317,7 @@ async function _pollBatchUntilReady(statusEl, filenames, maxWaitMs = 1800000) {
     await _load();
     if (!remaining.size) break;
     const elapsed = Math.round((Date.now() - startedAt) / 1000);
-    const hint = elapsed > 30 ? " — ça prend plus de temps que d'habitude, merci de patienter" : "";
+    const hint = elapsed > 30 ? ". Ça prend plus de temps que d'habitude, merci de patienter" : "";
     const progress = basenames.length > 1 ? `${readyCount + failedCount}/${basenames.length} traités, ` : "";
     setBanner(statusEl, `${progress}${remaining.size} en cours… (${elapsed}s)${hint}`, "info");
   }

@@ -68,7 +68,7 @@ export const safeFetch = async (path, options = {}) => {
 
       if (!res.ok) {
         const msg = await res.text();
-        throw new Error(`${res.status} — ${msg}`.trim());
+        throw new Error(`${res.status} : ${msg}`.trim());
       }
 
       const ct = res.headers.get("content-type") ?? "";
