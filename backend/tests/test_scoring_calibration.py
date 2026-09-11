@@ -242,6 +242,37 @@ def test_keyword_mentioned_once_but_present_in_job_title_becomes_core():
     )
 
 
+def test_explicit_ou_in_title_does_not_trigger_the_title_core_mechanism():
+    """Meme principe que le titre compose avec '/' : "Developpeur Java ou
+    Python" accepte explicitement L'UN OU L'AUTRE, pas les deux a la fois.
+    Verifie avant ce correctif : chaque cote devenait son PROPRE mot-cle
+    coeur independant, donc un candidat n'ayant que Java (une des deux
+    options explicitement acceptees) subissait quand meme une penalite
+    (0.5 de couverture -> -27.5% de score) pour ne pas avoir Python."""
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    job = parse_document("Développeur Java ou Python.\nOffre technique.", kind="job")
+    job.priority_keyword_terms = split_priority_keywords("Java\nPython\nSQL\n")
+    cv_java_only = parse_document("Compétences: Java, SQL, Spring.", kind="cv")
+    _apply_priority_keywords(cv_java_only, job)
+    assert _core_keyword_coverage(cv_java_only, job) == 1.0, (
+        "un titre avec 'ou' ne doit jamais designer Java OU Python comme "
+        "mot-cle coeur obligatoire individuel"
+    )
+
+
+def test_parenthesized_ou_alternative_does_not_trigger_the_title_core_mechanism():
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    job = parse_document(
+        "Data Engineer (Spark ou Databricks).\nOffre technique.", kind="job"
+    )
+    job.priority_keyword_terms = split_priority_keywords("Spark\nDatabricks\nSQL\n")
+    cv_spark_only = parse_document("Compétences: Spark, SQL, Python.", kind="cv")
+    _apply_priority_keywords(cv_spark_only, job)
+    assert _core_keyword_coverage(cv_spark_only, job) == 1.0
+
+
 def test_short_keyword_does_not_match_a_substring_inside_an_unrelated_title_word():
     """Le titre check doit exiger une vraie frontiere de mot, pas une
     simple inclusion de texte : un mot-cle court ("BI") ne doit pas

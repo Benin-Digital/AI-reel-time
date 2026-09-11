@@ -879,6 +879,18 @@ def _priority_keyword_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[fl
 # together they catch both a recruiter who repeats the headline tool
 # across several keyword lines AND one who only types it once but names it
 # in the job title itself (arguably the more common case).
+# Job titles that present multiple ALTERNATIVE labels/tools rather than
+# one headline requirement -- "/" ("Data Analyst / Concepteur
+# Decisionnel"), or the word "ou" ("Developpeur Java ou Python", "Data
+# Engineer (Spark ou Databricks)") -- disable the title-based core-keyword
+# check entirely (see _core_keyword_coverage). Verified real behaviour
+# without this: each side of an "ou" becomes its OWN independent core
+# keyword, so a candidate who has exactly one of the two explicitly
+# accepted options still gets a real penalty (0.5 coverage -> 27.5% score
+# cut) for "missing" the other -- backwards for a title that says either
+# is fine.
+_TITLE_ALTERNATION_RE = re.compile(r"/|\bou\b", re.IGNORECASE)
+
 _CORE_KEYWORD_MIN_REPEATS = 3
 # Multiplicative, not a hard cap: final *= CORE_PENALTY_FLOOR + (1 -
 # CORE_PENALTY_FLOOR) * core_coverage. A hard min() cap was tried first and
@@ -916,18 +928,19 @@ def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
       raw keyword against cv.skill_terms too (not just its canonical)
       credits that candidate correctly.
 
-      Skipped entirely when the title itself joins multiple labels with
-      "/" (e.g. "Data Analyst / Concepteur Decisionnel Senior H/F") -- a
-      real production case: this reads as two ALTERNATIVE/equivalent
-      framings of the same role, not "one headline tool", but the
-      substring check still picked "Data Analyst" out of it and crushed
-      two strong "Concepteur Decisionnel"-side candidates (25 and 10
-      years' real BI/Informatica experience) to less than half their
-      score for not literally writing that one alternate label -- while a
-      less-specialized candidate who happened to write it elsewhere on
-      their CV scored far higher. A single, non-"/"-joined title (the
-      "SAS" case this mechanism was built for) is unambiguous and keeps
-      using it.
+      Skipped entirely when the title itself presents multiple
+      ALTERNATIVE labels (see _TITLE_ALTERNATION_RE: "/", e.g. "Data
+      Analyst / Concepteur Decisionnel Senior H/F", or the word "ou",
+      e.g. "Developpeur Java ou Python") -- a real production case: the
+      "/" title reads as two ALTERNATIVE/equivalent framings of the same
+      role, not "one headline tool", but the substring check still picked
+      "Data Analyst" out of it and crushed two strong "Concepteur
+      Decisionnel"-side candidates (25 and 10 years' real BI/Informatica
+      experience) to less than half their score for not literally writing
+      that one alternate label -- while a less-specialized candidate who
+      happened to write it elsewhere on their CV scored far higher. A
+      single, non-alternation title (the "SAS" case this mechanism was
+      built for) is unambiguous and keeps using it.
 
     Returns 1.0 (no penalty) when no keyword qualifies as emphasized, so
     an ordinary, non-repeated priority-keyword list for a job whose title
@@ -938,7 +951,7 @@ def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
     counts = Counter(_normalize_priority_keyword(t) or t for t in job.priority_keyword_terms)
     core = {canonical for canonical, n in counts.items() if n >= _CORE_KEYWORD_MIN_REPEATS}
 
-    title_folded = "" if "/" in job.title_line else _fold(job.title_line)
+    title_folded = "" if _TITLE_ALTERNATION_RE.search(job.title_line) else _fold(job.title_line)
     cv_skills = set(cv.skill_terms)
     matched = {c for c in core if c in cv_skills}
     if title_folded:
