@@ -979,9 +979,21 @@ def parse_document(
     # unrelated candidate "match" on a shared soft-skill word alone.
     all_skill_terms, soft_skill_terms = partition_skills(find_skills(skill_src or cleaned))
     skill_terms = all_skill_terms
-    required_skill_terms, _ = (
-        partition_skills(find_skills(job_required_text)) if job_required_text else (list(skill_terms), [])
-    )
+    if job_required_text:
+        required_skill_terms, _ = partition_skills(find_skills(job_required_text))
+    else:
+        # No heading _match_section recognizes as "job_required" at all --
+        # common on free-flowing job postings (real example: "Profil requis
+        # et competences attendues" doesn't match any registered alias).
+        # The fallback used to be the raw skill_terms pool, which bypassed
+        # _split_hedged_sentences entirely (it only ran against
+        # job_required_text above) -- a hedged "constituerait un atout"
+        # sentence sitting anywhere in such a document still landed in
+        # required_skill_terms untouched. Scrub the fallback source the
+        # same way before re-deriving skills from it.
+        fallback_src, _hedged_fallback = _split_hedged_sentences(skill_src or cleaned)
+        job_nice_text = "\n".join(p for p in [job_nice_text, _hedged_fallback] if p)
+        required_skill_terms, _ = partition_skills(find_skills(fallback_src))
     nice_skill_terms, _ = partition_skills(find_skills(job_nice_text)) if job_nice_text else ([], [])
 
     # Language, contract, experience year extraction

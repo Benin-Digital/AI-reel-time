@@ -63,3 +63,33 @@ def test_real_job_offer_hedged_accounting_mention_lands_in_nice_not_required():
     # Les vraies exigences ne doivent pas etre affectees par l'extraction.
     for expected in ("PHP", "Laravel"):
         assert expected in job.required_skill_terms
+
+
+_JOB_TEXT_NO_RECOGNIZED_REQUIRED_HEADING = (
+    "Développeur full stack PHP Laravel VueJS -ER\n\n"
+    "Le candidat devra montrer un réel intérêt pour la gestion du "
+    "programme afin d'appréhender, voire d'anticiper les besoins des "
+    "utilisateurs et de les traduire en solutions informatiques.\n"
+    "Si le candidat possède des compétences ou un intérêt pour la "
+    "comptabilité publique, cela constituerait un réel atout pour notre "
+    "module d'interfaçage comptable.\n"
+    "Profil requis et compétences attendues\n"
+    "La personne apportera une assistance technique en soutien de "
+    "l'équipe informatique, avec une solide maitrise de PHP, Laravel et "
+    "Vue.js ainsi que de Git.\n"
+)
+
+
+def test_hedged_mention_is_filtered_even_without_a_recognized_required_heading():
+    """Regression reelle (offre "Developpeur full stack PHP Laravel VueJS
+    -ER", production, 2026-09-11) : aucune ligne de ce document ne
+    correspond a un alias job_required connu ("Profil requis et
+    competences attendues" ne matche aucun alias enregistre), donc
+    job_required_text reste vide et le code retombait sur la liste brute
+    de TOUTES les competences detectees -- en contournant completement le
+    filtrage des phrases "atout" qui ne s'appliquait qu'a job_required_text."""
+    job = parse_document(_JOB_TEXT_NO_RECOGNIZED_REQUIRED_HEADING, kind="job")
+    assert "Comptabilité générale" not in job.required_skill_terms
+    assert "Comptabilité générale" in job.nice_skill_terms
+    for expected in ("PHP", "Laravel", "Git"):
+        assert expected in job.required_skill_terms
