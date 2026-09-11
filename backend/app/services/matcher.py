@@ -456,28 +456,79 @@ _EXPERIENCE_SEVERE_OVER_RATIO = 4.0
 _EXPERIENCE_SEVERE_OVER_FLOOR = 0.85
 
 
+# A real-world sample of production job postings (2026-09-11 audit) showed
+# 5 of 6 real offers state NO explicit "N ans" figure at all -- the
+# experience component above is silently excluded (has_signal=False) for
+# the large majority of real jobs, regardless of its weight, because there
+# is nothing to compare cv_y against. Most of those still say something:
+# "Concepteur Decisionnel SENIOR", "Consultant EXPERT", "profil CONFIRME"
+# -- a real, if soft, seniority expectation a human recruiter reads
+# instinctively. _infer_seniority_years() recovers an approximate floor
+# from that language so the component isn't dormant for most real postings.
+_SENIORITY_YEARS_SIGNALS = [
+    (re.compile(r"\bexpert(?:e)?s?\b", re.IGNORECASE), 8),
+    (re.compile(r"\bs[ée]nior(?:e)?s?\b", re.IGNORECASE), 5),
+    (re.compile(r"\bconfirm[ée]e?s?\b", re.IGNORECASE), 3),
+    (re.compile(r"\bjunior(?:e)?s?\b", re.IGNORECASE), 1),
+    (re.compile(r"\bd[ée]butant(?:e)?s?\b", re.IGNORECASE), 1),
+]
+
+# Dampening applied to an INFERRED (not explicitly stated) requirement's
+# score: blended halfway toward the neutral "no requirement" value (0.75)
+# instead of counting at full strength -- "senior" in a title is a much
+# weaker, more ambiguous signal than a recruiter writing "5 ans minimum",
+# and shouldn't be able to swing the final score as hard as a real number.
+_INFERRED_EXPERIENCE_DAMPENING = 0.5
+
+
+def _infer_seniority_years(job: ParsedDocument) -> int:
+    """Best-effort implied years-of-experience floor from seniority
+    language in the job's title (falling back to the start of its full
+    text) when no explicit "N ans" statement was found. Returns 0 (no
+    signal) when nothing matches."""
+    haystack = job.title_line or job.cleaned_text[:500]
+    for pattern, years in _SENIORITY_YEARS_SIGNALS:
+        if pattern.search(haystack):
+            return years
+    return 0
+
+
+def _experience_zone_score(cv_y: int, job_y: int) -> float:
+    """Pure zone computation (inferieur / egal / legerement superieur /
+    trop superieur) shared by the explicit and inferred requirement paths.
+    Assumes cv_y > 0 and job_y > 0."""
+    if cv_y == job_y:
+        return 1.0
+    if cv_y > job_y:
+        ratio = cv_y / job_y
+        if ratio <= _EXPERIENCE_COMFORTABLE_OVER_RATIO:
+            return 1.0
+        if ratio >= _EXPERIENCE_SEVERE_OVER_RATIO:
+            return _EXPERIENCE_SEVERE_OVER_FLOOR
+        span = _EXPERIENCE_SEVERE_OVER_RATIO - _EXPERIENCE_COMFORTABLE_OVER_RATIO
+        progress = (ratio - _EXPERIENCE_COMFORTABLE_OVER_RATIO) / span
+        return 1.0 - progress * (1.0 - _EXPERIENCE_SEVERE_OVER_FLOOR)
+    shortfall = (job_y - cv_y) / job_y
+    return max(0.0, 1.0 - shortfall)
+
+
 def _experience_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     """Years-of-experience match."""
     cv_y, job_y = cv.experience_years, job.experience_years
+    inferred = False
+    if job_y <= 0:
+        job_y = _infer_seniority_years(job)
+        inferred = job_y > 0
     if job_y <= 0 and cv_y <= 0:
-        return 0.5, False  # no years extracted on either side
+        return 0.5, False  # no years extracted or inferable on either side
     if job_y <= 0:
         return 0.75, False  # job states no requirement to compare against
     if cv_y <= 0:
         return 0.2, False  # couldn't extract CV experience to compare
-    if cv_y == job_y:
-        return 1.0, True
-    if cv_y > job_y:
-        ratio = cv_y / job_y
-        if ratio <= _EXPERIENCE_COMFORTABLE_OVER_RATIO:
-            return 1.0, True
-        if ratio >= _EXPERIENCE_SEVERE_OVER_RATIO:
-            return _EXPERIENCE_SEVERE_OVER_FLOOR, True
-        span = _EXPERIENCE_SEVERE_OVER_RATIO - _EXPERIENCE_COMFORTABLE_OVER_RATIO
-        progress = (ratio - _EXPERIENCE_COMFORTABLE_OVER_RATIO) / span
-        return 1.0 - progress * (1.0 - _EXPERIENCE_SEVERE_OVER_FLOOR), True
-    shortfall = (job_y - cv_y) / job_y
-    return max(0.0, 1.0 - shortfall), True
+    raw = _experience_zone_score(cv_y, job_y)
+    if inferred:
+        raw = _INFERRED_EXPERIENCE_DAMPENING * raw + (1 - _INFERRED_EXPERIENCE_DAMPENING) * 0.75
+    return raw, True
 
 
 def _fold(text: str) -> str:
