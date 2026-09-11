@@ -146,3 +146,55 @@ def test_no_priority_keywords_is_a_no_op():
     b = match_cv_to_job(cv, job, priority_keywords=None)
     assert a.score == b.score
     assert a.score_skills == b.score_skills
+
+
+# ── Credit semantique partiel (2026-09-11) ───────────────────────────────────
+#
+# Regression reelle (offre "Data Analyst / Concepteur Decisionnel Senior",
+# 2026-09-11) : un mot-cle prioritaire non trouve MOT POUR MOT ("architectures
+# BI", "flux de donnees"...) ne recevait jamais aucun credit, contrairement a
+# la couverture de competences generale (_skill_score) qui accorde deja un
+# credit partiel via similarite d'embedding. Un candidat architecte
+# Data/BI de 25 ans d'experience, faisant clairement ce travail mais le
+# formulant differemment, voyait son plafond de score bloque a 65% (0.30 +
+# 0.70 * 7/14) sans aucun moyen d'en sortir. _priority_keyword_score reutilise
+# desormais _semantic_skill_credit, exactement comme _skill_score.
+
+def test_semantic_credit_raises_priority_keyword_score_for_a_related_term(monkeypatch):
+    from app.services import matcher
+
+    monkeypatch.setattr(
+        matcher, "_semantic_skill_credit",
+        lambda unmatched, cv_skills: 0.5 if "Reporting" in unmatched else 0.0,
+    )
+    cv = "Développeur Python, Django."
+    job = "Poste: Développeur Backend. Compétences requises: Python."
+    without_credit = match_cv_to_job(cv, job, priority_keywords="Python\nReporting\nDjango")
+    monkeypatch.setattr(matcher, "_semantic_skill_credit", lambda unmatched, cv_skills: 0.0)
+    exact_only = match_cv_to_job(cv, job, priority_keywords="Python\nReporting\nDjango")
+    assert without_credit.score_priority_keywords > exact_only.score_priority_keywords
+
+
+def test_semantic_credit_never_exceeds_full_coverage(monkeypatch):
+    from app.services import matcher
+
+    monkeypatch.setattr(matcher, "_semantic_skill_credit", lambda unmatched, cv_skills: 999.0)
+    cv = "Développeur Python."
+    job = "Poste: Développeur Backend."
+    result = match_cv_to_job(cv, job, priority_keywords="Python\nKubernetes")
+    assert result.score_priority_keywords == 1.0
+
+
+def test_displayed_matched_count_is_unaffected_by_semantic_credit(monkeypatch):
+    """Le compte affiche au recruteur ("X/Y mots-cles trouves") reste base
+    sur les correspondances EXACTES uniquement -- seul le plafond de score
+    beneficie du credit semantique, jamais le nombre affiche."""
+    from app.services import matcher
+
+    monkeypatch.setattr(matcher, "_semantic_skill_credit", lambda unmatched, cv_skills: 0.9)
+    cv = "Développeur Python."
+    job = "Poste: Développeur Backend."
+    result = match_cv_to_job(cv, job, priority_keywords="Python\nKubernetes")
+    assert result.priority_keywords_matched == ["Python"]
+    assert result.priority_keywords_total == 2
+    assert result.score_priority_keywords < 1.0  # credit partiel, pas un faux match exact

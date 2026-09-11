@@ -783,11 +783,30 @@ def _priority_keyword_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[fl
     common case: most recruiters never fill this in), so it's excluded
     from the weighted average entirely for that job rather than diluting
     every score with a neutral placeholder value.
+
+    Hybrid (2026-09-11), mirroring _skill_score's exact + semantic-top-up
+    approach: a priority keyword not matched literally can still earn
+    partial credit from embedding similarity to the CV's own skills.
+    Real production case: a "Data Analyst / Concepteur Decisionnel
+    Senior" job listed "architectures BI", "flux de donnees",
+    "controle de donnees" as priority keywords -- a 25-year BI/Data
+    Architect candidate clearly does exactly this work but phrases it
+    differently on his CV, and pure exact-match capped his score's
+    ceiling (_SKILL_CAP_FLOOR + (1-_SKILL_CAP_FLOOR)*coverage) well below
+    what his real fit warranted. This can only ever RAISE coverage vs pure
+    exact matching, never lower it, and the recruiter-facing "7/14
+    trouves" count (priority_keywords_matched/_total on MatchScore) stays
+    exact-match-only -- only the score's coverage benefits, so the count
+    displayed to the recruiter never looks inconsistent with itself.
     """
     if not job.priority_keyword_terms:
         return 0.5, False
     matched, all_terms = _resolve_priority_keywords(cv, job)
-    return (len(matched) / len(all_terms) if all_terms else 0.5), True
+    if not all_terms:
+        return 0.5, True
+    unmatched = set(all_terms) - set(matched)
+    credit = float(len(matched)) + _semantic_skill_credit(unmatched, set(cv.skill_terms))
+    return min(1.0, credit / len(all_terms)), True
 
 
 # A recruiter who types several phrasings of the SAME tool as separate
