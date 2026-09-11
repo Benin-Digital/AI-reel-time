@@ -300,7 +300,23 @@ _SKILLS: dict[str, list[str]] = {
     # a job's own priority-keywords (see matcher.py::_apply_priority_keywords).
     "Assurance": ["secteur de l assurance", "compagnie d assurance", "assureur",
                   "assurance dommages", "assurance vie", "assurance iard"],
+    # "declaration de sinistre" added: a real production CV read exactly
+    # this (singular, verb "declarer" not "gerer") and matched nothing at
+    # all despite being squarely claims-handling experience -- find_skills()
+    # does exact n-gram lookup with no stemming, so plural-only coverage
+    # ("sinistres") silently missed this common singular phrasing. The bare
+    # singular word "sinistre" alone is deliberately NOT added here (see
+    # test_deliberately_excluded_terms_stay_unresolved) -- unlike the
+    # 3-word phrase, it collides with the far more common everyday French
+    # adjective meaning "sinister/grim", which this exact multi-word
+    # context doesn't share. "indemnisation" is added too: the
+    # insurance-industry term for claims compensation/payout, and in a
+    # real "Chef de Projet MOA - Indemnisation IARD" job posting, literally
+    # the job's own domain name -- yet had no taxonomy entry of any kind
+    # before this, so it never counted as a real, demonstrated skill for a
+    # candidate whose CV used the same industry-standard word.
     "Gestion des sinistres": ["gestion des sinistres", "gestion de sinistre", "sinistres",
+                              "declaration de sinistre", "indemnisation",
                               "sinistralite", "cycle de vie d un sinistre"],
     "Gestion des risques": ["gestion des risques", "gestion du risque", "analyse des risques",
                             "cartographie des risques", "indicateurs de risques", "risk management",

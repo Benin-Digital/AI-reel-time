@@ -82,3 +82,17 @@ def test_real_job_offer_text_detects_expected_skills():
     assert "IARD" in result
     assert "Gestion des sinistres" in result
     assert "Assurance" in result
+
+
+def test_singular_declaration_de_sinistre_is_detected_without_the_ambiguous_bare_word():
+    """Regression reelle (Christophe Jalier, meme offre "Chef de Projet MOA -
+    Indemnisation IARD", 2026-09-11) : son CV decrit une vraie experience
+    de systeme de gestion de sinistres avec la formulation singuliere
+    "declaration de sinistre" (verbe "declarer", pas "gerer") -- absente
+    tant que seul le pluriel "sinistres" etait enregistre. La phrase
+    complete (3 mots) n'a pas la meme ambiguite que le mot seul "sinistre"
+    (qui reste exclu, voir test_deliberately_excluded_terms_stay_unresolved)
+    puisque find_skills() compare la phrase exacte, pas un mot isole."""
+    assert normalize_skill("sinistre") is None
+    assert "Gestion des sinistres" in find_skills("systemes de declaration de sinistre")
+    assert "Gestion des sinistres" in find_skills("indemnisation")
