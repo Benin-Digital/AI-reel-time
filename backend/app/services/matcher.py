@@ -342,6 +342,46 @@ def get_active_weights() -> dict[str, float] | None:
         return _learned_weights.copy() if _learned_weights else None
 
 
+# Live-adjustable override for the skill/priority-keyword semantic-credit
+# tuning (see _semantic_skill_credit) -- an admin can raise or lower these
+# via POST /admin/skill-embedding-tuning and see the effect on the very
+# next match computed, with no redeploy. Same in-memory-only pattern as
+# _learned_weights above (reset to settings' defaults on restart/deploy --
+# deliberately not silently auto-persisted or auto-applied from feedback,
+# per the same reasoning that removed the old /feedback/apply-weights
+# endpoint: a scoring-parameter change should be a deliberate, visible
+# admin action, not something that happens on its own).
+_skill_embedding_tuning_override: dict[str, float] | None = None
+_skill_embedding_tuning_lock = threading.Lock()
+
+
+def set_skill_embedding_tuning(threshold: float | None, max_credit: float | None) -> None:
+    """Pass both None to clear the override and revert to settings' defaults."""
+    global _skill_embedding_tuning_override
+    with _skill_embedding_tuning_lock:
+        if threshold is None and max_credit is None:
+            _skill_embedding_tuning_override = None
+            return
+        current = dict(_skill_embedding_tuning_override or {})
+        if threshold is not None:
+            current["threshold"] = threshold
+        if max_credit is not None:
+            current["max_credit"] = max_credit
+        _skill_embedding_tuning_override = current
+
+
+def get_skill_embedding_tuning() -> tuple[float, float, bool]:
+    """Returns (threshold, max_credit, is_overridden)."""
+    from ..settings import get_settings
+
+    settings = get_settings()
+    with _skill_embedding_tuning_lock:
+        override = dict(_skill_embedding_tuning_override) if _skill_embedding_tuning_override else {}
+    threshold = override.get("threshold", settings.skill_embedding_threshold)
+    max_credit = override.get("max_credit", settings.skill_embedding_max_credit)
+    return threshold, max_credit, bool(override)
+
+
 def _weights() -> dict[str, float]:
     """Weights for the final score. Domain-independent — see the comment
     above _DOMAIN_W for why per-domain weighting was retired."""
@@ -413,8 +453,7 @@ def _semantic_skill_credit(unmatched: set[str], cv_skills: set[str]) -> float:
         settings = get_settings()
         if not getattr(settings, "skill_embedding_enabled", False):
             return 0.0
-        threshold = settings.skill_embedding_threshold
-        max_credit = settings.skill_embedding_max_credit
+        threshold, max_credit, _overridden = get_skill_embedding_tuning()
 
         from .embeddings import best_skill_similarities
 

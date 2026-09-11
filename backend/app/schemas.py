@@ -518,6 +518,18 @@ class WeightComputeResult(BaseModel):
     current_weights: dict[str, float]
 
 
+class SkillEmbeddingTuningRead(BaseModel):
+    threshold: float
+    max_credit: float
+    is_overridden: bool
+
+
+class SkillEmbeddingTuningUpdate(BaseModel):
+    threshold: float | None = None
+    max_credit: float | None = None
+    reset: bool = False
+
+
 class ScoringV2TrainResult(BaseModel):
     sample_count: int
     auc: float

@@ -24,9 +24,15 @@ from ..schemas import (
     MatchFeedbackCreate,
     MatchFeedbackExportRead,
     MatchFeedbackRead,
+    SkillEmbeddingTuningRead,
+    SkillEmbeddingTuningUpdate,
     WeightComputeResult,
 )
-from ..services.matcher import get_active_weights
+from ..services.matcher import (
+    get_active_weights,
+    get_skill_embedding_tuning,
+    set_skill_embedding_tuning,
+)
 from ..services.weight_learner import compute_learned_weights
 
 router = APIRouter(tags=["feedback"])
@@ -298,4 +304,53 @@ def compute_weights(request: Request) -> WeightComputeResult:
         sample_count=result["sample_count"],
         accuracy=result["accuracy"],
         current_weights={k: round(v, 4) for k, v in current.items()},
+    )
+
+
+@router.get("/admin/skill-embedding-tuning", response_model=SkillEmbeddingTuningRead)
+def get_skill_embedding_tuning_settings(request: Request) -> SkillEmbeddingTuningRead:
+    """Current effective threshold/max_credit for the semantic partial-
+    credit mechanism (skills and priority keywords, see
+    matcher._semantic_skill_credit) -- either the deployed default
+    (AI_REALTIME_SKILL_EMBEDDING_THRESHOLD/_MAX_CREDIT) or a live admin
+    override, whichever is active."""
+    require_user(request)
+    threshold, max_credit, overridden = get_skill_embedding_tuning()
+    return SkillEmbeddingTuningRead(
+        threshold=threshold, max_credit=max_credit, is_overridden=overridden
+    )
+
+
+@router.patch("/admin/skill-embedding-tuning", response_model=SkillEmbeddingTuningRead)
+def update_skill_embedding_tuning_settings(
+    request: Request, payload: SkillEmbeddingTuningUpdate
+) -> SkillEmbeddingTuningRead:
+    """Adjust the semantic partial-credit threshold/max_credit live, with
+    NO redeploy and NO restart -- takes effect on the very next match
+    computed. In-memory only (like matcher._learned_weights): resets to
+    the deployed default on the next restart/deploy, so this is for
+    live experimentation, not a permanent change -- once a value proves
+    itself, bake it into AI_REALTIME_SKILL_EMBEDDING_THRESHOLD/_MAX_CREDIT
+    so it survives a deploy.
+
+    Pass reset=true to clear the override and revert to the deployed
+    default. Deliberately requires an explicit admin call rather than
+    ever adjusting itself automatically -- same reasoning as the removed
+    /feedback/apply-weights endpoint (see compute_weights above): a
+    scoring-parameter change must be a deliberate, visible action.
+    """
+    require_admin(request)
+    if payload.threshold is not None and not (0.0 < payload.threshold <= 1.0):
+        raise HTTPException(status_code=422, detail="threshold doit être dans ]0, 1]")
+    if payload.max_credit is not None and not (0.0 < payload.max_credit <= 1.0):
+        raise HTTPException(status_code=422, detail="max_credit doit être dans ]0, 1]")
+
+    if payload.reset:
+        set_skill_embedding_tuning(None, None)
+    else:
+        set_skill_embedding_tuning(payload.threshold, payload.max_credit)
+
+    threshold, max_credit, overridden = get_skill_embedding_tuning()
+    return SkillEmbeddingTuningRead(
+        threshold=threshold, max_credit=max_credit, is_overridden=overridden
     )
