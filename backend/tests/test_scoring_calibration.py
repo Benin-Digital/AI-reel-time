@@ -33,6 +33,8 @@ Trois constats reels ont motive ce recalibrage :
 """
 from __future__ import annotations
 
+import pytest
+
 from app.services.matcher import (
     _core_keyword_coverage,
     _resolve_priority_keywords,
@@ -270,3 +272,23 @@ def test_skill_mentioned_only_in_the_education_section_is_still_detected():
     )
     doc = parse_document(cv_text, kind="cv")
     assert "Data Analyst" in doc.skill_terms
+
+
+# ── Point 6 (suite a l'audit) : poids semantique reduit ──────────────────────
+
+def test_semantic_weight_is_no_longer_the_highest():
+    """Regression reelle : le cross-encoder retournait des valeurs presque
+    constantes (0.57-0.73, la plupart groupees a 0.70-0.73) quel que soit
+    le candidat, quand bien meme il portait le poids le plus eleve de la
+    formule (0.40). Mesure : remplacer la vraie valeur semantique par une
+    constante (0.70) pour tous les 16 candidats d'un jeu de validation
+    changeait l'erreur moyenne face au jugement humain de moins de 0.5
+    point -- signe que ce poids ne discriminait quasiment rien. Redistribue
+    vers skills/priority_keywords, les composantes qui, elles, discriminent
+    reellement (les retirer de la meme facon double l'erreur)."""
+    from app.services.matcher import _weights
+
+    w = _weights()
+    assert w["semantic"] < w["skills"]
+    assert w["semantic"] < w["priority_keywords"]
+    assert w["semantic"] == pytest.approx(0.10)

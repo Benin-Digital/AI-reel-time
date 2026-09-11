@@ -189,8 +189,23 @@ def _cross_encode_best(query: str, document: str) -> float:
 # the effect on the accuracy dataset (test_validation_dataset.py) first.
 
 _DEFAULT_W = {
-    "semantic": 0.40,
-    "skills": 0.30,
+    # Lowered from 0.40 (2026-09-11), after measuring on a 16-CV / 1-job
+    # validation set (independent human-judgment target per pair) that the
+    # cross-encoder's real output barely varies across genuinely different
+    # candidates (0.57-0.73 for all 16, most clustered at 0.70-0.73
+    # regardless of actual fit): replacing every candidate's real semantic
+    # score with a flat 0.70 changed the mean absolute error against the
+    # human targets by less than half a point (8.51 -> 8.80). At its old
+    # 0.40 weight -- the single highest of any component -- that's 40% of
+    # the formula spent on a signal that, on this evidence, isn't
+    # discriminating between good and bad matches. Skill and
+    # priority-keyword coverage carry the real signal (removing THEM the
+    # same way roughly doubles the error), so weight moved there instead.
+    # Not dropped to zero: the one candidate whose real score noticeably
+    # differed from the 0.70 cluster was pulled slightly CLOSER to their
+    # human-judgment target by it, so some weight is kept.
+    "semantic": 0.10,
+    "skills": 0.40,
     # Only counted when the job has priority keywords (see has_signal on
     # _priority_keyword_score) -- absent for the common case (a recruiter
     # who never filled this in), so it changes nothing there. When present,
@@ -201,7 +216,7 @@ _DEFAULT_W = {
     # longer make up for missing exactly what the recruiter flagged as
     # priority by scoring well on generic semantic similarity, because
     # that similarity's share of the total shrinks too, not just skills'.
-    "priority_keywords": 0.20,
+    "priority_keywords": 0.40,
     "experience": 0.12,
     "education": 0.08,
     "languages": 0.05,
