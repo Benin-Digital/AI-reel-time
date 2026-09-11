@@ -783,6 +783,57 @@ class ParsedDocument:
         return ""
 
 
+# A recruiter routinely states an optional/bonus criterion as a sentence
+# buried inside the "required" block's paragraph rather than under its own
+# "job_nice" heading (e.g. "Si le candidat possede ... pour la comptabilite
+# publique, cela constituerait un reel atout pour notre module
+# d'interfacage comptable." found on a real PHP/Laravel/VueJS job posting).
+# _match_section only recognizes a "job_nice" HEADING -- it can't see a
+# hedged sentence mid-paragraph -- so that skill silently landed in
+# required_skill_terms and permanently capped every candidate's score for
+# a criterion the recruiter explicitly framed as non-essential.
+_HEDGE_SENTENCE_PATTERNS = [
+    re.compile(p) for p in (
+        r"constituerait\s+(?:un\s+)?(?:reel\s+|veritable\s+)?(?:atout|plus)",
+        r"serait\s+(?:un\s+)?(?:reel\s+|veritable\s+)?(?:atout|plus)",
+        r"representerait\s+(?:un\s+)?(?:reel\s+|veritable\s+)?atout",
+        r"(?:serait|sera)\s+(?:grandement\s+|particulierement\s+)?apprecie",
+        r"un\s+atout\s+(?:supplementaire|non negligeable|certain)",
+        r"\bnice to have\b",
+        r"\bde preference\b",
+        r"\bsi possible\b",
+    )
+]
+
+
+def _split_hedged_sentences(text: str) -> tuple[str, str]:
+    """Pulls sentences phrased as optional ("constituerait un atout",
+    "serait un plus"...) out of a job's required-skills block.
+
+    Returns (kept_text, hedged_text) -- kept_text is what remains after
+    removing every hedged sentence, hedged_text is those sentences joined,
+    meant to be appended to job_nice_text so the skills they mention land
+    in nice_skill_terms instead of required_skill_terms.
+    """
+    if not text:
+        return text, ""
+    kept_lines: list[str] = []
+    hedged_sentences: list[str] = []
+    for line in text.split("\n"):
+        sentences = re.split(r"(?<=[.!?])\s+", line)
+        kept_sentences = []
+        for sentence in sentences:
+            folded = _fold(sentence)
+            if any(p.search(folded) for p in _HEDGE_SENTENCE_PATTERNS):
+                hedged_sentences.append(sentence.strip())
+            else:
+                kept_sentences.append(sentence)
+        rebuilt = " ".join(s for s in kept_sentences if s.strip())
+        if rebuilt.strip():
+            kept_lines.append(rebuilt)
+    return "\n".join(kept_lines), "\n".join(hedged_sentences)
+
+
 # ── Main parse function ───────────────────────────────────────────────────────
 
 _OVERRIDE_KNOWN_SECTIONS = {
@@ -881,6 +932,8 @@ def parse_document(
     languages_text = sec("languages")
     job_required_text = sec("job_required")
     job_nice_text = sec("job_nice")
+    job_required_text, _hedged_nice_text = _split_hedged_sentences(job_required_text)
+    job_nice_text = "\n".join(p for p in [job_nice_text, _hedged_nice_text] if p)
     contract_text = sec("contract")
     location_text = sec("location")
     other_text = sec("other")
