@@ -145,7 +145,8 @@ _NAME_SECTION_RE = re.compile(
     r"réf|ref\b|version\b|doc-|"
     r"mission|connaissance|technique|réalisation|realisation|"
     r"parcours|diplôme|diplome|savoir|responsabilit|"
-    r"objectif|domaine|présentation|presentation|à propos|a propos",
+    r"objectif|domaine|présentation|presentation|à propos|a propos|"
+    r"intérêt|interet|atout|qualité|qualite|soft skill|point fort",
     re.IGNORECASE,
 )
 _NAME_YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
@@ -291,7 +292,16 @@ def _extract_name_rule_based(lines: list[str]) -> str | None:
         if not line or len(line) < 3 or len(line) > 60:
             continue
         if _is_letter_spaced(line):
-            return None
+            # Distinct from the "nothing found" `None` below: this is
+            # positive evidence the real name sits right here but can't be
+            # reassembled from flattened text -- NOT "no name-like line
+            # anywhere, defer to NER". The caller must clear whatever NER
+            # guessed instead of leaving it standing, since NER reads the
+            # exact same garbled letter-spaced text and is just as likely to
+            # misfire on it (a real production case: it picked up a
+            # candidate's high school name, "Lyc\u00e9e Louis Armand", as her
+            # name instead).
+            return ""
         if _NAME_CONTACT_RE.search(line) or _NAME_SECTION_RE.search(line) or _NAME_YEAR_RE.search(line):
             continue
         if re.search(r"\d{3,}", line):
@@ -487,6 +497,13 @@ def build_document_profile(
         rule_name = _extract_name_rule_based(lines)
         if rule_name:
             person_name = rule_name
+        elif rule_name == "":
+            # "" (not None) means the rule-based scan found positive
+            # evidence of an unparseable letter-spaced name header -- see
+            # its docstring. NER ran on the same garbled text, so its guess
+            # is equally untrustworthy here; clear it instead of leaving
+            # whatever it picked up standing unquestioned.
+            person_name = None
 
     # Job offers never have a person_name (NER picks up "Fiche" from "Fiche de poste", etc.)
     if resolved_kind == "job":
