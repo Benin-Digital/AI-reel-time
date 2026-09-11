@@ -302,17 +302,49 @@ def _alias_pattern(alias: str) -> re.Pattern:
 _SECTION_STOPWORDS = {
     "et", "de", "des", "du", "la", "le", "les", "d", "l", "a", "à",
     "en", "pour", "sur", "avec", "au", "aux", "&",
-    # Generic qualifiers that commonly extend a heading without changing its
-    # meaning ("Expériences professionnelles", "Compétences principales") —
-    # unlike a list-intro verb ("... utilisés :"), these carry no content of
-    # their own, so treating them as filler doesn't risk absorbing a
-    # per-bullet label like "Technologies utilisées" as a section switch.
-    "professionnel", "professionnelle", "professionnels", "professionnelles",
-    "personnel", "personnelle", "personnels", "personnelles",
-    "principal", "principale", "principaux", "principales",
-    "general", "generale", "generaux", "generales",
-    "specifique", "specifiques", "cle", "cles",
 }
+
+# A per-role bullet label ("Technologies utilisées : ...", "Outils employés
+# par le client : ...") reads exactly like a real compound heading -- one or
+# two Skills-alias words plus a connector -- except for a trailing past-
+# participle that only makes sense as "[these tools] were used", not as a
+# section title. That verb is the one reliable signal telling the two
+# apart: an early version of this check instead demanded every extra word
+# be an explicit stopword or another alias of the same section, which
+# missed ordinary qualifiers nobody had thought to list ("Compétences
+# TECHNIQUES", "Formation ACADEMIQUE", "Compétences FONCTIONNELLES"...) and
+# broke each one it missed -- a real production CV lost its *entire*
+# "Compétences techniques" block (BDD/BI/Langages/Framework/ERP-CRM/
+# Logiciels/Ticketing) this way, because "techniques" wasn't on the list.
+_SECTION_LIST_INTRO_RE = re.compile(r"^(?:utilise|employe|maitrise|acquis)e?s?$")
+
+
+def _match_section(line: str) -> str | None:
+    """Return section name if the line matches a known heading alias.
+
+    Only heading-shaped lines (a handful of words, like the ALL-CAPS and
+    bullet-follow heuristics below) are considered. Without that guard, an
+    alias word occurring naturally inside a normal sentence — or even glued
+    inside an unrelated word, e.g. "role" inside "controle" without a word
+    boundary — would misclassify that sentence as a section break and
+    silently drop its own content from every section.
+
+    Beyond the length guard, a multi-word line matching an alias is
+    rejected only when one of its other words either names a DIFFERENT
+    section (so "Formation Experience" doesn't quietly become Education)
+    or is a list-intro past participle (see _SECTION_LIST_INTRO_RE) --
+    everything else (plain qualifiers, connectors, another alias of the
+    SAME section) is accepted. Real headings are made of nothing else
+    ("Compétences et connaissances", "Compétences techniques"). Per-role
+    bullet labels that happen to contain an alias word are still rejected:
+    "Technologies et outils utilisés : ..." matches "technologies", but
+    "utilises" trips _SECTION_LIST_INTRO_RE, so it's correctly read as a
+    tool call-out rather than a switch to the Skills section — which used
+    to truncate every job entry listed after the first one's "Technologies
+    utilisées" bullet out of the Experience section entirely.
+    """
+    folded = _fold(line.strip())
+    words = folded.split()
 
 
 def _match_section(line: str) -> str | None:
@@ -349,7 +381,11 @@ def _match_section(line: str) -> str | None:
             continue
         alias_words = set(alias.split())
         extra = [w for w in words if w not in alias_words and w not in _SECTION_STOPWORDS]
-        if all(lookup.get(w) == section for w in extra):
+        disqualified = any(
+            _SECTION_LIST_INTRO_RE.match(w) or lookup.get(w) not in (None, section)
+            for w in extra
+        )
+        if not disqualified:
             return section
     return None
 

@@ -57,6 +57,48 @@ def test_compound_heading_of_same_section_aliases_still_matches():
     assert _match_section("Competences et connaissances") == "skills"
 
 
+def test_arbitrary_qualifier_words_still_match_not_just_the_hardcoded_list():
+    """Regression reelle (production, Boubacar Mainassara, 2026-09-11) :
+    l'implementation precedente exigeait que CHAQUE mot en trop soit
+    explicitement dans une liste blanche de qualificatifs codee en dur
+    ("professionnelles", "principales"...). "COMPETENCES TECHNIQUES" -- un
+    des titres de section les PLUS courants d'un CV tech francais -- n'y
+    figurait pas : le titre ne matchait plus du tout, `current` restait
+    bloque sur la section precedente (Contact, via une ligne "Adresse :"
+    plus haut), et TOUT le bloc de competences qui suivait (BDD / BI /
+    Langages / Framework / ERP-CRM / Logiciels / Ticketing) disparaissait
+    purement et simplement des competences detectees et des mots-cles
+    prioritaires -- sans qu'aucun message d'erreur ne le signale.
+
+    Le correctif remplace la liste blanche par une liste noire ciblee (un
+    autre alias d'une AUTRE section, ou un verbe d'introduction de liste
+    comme "utilises") : n'importe quel qualificatif generique, meme non
+    prevu a l'avance, doit desormais passer."""
+    assert _match_section("Competences techniques") == "skills"
+    assert _match_section("Competences fonctionnelles") == "skills"
+    assert _match_section("Competences informatiques") == "skills"
+    assert _match_section("Domaines de competences") == "skills"
+    assert _match_section("Formation academique") == "education"
+    assert _match_section("Formation initiale") == "education"
+
+
+def test_competences_techniques_heading_does_not_swallow_the_whole_skills_block():
+    """Bout-en-bout : la regression ci-dessus, au niveau document complet."""
+    cv_text = (
+        "Adresse : 12 rue des Lilas\n"
+        "Competences techniques\n"
+        "BDD : SQL Server, Oracle, MySQL\n"
+        "Langages : Python, Java, PHP\n"
+        "Experience\n"
+        "2020-2023 : Ingenieur chez ACME\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert "Oracle" in doc.skills_text
+    assert "Python" in doc.skills_text
+    assert "Oracle" not in doc.other_text
+    assert "Python" not in doc.other_text
+
+
 def test_education_section_survives_a_sentence_containing_universite():
     """Repro reelle : 'Universite' (alias education) glisse dans une phrase
     normale et effacait toute la section Formation."""
