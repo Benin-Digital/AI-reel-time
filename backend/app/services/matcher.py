@@ -17,6 +17,7 @@ import re
 import threading
 import time
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 
 from .parser import ParsedDocument, parse_document
@@ -625,15 +626,36 @@ def _apply_priority_keywords(cv: ParsedDocument, job: ParsedDocument) -> None:
 def _resolve_priority_keywords(cv: ParsedDocument, job: ParsedDocument) -> tuple[list[str], list[str]]:
     """(matched, all_terms): the job's priority keywords resolved to their
     taxonomy canonical (or left as the raw term when the taxonomy doesn't
-    recognize it), and which of those are present in cv.skill_terms
-    (already enriched for unknown terms by _apply_priority_keywords).
-    Shared by _priority_keyword_score (the weighted component) and
-    match_parsed_documents (which exposes the raw counts on MatchScore for
-    the UI, e.g. "6/9 mots-clés prioritaires trouvés")."""
-    all_terms = [normalize_skill(t) or t for t in job.priority_keyword_terms]
+    recognize it), DEDUPLICATED by canonical, and which of those are
+    present in cv.skill_terms (already enriched for unknown terms by
+    _apply_priority_keywords). Shared by _priority_keyword_score (the
+    weighted component) and match_parsed_documents (which exposes the raw
+    counts on MatchScore for the UI, e.g. "6/9 mots-clés prioritaires
+    trouvés").
+
+    Deduplication matters because recruiters routinely type several
+    phrasings of the SAME tool as separate lines ("SAS Enterprise Guide",
+    "SAS Base", "SAS Grid" all normalize to the single canonical "SAS
+    (logiciel)"; "tableaux de bord" and "reporting" both normalize to
+    "Reporting"). Counting each raw line as its own slot silently changes
+    what the fraction actually measures: a candidate who mentions SAS once
+    got credit for 3 "matched" keywords instead of 1 (inflating anyone with
+    even a passing mention of the job's core tool), while a candidate who
+    never mentions SAS at all only lost 3 slots out of 12+ -- diluting the
+    one gap that should matter most into a fraction of a broad average.
+    Deduplicating first means the count reflects distinct required
+    concepts, so a candidate missing the job's headline tool can't have
+    that loss buried under a dozen effectively-repeated line items.
+    """
+    seen: dict[str, None] = {}
+    matched_seen: dict[str, None] = {}
     cv_skills = set(cv.skill_terms)
-    matched = [t for t in all_terms if t in cv_skills]
-    return matched, all_terms
+    for raw_term in job.priority_keyword_terms:
+        canonical = normalize_skill(raw_term) or raw_term
+        seen.setdefault(canonical, None)
+        if canonical in cv_skills:
+            matched_seen.setdefault(canonical, None)
+    return list(matched_seen), list(seen)
 
 
 def _priority_keyword_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
@@ -652,6 +674,55 @@ def _priority_keyword_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[fl
         return 0.5, False
     matched, all_terms = _resolve_priority_keywords(cv, job)
     return (len(matched) / len(all_terms) if all_terms else 0.5), True
+
+
+# A recruiter who types several phrasings of the SAME tool as separate
+# priority-keyword lines ("SAS Enterprise Guide", "SAS Base", "SAS Grid" --
+# all normalizing to the canonical "SAS (logiciel)") is, in effect, telling
+# us that tool is the job's headline requirement, not just one item among
+# many. The average priority-keywords coverage fraction can't capture this:
+# missing exactly that one emphasized tool is diluted into a fraction of a
+# dozen-plus other, less central keywords -- observed in production on a
+# "Data Analyst Expert SAS" job, where several candidates with zero SAS
+# experience but decent generic BI/SQL overlap still scored 55-68%.
+#
+# Repetition count is a fully generic signal (position in the list, or the
+# literal word, are NOT used) -- it only reacts to a pattern the recruiter
+# themselves created by typing the same concept multiple times, so it
+# applies to any future job without hardcoding any specific tool name.
+_CORE_KEYWORD_MIN_REPEATS = 3
+# Multiplicative, not a hard cap: final *= CORE_PENALTY_FLOOR + (1 -
+# CORE_PENALTY_FLOOR) * core_coverage. A hard min() cap was tried first and
+# rejected -- it collapsed every candidate missing the core tool to the
+# exact same floor value regardless of how they differed otherwise
+# (experience, other real skills), erasing differentiation a human
+# reviewer clearly still makes among "doesn't have the core tool" CVs.
+# Scaling the final score instead preserves that relative ordering while
+# still applying a substantial, real penalty for missing the emphasized
+# requirement.
+_CORE_PENALTY_FLOOR = 0.45
+
+# Floor for the skills/priority-keywords caps below (0.0-1.0 coverage maps
+# to _SKILL_CAP_FLOOR-1.0 score). See the comment at the cap's call site in
+# match_parsed_documents for the calibration rationale.
+_SKILL_CAP_FLOOR = 0.30
+
+
+def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
+    """Coverage (0.0-1.0) of the job's "emphasized" priority keywords --
+    canonicals the recruiter typed via at least _CORE_KEYWORD_MIN_REPEATS
+    distinct raw lines. Returns 1.0 (no penalty) when no keyword reaches
+    that repeat threshold, so an ordinary, non-repeated priority-keyword
+    list is entirely unaffected by this mechanism.
+    """
+    if not job.priority_keyword_terms:
+        return 1.0
+    counts = Counter(normalize_skill(t) or t for t in job.priority_keyword_terms)
+    core = {canonical for canonical, n in counts.items() if n >= _CORE_KEYWORD_MIN_REPEATS}
+    if not core:
+        return 1.0
+    cv_skills = set(cv.skill_terms)
+    return len(core & cv_skills) / len(core)
 
 
 def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScore:
@@ -731,17 +802,34 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     # the system's own explanation admitted those skills were absent. Skill
     # coverage is the most literal, least ambiguous signal we have when the
     # job lists required skills at all, so it sets a ceiling the rest of the
-    # score can approach but never exceed: 50% at zero coverage, up to 100%
-    # at full coverage.
+    # score can approach but never exceed.
+    #
+    # Floor calibrated (2026-09-11) against a 16-CV / 1-job real-world
+    # validation set with an independent human-judgment target score for
+    # each pair: the previous 0.5 floor let a CV with essentially no
+    # relevant skill overlap still land at 50%, far above what any
+    # recruiter reviewing the same pair would call it. _SKILL_CAP_FLOOR is
+    # the floor at zero coverage; coverage of 1.0 always reaches 100%
+    # regardless of the floor (floor + (1-floor)*1.0 == 1.0), so a genuinely
+    # perfect match is never held back by this constant.
     if skills_ok:
-        final = min(final, 0.5 + 0.5 * skills)
+        final = min(final, _SKILL_CAP_FLOOR + (1 - _SKILL_CAP_FLOOR) * skills)
     # Same reasoning, applied to the recruiter's own priorities specifically:
     # a weight alone still lets the other ~80% of the score compensate for
     # missing exactly what the recruiter flagged as most important. The cap
     # makes that non-negotiable, the same way the skills cap above does for
     # the general required-skills set.
     if priority_kw_ok:
-        final = min(final, 0.5 + 0.5 * priority_kw_score)
+        final = min(final, _SKILL_CAP_FLOOR + (1 - _SKILL_CAP_FLOOR) * priority_kw_score)
+
+    # Multiplicative penalty (not a cap) for missing the job's "emphasized"
+    # tool(s) -- see _core_keyword_coverage. Applied after the caps above
+    # rather than folded into them, so it scales down whatever differentiated
+    # score two candidates already have instead of collapsing them to one
+    # shared floor value.
+    core_coverage = _core_keyword_coverage(cv, job)
+    if core_coverage < 1.0:
+        final *= _CORE_PENALTY_FLOOR + (1 - _CORE_PENALTY_FLOOR) * core_coverage
 
     cv_skills = set(cv.skill_terms)
     job_required = set(job.required_skill_terms or job.skill_terms)
