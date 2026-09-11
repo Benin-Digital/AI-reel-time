@@ -239,6 +239,15 @@ _SECTION_DEFS: list[tuple[str, list[str]]] = [
         # correctly rejects "Technologies et outils utilises".
         "experience requise", "experience demandee", "experience souhaitee",
         "experience minimum",
+        # Consultant-CV template heading for a list of past client missions
+        # ("REFERENCES PROJETS", "REFERENCES SIGNIFICATIVES"). Real
+        # production regression: "references projets" itself resolves to no
+        # section, so a prior, legitimate "Formation" heading a few lines
+        # above never got reset -- an entire multi-page job history (dozens
+        # of real missions with client names, dates, technologies) ended up
+        # classified as Education instead of Experience for the rest of the
+        # document.
+        "references projets", "references significatives",
     ]),
     ("education", [
         "formation", "formations", "education", "etudes", "diplome", "diplomes",
@@ -302,20 +311,27 @@ def _alias_pattern(alias: str) -> re.Pattern:
 _SECTION_STOPWORDS = {
     "et", "de", "des", "du", "la", "le", "les", "d", "l", "a", "à",
     "en", "pour", "sur", "avec", "au", "aux", "&",
+    # Qualifier NOUNS that extend a heading ("Domaines de compétences") but
+    # don't share a recognizable adjective ending, so _SECTION_QUALIFIER_RE
+    # below wouldn't catch them.
+    "domaines", "domaine", "cle", "cles",
 }
+
+# Most French adjectives that legitimately extend a heading share one of a
+# small set of endings (techniqueS, professionnEL, principAL, académiqueS,
+# spécifiqueS...). Matching on the ending, rather than maintaining a list of
+# every possible adjective, is what lets "COMPETENCES TECHNIQUES" -- one of
+# the single most common section headings in French tech CVs -- match
+# without "techniques" having had to be anticipated in advance.
+_SECTION_QUALIFIER_SUFFIX_RE = re.compile(
+    r".*(?:ique|iques|el|elle|els|elles|al|ale|aux|ales|aire|aires|if|ive|ifs|ives)$"
+)
 
 # A per-role bullet label ("Technologies utilisées : ...", "Outils employés
 # par le client : ...") reads exactly like a real compound heading -- one or
 # two Skills-alias words plus a connector -- except for a trailing past-
 # participle that only makes sense as "[these tools] were used", not as a
-# section title. That verb is the one reliable signal telling the two
-# apart: an early version of this check instead demanded every extra word
-# be an explicit stopword or another alias of the same section, which
-# missed ordinary qualifiers nobody had thought to list ("Compétences
-# TECHNIQUES", "Formation ACADEMIQUE", "Compétences FONCTIONNELLES"...) and
-# broke each one it missed -- a real production CV lost its *entire*
-# "Compétences techniques" block (BDD/BI/Langages/Framework/ERP-CRM/
-# Logiciels/Ticketing) this way, because "techniques" wasn't on the list.
+# section title.
 _SECTION_LIST_INTRO_RE = re.compile(r"^(?:utilise|employe|maitrise|acquis)e?s?$")
 
 
@@ -329,46 +345,31 @@ def _match_section(line: str) -> str | None:
     boundary — would misclassify that sentence as a section break and
     silently drop its own content from every section.
 
-    Beyond the length guard, a multi-word line matching an alias is
-    rejected only when one of its other words either names a DIFFERENT
-    section (so "Formation Experience" doesn't quietly become Education)
-    or is a list-intro past participle (see _SECTION_LIST_INTRO_RE) --
-    everything else (plain qualifiers, connectors, another alias of the
-    SAME section) is accepted. Real headings are made of nothing else
-    ("Compétences et connaissances", "Compétences techniques"). Per-role
-    bullet labels that happen to contain an alias word are still rejected:
-    "Technologies et outils utilisés : ..." matches "technologies", but
-    "utilises" trips _SECTION_LIST_INTRO_RE, so it's correctly read as a
-    tool call-out rather than a switch to the Skills section — which used
-    to truncate every job entry listed after the first one's "Technologies
-    utilisées" bullet out of the Experience section entirely.
-    """
-    folded = _fold(line.strip())
-    words = folded.split()
-
-
-def _match_section(line: str) -> str | None:
-    """Return section name if the line matches a known heading alias.
-
-    Only heading-shaped lines (a handful of words, like the ALL-CAPS and
-    bullet-follow heuristics below) are considered. Without that guard, an
-    alias word occurring naturally inside a normal sentence — or even glued
-    inside an unrelated word, e.g. "role" inside "controle" without a word
-    boundary — would misclassify that sentence as a section break and
-    silently drop its own content from every section.
-
     Beyond the length guard, every word in the line besides the matched
-    alias itself must be a stopword or another alias OF THE SAME SECTION.
-    Real headings are made of nothing else ("Compétences et connaissances").
-    Per-role bullet labels that happen to contain an alias word are not:
-    "Technologies et outils utilisés : ..." matches "technologies", but
-    "utilises" is neither a stopword nor a recognized alias, so it is
-    correctly rejected instead of being read as a switch to the Skills
-    section — which used to truncate every job entry listed after the
-    first one's "Technologies utilisées" bullet out of the Experience
-    section entirely (they'd be silently reassigned to Skills instead).
+    alias itself must be a stopword, another alias OF THE SAME SECTION, or
+    a word with a recognizable French-adjective ending (see
+    _SECTION_QUALIFIER_SUFFIX_RE) — real headings are made of nothing else
+    ("Compétences et connaissances", "Compétences techniques", "Domaines de
+    compétences"). Two earlier designs each failed on real production CVs:
+    an allowlist of specific qualifier words ("professionnelles",
+    "principales"...) missed "techniques" and dropped an entire skills
+    block into the wrong section; a denylist that accepted any word not
+    explicitly known-bad let ordinary sentences ("automatique de contrat de
+    rétrocession.") and unrelated nouns ("Location de véhicule") get read
+    as headings too. Requiring a real, recognizable adjective shape (or an
+    explicit stopword/alias) for anything past the matched alias is what
+    keeps both directions of failure closed: "Technologies et outils
+    utilisés : ..." still fails because "utilisés" is a past participle,
+    not an adjective — the same signal used to reject it before.
     """
-    folded = _fold(line.strip())
+    # Punctuation stripped before splitting into words: a heading like
+    # "COMPETENCES (PRINCIPALES)" otherwise tokenizes as "(principales)"
+    # with the parenthesis still attached, which matches neither a stopword
+    # nor the qualifier-suffix pattern below (it fails a plain endswith
+    # check on the literal ")") -- silently rejecting an otherwise-ordinary
+    # heading and, in one real production CV, emptying its Skills section
+    # entirely.
+    folded = re.sub(r"[^\w\s]", " ", _fold(line.strip()))
     words = folded.split()
     if not words or len(words) > 6:
         return None
@@ -381,11 +382,18 @@ def _match_section(line: str) -> str | None:
             continue
         alias_words = set(alias.split())
         extra = [w for w in words if w not in alias_words and w not in _SECTION_STOPWORDS]
-        disqualified = any(
-            _SECTION_LIST_INTRO_RE.match(w) or lookup.get(w) not in (None, section)
-            for w in extra
-        )
-        if not disqualified:
+        ok = True
+        for w in extra:
+            other_section = lookup.get(w)
+            if other_section is not None:
+                if other_section != section:
+                    ok = False
+                    break
+                continue  # another alias of the SAME section: fine
+            if _SECTION_LIST_INTRO_RE.match(w) or not _SECTION_QUALIFIER_SUFFIX_RE.match(w):
+                ok = False
+                break
+        if ok:
             return section
     return None
 

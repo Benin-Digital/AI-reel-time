@@ -70,16 +70,55 @@ def test_arbitrary_qualifier_words_still_match_not_just_the_hardcoded_list():
     purement et simplement des competences detectees et des mots-cles
     prioritaires -- sans qu'aucun message d'erreur ne le signale.
 
-    Le correctif remplace la liste blanche par une liste noire ciblee (un
-    autre alias d'une AUTRE section, ou un verbe d'introduction de liste
-    comme "utilises") : n'importe quel qualificatif generique, meme non
-    prevu a l'avance, doit desormais passer."""
+    Le correctif reconnait un qualificatif par sa TERMINAISON d'adjectif
+    francais (-ique, -el/-elle, -al/-ale, -aire, -if/-ive...) plutot que par
+    une liste figee : n'importe quel qualificatif generique, meme non prevu
+    a l'avance, passe desormais tant qu'il a une forme d'adjectif."""
     assert _match_section("Competences techniques") == "skills"
     assert _match_section("Competences fonctionnelles") == "skills"
     assert _match_section("Competences informatiques") == "skills"
     assert _match_section("Domaines de competences") == "skills"
     assert _match_section("Formation academique") == "education"
     assert _match_section("Formation initiale") == "education"
+
+
+def test_ordinary_sentences_are_still_not_headings_despite_the_relaxed_rule():
+    """Un premier correctif (liste noire pure : un mot en trop ne bloque que
+    s'il nomme une AUTRE section ou ressemble a un verbe d'introduction de
+    liste) etait trop permissif dans l'autre sens : une phrase ordinaire
+    contenant un mot-alias, mais aucun mot suspect connu, passait aussi.
+    Regressions reelles trouvees en auditant les CV de production :
+    "Location de vehicule" (mention de mobilite/permis, pas un titre de
+    section Localisation) et "automatique de contrat de retrocession."
+    (une phrase bancaire ordinaire, pas un titre Contrat) faisaient toutes
+    deux basculer `current`, engloutissant tout le contenu qui suivait.
+    Exiger que le mot en trop ait une vraie forme d'adjectif francais (ou
+    soit un alias de la meme section) ferme ce trou sans revenir a la
+    liste blanche figee."""
+    assert _match_section("Location de véhicule") is None
+    assert _match_section("automatique de contrat de rétrocession.") is None
+
+
+def test_heading_wrapped_in_punctuation_still_matches():
+    """Regression reelle (production, Ibrahim Oubandoma, 2026-09-11) :
+    "COMPETENCES (PRINCIPALES)" tokenisait le mot qualificatif avec ses
+    parentheses encore attachees ("(principales)"), qui ne correspond a
+    aucun alias ni a la terminaison d'adjectif attendue -- le titre entier
+    etait rejete et TOUTE la section Competences de ce candidat disparaissait
+    (skills_text vide). La ponctuation est desormais retiree avant de
+    decouper la ligne en mots."""
+    assert _match_section("COMPETENCES (PRINCIPALES)") == "skills"
+
+
+def test_references_projets_heading_maps_to_experience():
+    """Regression reelle (production, Guillaume Saha, 2026-09-11) : le titre
+    "REFERENCES PROJETS" (liste de missions client, gabarit CV consultant)
+    ne correspondait a aucun alias. Une section "Formation" plus haut dans
+    le document ne se reinitialisait donc jamais, et des dizaines de
+    missions reelles (noms de clients, dates, technologies) se
+    retrouvaient classees comme Formation plutot que comme Experience."""
+    assert _match_section("REFERENCES PROJETS") == "experience"
+    assert _match_section("RÉFÉRENCES SIGNIFICATIVES") == "experience"
 
 
 def test_competences_techniques_heading_does_not_swallow_the_whole_skills_block():
@@ -97,6 +136,21 @@ def test_competences_techniques_heading_does_not_swallow_the_whole_skills_block(
     assert "Python" in doc.skills_text
     assert "Oracle" not in doc.other_text
     assert "Python" not in doc.other_text
+
+
+def test_references_projets_does_not_get_stuck_under_a_prior_formation_heading():
+    """Bout-en-bout : la regression Saha ci-dessus, au niveau document
+    complet -- sans l'alias, tout finissait dans education_text."""
+    cv_text = (
+        "Formation\n"
+        "Diplome d ingenieur, 2010\n"
+        "References projets\n"
+        "PROJET 1 : Mise en place des evolutions chez ACME\n"
+        "Developpement Python et SQL pour le client.\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert "ACME" in doc.experience_text
+    assert "ACME" not in doc.education_text
 
 
 def test_education_section_survives_a_sentence_containing_universite():
