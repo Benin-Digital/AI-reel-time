@@ -382,3 +382,38 @@ def test_borderline_project_management_terms_are_not_excluded():
         assert real_term in job.required_skill_terms, (
             f"{real_term!r} doit rester une competence comptee, pas assez de preuve pour l'exclure"
         )
+
+
+# ── Point 9 : mots-cles combines par "/" (ex. "MOA / AMOA") ─────────────────
+
+def test_slash_combined_priority_keyword_matches_its_shared_canonical():
+    """Regression reelle (offre "Chef de Projet MOA - Indemnisation IARD",
+    2026-09-11) : le recruteur a tape "MOA / AMOA" sur une seule ligne de
+    mot-cle prioritaire. normalize_skill() fait une recherche exacte sur la
+    chaine entiere -- "moa / amoa" n'est evidemment l'alias de rien, alors
+    que "moa" et "amoa" le sont tous les deux (vers le meme canonique,
+    "Maitrise d'ouvrage"). Un candidat dont le CV disait litteralement
+    "Chef de Projet MOA" trois fois voyait quand meme "MOA / AMOA" ressortir
+    comme mot-cle manquant, car la comparaison se faisait contre la chaine
+    brute "MOA / AMOA" plutot que contre le vrai canonique."""
+    from app.services.matcher import (
+        _normalize_priority_keyword,
+        _apply_priority_keywords,
+        _resolve_priority_keywords,
+        split_priority_keywords,
+    )
+
+    assert _normalize_priority_keyword("MOA / AMOA") == "Maîtrise d'ouvrage"
+    # Un combo ambigu (deux concepts reellement differents) ne doit pas etre
+    # arbitrairement resolu vers l'un des deux.
+    assert _normalize_priority_keyword("Excel/PowerPoint") is None
+
+    cv = parse_document("Experience: Chef de Projet MOA chez ACME Assurance.", kind="cv")
+    job = parse_document("Offre.", kind="job")
+    job.priority_keyword_terms = split_priority_keywords("MOA / AMOA\nAssurance\n")
+    _apply_priority_keywords(cv, job)
+    matched, all_terms = _resolve_priority_keywords(cv, job)
+    assert "Maîtrise d'ouvrage" in matched, (
+        "le candidat demontre clairement une experience MOA -- le mot-cle combine "
+        "doit etre credite, pas compte comme manquant"
+    )

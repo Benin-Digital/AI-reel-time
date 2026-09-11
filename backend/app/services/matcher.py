@@ -602,6 +602,38 @@ def split_priority_keywords(raw: str | None) -> list[str]:
     return terms
 
 
+def _normalize_priority_keyword(raw_term: str) -> str | None:
+    """normalize_skill(), extended for the recruiter shorthand of combining
+    two synonymous abbreviations on one line with a slash ("MOA / AMOA",
+    "Assurance/IARD"). normalize_skill() itself does one exact lookup on
+    the whole folded string -- "moa / amoa" is never going to be a
+    registered alias itself, even though "moa" and "amoa" both are (both
+    to the same canonical, "Maîtrise d'ouvrage"). Confirmed in production:
+    a candidate whose CV literally read "Chef de Projet MOA" three times
+    still showed "MOA / AMOA" as a missing priority keyword, because the
+    combined raw string never matched anything -- the coverage fraction
+    used the literal text "MOA / AMOA" as its own fake "canonical" instead
+    of the real one his CV plainly satisfied.
+
+    Splits on "/" and normalizes each side; returns the shared canonical
+    only when every side that does normalize agrees, so an ambiguous
+    combo naming two genuinely different things ("Excel/PowerPoint")
+    isn't silently collapsed into one.
+    """
+    canonical = normalize_skill(raw_term)
+    if canonical:
+        return canonical
+    if "/" not in raw_term:
+        return None
+    parts_canonical = {
+        normalize_skill(part) for part in raw_term.split("/") if part.strip()
+    }
+    parts_canonical.discard(None)
+    if len(parts_canonical) == 1:
+        return next(iter(parts_canonical))
+    return None
+
+
 def _apply_priority_keywords(cv: ParsedDocument, job: ParsedDocument) -> None:
     """Make a job's recruiter-curated priority keywords detectable on the
     CV side, bypassing find_skills() for terms it doesn't recognize --
@@ -630,7 +662,7 @@ def _apply_priority_keywords(cv: ParsedDocument, job: ParsedDocument) -> None:
     """
     cv_text_folded = _fold(cv.cleaned_text)
     for raw_term in job.priority_keyword_terms:
-        canonical = normalize_skill(raw_term)
+        canonical = _normalize_priority_keyword(raw_term)
         if canonical:
             continue  # already detectable via find_skills() like any other skill
         term = raw_term
@@ -666,7 +698,7 @@ def _resolve_priority_keywords(cv: ParsedDocument, job: ParsedDocument) -> tuple
     matched_seen: dict[str, None] = {}
     cv_skills = set(cv.skill_terms)
     for raw_term in job.priority_keyword_terms:
-        canonical = normalize_skill(raw_term) or raw_term
+        canonical = _normalize_priority_keyword(raw_term) or raw_term
         seen.setdefault(canonical, None)
         if canonical in cv_skills:
             matched_seen.setdefault(canonical, None)
@@ -753,7 +785,7 @@ def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
     """
     if not job.priority_keyword_terms:
         return 1.0
-    counts = Counter(normalize_skill(t) or t for t in job.priority_keyword_terms)
+    counts = Counter(_normalize_priority_keyword(t) or t for t in job.priority_keyword_terms)
     core = {canonical for canonical, n in counts.items() if n >= _CORE_KEYWORD_MIN_REPEATS}
 
     title_folded = _fold(job.title_line)
@@ -761,7 +793,7 @@ def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
     matched = {c for c in core if c in cv_skills}
     if title_folded:
         for raw_term in job.priority_keyword_terms:
-            canonical = normalize_skill(raw_term) or raw_term
+            canonical = _normalize_priority_keyword(raw_term) or raw_term
             if canonical in core:
                 continue
             if _fold(raw_term) not in title_folded:
