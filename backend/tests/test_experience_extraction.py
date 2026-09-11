@@ -138,3 +138,87 @@ def test_education_date_ranges_are_not_counted_as_experience():
     )
     doc = parse_document(cv_text, kind="cv")
     assert doc.experience_years == 3, "seule la periode 2020-2023 est une vraie experience professionnelle"
+
+
+def test_formations_plural_heading_is_still_recognized_as_education():
+    """Regression reelle (production, 2026-09-11) : seul l'alias singulier
+    "formation" etait enregistre. Le titre "Formations" (pluriel, tres
+    courant en fin de CV) n'etait alors reconnu par aucune section, donc
+    "Formations" restait rattache a la section courante (Experience) et ses
+    dates de diplome (2017-2020, 2014-2017...) etaient additionnees a
+    l'experience professionnelle reelle."""
+    cv_text = (
+        "Experience\n"
+        "Ingenieur BI chez ACME - 2020 - 2023\n"
+        "Formations\n"
+        "2017 - 2020 - Diplome d ingenieur\n"
+        "2014 - 2017 - Technicien specialise\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert doc.experience_years == 3, (
+        f"les dates de Formations (plurie) ne doivent pas gonfler l'experience, obtenu {doc.experience_years}"
+    )
+
+
+# ── Apostrophes typographiques dans "aujourd'hui" (bug trouve en audit) ──────
+# Un CV redige sous Word/Google Docs remplace quasi systematiquement
+# l'apostrophe ASCII par une apostrophe typographique courbe (U+2019), et la
+# substitution de police PDF produit parfois un accent aigu (U+00B4) a la
+# place. Une regex codee en dur sur l'apostrophe ASCII ('?) ne matchait
+# aucune de ces deux variantes tres courantes en pratique, rendant toute la
+# plage de dates invisible et faisant disparaitre ce poste (souvent le plus
+# recent, en cours) du total.
+
+def test_ongoing_with_curly_apostrophe_is_recognized():
+    assert _extract_years("Ingenieur BI 2020 – Aujourd’hui") == CURRENT_YEAR - 2020
+
+
+def test_ongoing_with_acute_accent_apostrophe_is_recognized():
+    assert _extract_years("Ingenieur BI 2020 – Aujourd´hui") == CURRENT_YEAR - 2020
+
+
+def test_month_glued_to_year_is_still_a_valid_range():
+    """Regression reelle (production, 2026-09-11) : l'extraction PDF colle
+    parfois le nom du mois directement a l'annee sans espace
+    ("Decembre2022"), comme pour d'autres mots ("Technologieset") ailleurs
+    dans ce fichier. Un \\s+ obligatoire apres le mois faisait echouer toute
+    la plage, supprimant ce poste du total."""
+    assert _extract_years("Ingenieur BI Decembre2022 – Mai 2023") == 1
+
+
+def test_technologies_bullet_label_does_not_truncate_the_experience_section():
+    """Regression reelle (production, Mohamed Morchid, 2026-09-11) : chaque
+    poste de son CV se termine par une ligne "Technologies et outils
+    utilises : ..." -- l'ancien _match_section prenait "technologies"/
+    "outils" comme alias de section (Competences) des qu'un de ces mots
+    apparaissait dans la ligne, meme entoure de texte non lie ("utilises").
+    Tous les postes suivant la PREMIERE ligne "Technologies utilisees"
+    etaient alors bascules dans la section Competences et disparaissaient de
+    l'experience professionnelle."""
+    cv_text = (
+        "Experience\n"
+        "Ingenieur BI 2024 – Aujourd'hui | SQLI\n"
+        "Technologies et outils utilises : Power BI, SQL Server, Jira\n"
+        "Ingenieur BI 2020 – 2022 | Aria Group\n"
+        "Technologies et outils utilises : SSIS, SSAS, Power BI\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert "Aria Group" in doc.experience_text, (
+        "le deuxieme poste ne doit pas etre bascule hors de la section Experience"
+    )
+    # 2020-2022 (2 ans) + 2024-Aujourd'hui, non contigus (ecart 2023) -> pas fusionnes
+    assert doc.experience_years == 2 + (CURRENT_YEAR - 2024)
+
+
+def test_job_offer_experience_requise_heading_still_maps_to_experience_section():
+    """"Experience requise :" (offre d'emploi) doit rester rattachee a la
+    section Experience explicitement, en alias exact -- pas via la recherche
+    generique par mot, resserree par ailleurs pour rejeter les libelles de
+    puce ("Technologies utilisees") qui contiennent aussi un mot-alias."""
+    job_text = (
+        "Competences requises: Python, Django.\n"
+        "Experience requise: Minimum 8 ans en developpement backend.\n"
+    )
+    doc = parse_document(job_text, kind="job")
+    assert "8 ans" in doc.experience_text
+    assert doc.experience_years == 8

@@ -21,6 +21,17 @@ from .taxonomy import find_skills, partition_skills
 
 
 def _fold(text: str) -> str:
+    # Typographic apostrophes (curly quote U+2019, acute accent U+00B4 used as
+    # a lazy apostrophe by some fonts/PDF exports) are common in real
+    # Word/Docs-authored CVs ("d'expérience", "aujourd'hui"). Left alone, the
+    # ascii-ignore step below silently DELETES U+2019 (no ascii mapping) and
+    # turns standalone U+00B4 into a bare space (its NFKD compat decomposition
+    # is space + combining accent, and the combining mark then gets dropped)
+    # -- either way destroying the apostrophe that many regexes downstream
+    # rely on to find a word boundary, and merging or splitting words in a way
+    # that breaks matching. Normalizing them to a plain "'" first keeps that
+    # boundary intact for every caller of _fold, not just apostrophe-aware ones.
+    text = text.replace("’", "'").replace("´", "'").replace("`", "'")
     nfkd = unicodedata.normalize("NFKD", text)
     return nfkd.encode("ascii", "ignore").decode("ascii").lower()
 
@@ -207,9 +218,18 @@ _SECTION_DEFS: list[tuple[str, list[str]]] = [
         "parcours", "missions", "mission", "emploi", "postes occupes",
         "employment history", "career", "parcours professionnel",
         "realisations", "achievements", "portfolio", "postes",
+        # Job-offer phrasing for the required-experience line ("Experience
+        # requise : Minimum 8 ans..."). Exact aliases, not left to the
+        # generic word-boundary search, since "requise"/"demandee" aren't
+        # themselves registered anywhere -- the stricter _match_section
+        # (see _SECTION_STOPWORDS) would otherwise reject the whole heading
+        # as an alias word buried in unrelated content, same as it now
+        # correctly rejects "Technologies et outils utilises".
+        "experience requise", "experience demandee", "experience souhaitee",
+        "experience minimum",
     ]),
     ("education", [
-        "formation", "education", "etudes", "diplome", "diplomes",
+        "formation", "formations", "education", "etudes", "diplome", "diplomes",
         "diplomes obtenus", "academique", "scolarite", "universite",
         "ecole", "school", "cursus", "parcours academique", "enseignement",
     ]),
@@ -267,6 +287,22 @@ def _alias_pattern(alias: str) -> re.Pattern:
     return re.compile(r"\b" + re.escape(alias) + r"\b")
 
 
+_SECTION_STOPWORDS = {
+    "et", "de", "des", "du", "la", "le", "les", "d", "l", "a", "à",
+    "en", "pour", "sur", "avec", "au", "aux", "&",
+    # Generic qualifiers that commonly extend a heading without changing its
+    # meaning ("Expériences professionnelles", "Compétences principales") —
+    # unlike a list-intro verb ("... utilisés :"), these carry no content of
+    # their own, so treating them as filler doesn't risk absorbing a
+    # per-bullet label like "Technologies utilisées" as a section switch.
+    "professionnel", "professionnelle", "professionnels", "professionnelles",
+    "personnel", "personnelle", "personnels", "personnelles",
+    "principal", "principale", "principaux", "principales",
+    "general", "generale", "generaux", "generales",
+    "specifique", "specifiques", "cle", "cles",
+}
+
+
 def _match_section(line: str) -> str | None:
     """Return section name if the line matches a known heading alias.
 
@@ -276,6 +312,17 @@ def _match_section(line: str) -> str | None:
     inside an unrelated word, e.g. "role" inside "controle" without a word
     boundary — would misclassify that sentence as a section break and
     silently drop its own content from every section.
+
+    Beyond the length guard, every word in the line besides the matched
+    alias itself must be a stopword or another alias OF THE SAME SECTION.
+    Real headings are made of nothing else ("Compétences et connaissances").
+    Per-role bullet labels that happen to contain an alias word are not:
+    "Technologies et outils utilisés : ..." matches "technologies", but
+    "utilises" is neither a stopword nor a recognized alias, so it is
+    correctly rejected instead of being read as a switch to the Skills
+    section — which used to truncate every job entry listed after the
+    first one's "Technologies utilisées" bullet out of the Experience
+    section entirely (they'd be silently reassigned to Skills instead).
     """
     folded = _fold(line.strip())
     words = folded.split()
@@ -286,7 +333,11 @@ def _match_section(line: str) -> str | None:
     if folded in lookup:
         return lookup[folded]
     for alias, section in lookup.items():
-        if len(alias) >= 4 and _alias_pattern(alias).search(folded):
+        if len(alias) < 4 or not _alias_pattern(alias).search(folded):
+            continue
+        alias_words = set(alias.split())
+        extra = [w for w in words if w not in alias_words and w not in _SECTION_STOPWORDS]
+        if all(lookup.get(w) == section for w in extra):
             return section
     return None
 
@@ -327,6 +378,10 @@ def _is_heading(line: str, next_line: str | None) -> bool:
 
 # ── Field extractors ──────────────────────────────────────────────────────────
 
+# This runs on _fold()ed text, which now normalizes curly-quote/acute-accent
+# apostrophe variants to a plain "'" before this regex ever sees them (see
+# _fold), so a bare ASCII "'" here is enough to match "d'expérience" however
+# it was originally typed.
 _YEAR_CTX_RE = re.compile(
     r"(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)\s+d[e']\s*(?:exp[eé]rience|exp\b)"
     r"|(?:exp[eé]rience|exp)\s+(?:de\s+)?(\d{1,2})\s*\+?\s*(?:years?|ans?|ann[eé]e?s?)"
@@ -345,15 +400,31 @@ _EXP_CTX_RE = re.compile(r"exp[eé]rience|exp\b|pratique", re.IGNORECASE)
 # separator. We therefore accept accented "ongoing" tokens here, and make the
 # dash separator tolerant (hyphen/en-dash/em-dash, or just whitespace).
 _DASH = r"[-–—]"
-_ONGOING = r"(?:à ce jour|a ce jour|aujourd'?hui|pr[ée]sent|actuel(?:le)?|en cours|now)"
+# "Aujourd'hui" almost never keeps a plain ASCII apostrophe in a real,
+# Word/Docs-authored CV: word processors auto-correct it to a typographic
+# quote (’, U+2019), and PDF font substitution sometimes turns it into an
+# acute accent (´, U+00B4) instead. A bare `'?` only matched the ASCII form
+# -- every other variant made the whole date range invisible to
+# _years_from_date_ranges, silently dropping that job (often the most
+# recent, ongoing one) from the total. Real case: a candidate with 5 years
+# of BI experience (stated explicitly as "5 ans d'expériences" and
+# corroborated by 5 job entries) came out at 0 because both of his ongoing
+# roles used "Aujourd’hui"/"Aujourd´hui".
+_APOS = r"['’´`]?"
+_ONGOING = rf"(?:à ce jour|a ce jour|aujourd{_APOS}hui|pr[ée]sent|actuel(?:le)?|en cours|now)"
 _MONTH_NAME = (
     r"(?:jan(?:vier)?|f[ée]v(?:rier)?|mars|avr(?:il)?|mai|juin|juil(?:let)?|"
     r"ao[uû]t|sept?(?:embre)?|oct(?:obre)?|nov(?:embre)?|d[ée]c(?:embre)?|"
     r"january|february|march|april|may|june|july|august|september|october|november|december)"
 )
 # A year is very often preceded by a month name ("janvier 2019") or a
-# numeric month ("01/2019") — optional so a bare year still matches.
-_MONTH_PREFIX = rf"(?:{_MONTH_NAME}\.?\s+|\d{{1,2}}\s*/\s*)?"
+# numeric month ("01/2019") — optional so a bare year still matches. The
+# space after the month name is itself optional: PDF text extraction
+# routinely glues the month straight onto the year with no space at all
+# ("Décembre2022 – Mai 2023"), same class of artifact as "Technologieset"
+# elsewhere in this file — a required \s+ silently dropped that whole job
+# entry (and its years) out of the date-range total.
+_MONTH_PREFIX = rf"(?:{_MONTH_NAME}\.?\s*|\d{{1,2}}\s*/\s*)?"
 _YEAR_RANGE_RE = re.compile(
     rf"\b{_MONTH_PREFIX}(19[7-9]\d|20\d\d)\s*(?:{_DASH}|au|to|\bà\b)\s*"
     rf"{_MONTH_PREFIX}(19[7-9]\d|20\d\d|{_ONGOING})",
