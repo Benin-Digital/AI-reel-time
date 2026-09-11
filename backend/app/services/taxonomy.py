@@ -623,15 +623,43 @@ SOFT_SKILL_CANONICALS: frozenset[str] = frozenset({
     "Permis B",
 })
 
+# Distinct from SOFT_SKILL_CANONICALS (behavioural traits): these are real
+# taxonomy canonicals -- three from the original SKILLS dict, "Contrôle
+# qualité" pulled in by the ROME 4.0 vocabulary import (rome_skills_data.json,
+# 8500+ entries covering every job family from textiles to mechanics) -- but
+# worded so generically that they almost never appear as a literal, discrete
+# line on a real CV the way "SQL" or "Python" would. Left in required_skill_
+# terms, they silently lower the coverage denominator for every candidate
+# on any job whose description happens to use ordinary phrases like "bonne
+# communication" or "sens du service client" -- confirmed in production: a
+# candidate with 6 of 7 real technical requirements covered was capped at
+# 66% coverage (rather than the ~90%+ a recruiter would judge) purely
+# because "Communication"/"Service client"/"Contrôle qualité"/"Mathématiques"
+# were counted as missing hard skills alongside SAS/SQL/SGBD. This is
+# necessarily a starting list, not an audit of the full ROME import --
+# other entries in that vocabulary may be similarly over-broad and are not
+# yet reviewed.
+_GENERIC_SKILL_CANONICALS: frozenset[str] = frozenset({
+    "Communication",
+    "Service client",
+    "Contrôle qualité",
+    "Mathématiques",
+})
+
+_EXCLUDED_FROM_HARD_SKILLS = SOFT_SKILL_CANONICALS | _GENERIC_SKILL_CANONICALS
+
 
 def is_soft_skill(canonical: str) -> bool:
     return canonical in SOFT_SKILL_CANONICALS
 
 
 def partition_skills(skills: list[str]) -> tuple[list[str], list[str]]:
-    """Split a list of canonical skills into (hard, soft), preserving order."""
-    hard = [s for s in skills if s not in SOFT_SKILL_CANONICALS]
-    soft = [s for s in skills if s in SOFT_SKILL_CANONICALS]
+    """Split a list of canonical skills into (hard, soft), preserving order.
+    "soft" here also absorbs _GENERIC_SKILL_CANONICALS (see comment above) --
+    both are excluded from hard-skill coverage for the same reason, even
+    though not all of them are behavioural traits."""
+    hard = [s for s in skills if s not in _EXCLUDED_FROM_HARD_SKILLS]
+    soft = [s for s in skills if s in _EXCLUDED_FROM_HARD_SKILLS]
     return hard, soft
 
 

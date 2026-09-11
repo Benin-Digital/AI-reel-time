@@ -292,3 +292,44 @@ def test_semantic_weight_is_no_longer_the_highest():
     assert w["semantic"] < w["skills"]
     assert w["semantic"] < w["priority_keywords"]
     assert w["semantic"] == pytest.approx(0.10)
+
+
+# ── Point 7 (suite a l'audit) : termes generiques exclus des competences ────
+
+def test_generic_professional_traits_are_excluded_from_required_skills():
+    """Regression reelle (Boubacar Mainassara, 2026-09-11) : le texte d'une
+    offre mentionnant en langage naturel "bonne communication ecrite et
+    orale" ou "sens du service client" faisait extraire "Communication" et
+    "Service client" comme si c'etaient des competences TECHNIQUES
+    discretes, au meme titre que "SQL" ou "SAS". Aucun CV ne liste jamais
+    litteralement "Communication" comme ligne de competence -- ces termes
+    diluaient donc la couverture reelle de tout candidat, meme excellent.
+    "Contrôle qualité" (import ROME 4.0, vocabulaire couvrant des dizaines
+    de metiers) et "Mathématiques" (domaine academique, pas un outil)
+    souffrent du meme probleme. Mesure reelle : un candidat couvrant 6 des
+    7 vraies competences techniques du poste voyait son score plafonne a
+    66% de couverture (au lieu de ~85%+) a cause de ces 4 termes comptes
+    comme manquants."""
+    from app.services.parser import parse_document
+
+    job_text = (
+        "Offre Data Analyst. Competences requises: SAS, SQL, SGBD. "
+        "Bonne communication ecrite et orale, sens du service client, "
+        "connaissance des methodes de controle qualite des donnees. "
+        "Formation superieure en informatique, statistiques, "
+        "mathematiques appliquees."
+    )
+    job = parse_document(job_text, kind="job")
+    for generic_term in ("Communication", "Service client", "Contrôle qualité", "Mathématiques"):
+        assert generic_term not in job.required_skill_terms, (
+            f"{generic_term!r} est un trait general, pas une competence technique discrete"
+        )
+
+
+def test_real_quality_control_tooling_is_not_accidentally_excluded():
+    """Le filtrage cible precisement le canonique generique "Contrôle
+    qualité" -- un vrai outil/certification qualite nomme specifiquement
+    (ex: SonarQube) ne doit pas etre touche."""
+    from app.services.taxonomy import find_skills
+
+    assert "SonarQube" in find_skills("Competences: SonarQube, Python.")
