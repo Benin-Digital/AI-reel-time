@@ -333,3 +333,52 @@ def test_real_quality_control_tooling_is_not_accidentally_excluded():
     from app.services.taxonomy import find_skills
 
     assert "SonarQube" in find_skills("Competences: SonarQube, Python.")
+
+
+# ── Point 8 (audit approfondi, sur demande explicite) : referentiel RECTEC ──
+# Audit systematique du dictionnaire technique (281 entrees) et de l'import
+# ROME (8500+ entrees) contre les 12 "competences transversales" officielles
+# du referentiel RECTEC (France Travail / Education nationale, projet
+# finance par l'UE) -- un cadre concu specifiquement pour identifier les
+# competences qui s'appliquent a peu pres a tous les metiers, quel que soit
+# le domaine. Six nouveaux termes correspondent clairement a l'un des 12
+# poles officiels (communicationnel/organisationnel/reflexif) et ne
+# figurent jamais comme une ligne de competence discrete sur un vrai CV.
+# Trois candidats limites (Planification, Coordination, Parties prenantes)
+# ont ete deliberement laisses de cote : usage reel et discriminant dans
+# les metiers de gestion de projet, pas de preuve concrete de surestimation
+# en production -- les exclure sans preuve reintroduirait la meme classe
+# d'erreur, inversee.
+
+def test_rectec_aligned_generic_terms_are_excluded():
+    """Chacun de ces six termes correspond a l'un des 12 poles officiels
+    RECTEC (communiquer a l'oral, utiliser les ressources numeriques,
+    piloter l'activite, assurer les procedures et la qualite...) et n'est
+    quasiment jamais une ligne de competence discrete sur un CV reel."""
+    job_text = (
+        "Offre. Competences requises: Python. "
+        "Bonne presentation orale, ecoute active des besoins clients, "
+        "maitrise des outils bureautiques, bonne gestion du temps, "
+        "sens de la qualite, capacite de resolution de problemes."
+    )
+    job = parse_document(job_text, kind="job")
+    for generic_term in (
+        "Outils bureautiques", "Qualité", "Résolution de problèmes",
+        "Présentation", "Ecoute active", "Gestion du temps",
+    ):
+        assert generic_term not in job.required_skill_terms, (
+            f"{generic_term!r} correspond a un pole RECTEC officiel, pas a une competence technique discrete"
+        )
+
+
+def test_borderline_project_management_terms_are_not_excluded():
+    """Planification/Coordination/Parties prenantes restent de vraies
+    competences comptees -- usage reel et discriminant dans les metiers de
+    gestion de projet, pas assez de preuve pour les traiter comme
+    generiques."""
+    job_text = "Offre Chef de projet. Competences requises: Planification, Coordination, Parties prenantes."
+    job = parse_document(job_text, kind="job")
+    for real_term in ("Planification", "Coordination", "Parties prenantes"):
+        assert real_term in job.required_skill_terms, (
+            f"{real_term!r} doit rester une competence comptee, pas assez de preuve pour l'exclure"
+        )

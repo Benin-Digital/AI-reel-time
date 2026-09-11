@@ -635,15 +635,38 @@ SOFT_SKILL_CANONICALS: frozenset[str] = frozenset({
 # candidate with 6 of 7 real technical requirements covered was capped at
 # 66% coverage (rather than the ~90%+ a recruiter would judge) purely
 # because "Communication"/"Service client"/"Contrôle qualité"/"Mathématiques"
-# were counted as missing hard skills alongside SAS/SQL/SGBD. This is
-# necessarily a starting list, not an audit of the full ROME import --
-# other entries in that vocabulary may be similarly over-broad and are not
-# yet reviewed.
+# were counted as missing hard skills alongside SAS/SQL/SGBD.
+#
+# Second pass (2026-09-11): cross-checked both this dict and the ROME import
+# against France Travail's own RECTEC referential -- an official, EU-funded
+# framework of 12 "compétences transversales" (transversal competencies)
+# specifically designed to identify skills that apply across virtually every
+# occupation regardless of domain (pôles communicationnel/organisationnel/
+# réflexif: communiquer à l'oral/écrit, utiliser les ressources numériques,
+# piloter l'activité, agir face à l'imprévu, coopérer, gérer les données
+# mathématiques/budgétaires, traiter l'information, assurer les procédures
+# et la qualité, construire son parcours professionnel, développer des
+# compétences). Six more canonicals matched one of these 12 domains clearly
+# enough to add; three borderline candidates (Planification, Coordination,
+# Parties prenantes) were deliberately left out -- they have real,
+# discriminating domain-specific use in project-management-heavy roles, and
+# excluding them without concrete evidence of a production over-broadening
+# case would risk the same class of error this fix addresses, just inverted.
+#
+# This is still a starting list, not an audit of the full 8500+-entry ROME
+# import -- other entries in that vocabulary may be similarly over-broad and
+# are not yet reviewed.
 _GENERIC_SKILL_CANONICALS: frozenset[str] = frozenset({
     "Communication",
     "Service client",
     "Contrôle qualité",
     "Mathématiques",
+    "Outils bureautiques",
+    "Qualité",
+    "Résolution de problèmes",
+    "Présentation",
+    "Ecoute active",
+    "Gestion du temps",
 })
 
 _EXCLUDED_FROM_HARD_SKILLS = SOFT_SKILL_CANONICALS | _GENERIC_SKILL_CANONICALS
