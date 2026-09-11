@@ -438,6 +438,24 @@ def _semantic_skill_credit(unmatched: set[str], cv_skills: set[str]) -> float:
     return total
 
 
+# Four explicit zones (2026-09-11), replacing a two-way split that treated
+# "exactly meets the requirement" and "comfortably more experienced" the
+# same as a hard cliff at 3x for "over-qualified", with no room in between:
+#   - INFERIEUR (cv_y < job_y): unchanged, linear shortfall penalty.
+#   - EGAL (cv_y == job_y): full credit.
+#   - LEGEREMENT SUPERIEUR (job_y < cv_y <= _EXPERIENCE_COMFORTABLE_OVER_RATIO
+#     * job_y): still full credit -- a job stating "au moins N ans" (a
+#     FLOOR, not a target window) means more experience than the floor is
+#     never itself a downside up to a reasonable multiple.
+#   - TROP SUPERIEUR (beyond that): real overqualification risk (salary
+#     expectations, day-to-day boredom, retention) exists, but it's a
+#     gradual concern, not a step function -- tapers from full credit down
+#     to a floor instead of jumping straight to one fixed penalty value.
+_EXPERIENCE_COMFORTABLE_OVER_RATIO = 2.0
+_EXPERIENCE_SEVERE_OVER_RATIO = 4.0
+_EXPERIENCE_SEVERE_OVER_FLOOR = 0.85
+
+
 def _experience_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     """Years-of-experience match."""
     cv_y, job_y = cv.experience_years, job.experience_years
@@ -447,9 +465,17 @@ def _experience_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, b
         return 0.75, False  # job states no requirement to compare against
     if cv_y <= 0:
         return 0.2, False  # couldn't extract CV experience to compare
-    if cv_y >= job_y:
-        # Over-qualified: slight penalty if 3× over-qualified
-        return (0.85 if cv_y / job_y > 3 else 1.0), True
+    if cv_y == job_y:
+        return 1.0, True
+    if cv_y > job_y:
+        ratio = cv_y / job_y
+        if ratio <= _EXPERIENCE_COMFORTABLE_OVER_RATIO:
+            return 1.0, True
+        if ratio >= _EXPERIENCE_SEVERE_OVER_RATIO:
+            return _EXPERIENCE_SEVERE_OVER_FLOOR, True
+        span = _EXPERIENCE_SEVERE_OVER_RATIO - _EXPERIENCE_COMFORTABLE_OVER_RATIO
+        progress = (ratio - _EXPERIENCE_COMFORTABLE_OVER_RATIO) / span
+        return 1.0 - progress * (1.0 - _EXPERIENCE_SEVERE_OVER_FLOOR), True
     shortfall = (job_y - cv_y) / job_y
     return max(0.0, 1.0 - shortfall), True
 
