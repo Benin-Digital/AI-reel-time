@@ -584,19 +584,49 @@ def match_cv_to_job(cv_text: str, job_text: str, priority_keywords: str | None =
     return match_parsed_documents(cv, job)
 
 
+# A "Mots Clés.docx" pasted into the priority-keywords textarea very
+# commonly renders each bullet as a leading glyph the source Word list
+# style used ("•", "◦", "‣", "▪", a plain "-"/"*", or a numbered
+# "1."/"1)"/"(1)") -- none of which are actual keyword characters. Left
+# in place, EVERY line in a bulleted list keeps its marker as part of the
+# "keyword" text ("• Chef de projet" instead of "Chef de projet"), which
+# then never normalizes to anything in the taxonomy and silently fails to
+# match a CV that plainly demonstrates it. Confirmed as a recurring,
+# manual chore: recruiters report routinely having to strip this
+# themselves before saving, for every bulleted keyword list they paste.
+_BULLET_PREFIX_RE = re.compile(r"^(?:[•◦‣▪·\-\*]|\(?\d+[.)])\s+")
+
+# The header line ("Mots Clés :", "Liste des mots-clés", "MOTS CLÉS",
+# "Mot cle recherche"...) varies more than a small fixed set of exact
+# strings can reliably catch -- checking that the folded line merely
+# CONTAINS "mots cle" (singular root, so "clé"/"clés"/"cles" all fold to
+# it) after the bullet/punctuation strip below catches real-world
+# variations, including a leading lead-in word ("Liste des mots-clés"),
+# without needing to enumerate every one of them by hand. No real skill
+# or job keyword would itself contain the phrase "mot(s) clé(s)", so a
+# substring check carries no meaningful false-positive risk here.
+_KEYWORDS_HEADER_MARKERS = ("mots cle", "mot cle", "keyword")
+
+
 def split_priority_keywords(raw: str | None) -> list[str]:
     """Parse a recruiter-edited priority-keywords text (one per line, as
     saved from the "Mots-clés prioritaires" textarea) into a clean list of
-    terms. Blank lines are dropped; a leading "Mots Clés :"-style header
-    line (copy-pasted from a "Mots Clés.docx") is dropped too."""
+    terms. Blank lines are dropped; a leading list-bullet marker per line
+    and a "Mots Clés :"-style header line (both commonly present when a
+    "Mots Clés.docx" list is pasted in directly) are stripped too."""
     if not raw:
         return []
     terms = []
     for line in raw.splitlines():
-        term = line.strip().strip(":,;").strip()
+        term = _BULLET_PREFIX_RE.sub("", line.strip())
+        term = term.strip().strip(":,;").strip()
         if not term:
             continue
-        if _fold(term) in {"mots cles", "mots-cles", "keywords"}:
+        # "-" -> " " before the containment check: _fold() strips accents
+        # and case but leaves hyphens alone, and "mots-clés" (hyphenated)
+        # is at least as common a spelling as "mots clés" (space).
+        folded_term = _fold(term).replace("-", " ")
+        if len(term.split()) <= 6 and any(marker in folded_term for marker in _KEYWORDS_HEADER_MARKERS):
             continue
         terms.append(term)
     return terms

@@ -23,6 +23,50 @@ def test_split_priority_keywords_drops_blank_lines_and_header():
     assert split_priority_keywords(raw) == ["Chef de projet", "MOA / AMOA"]
 
 
+def test_split_priority_keywords_strips_bullets_from_a_pasted_word_list():
+    """Regression reelle (retour recruteur, 2026-09-11) : un "Mots
+    Cles.docx" colle tel quel dans le champ garde le glyphe de puce Word
+    ("•") devant chaque ligne -- laisse tel quel, "• Chef de projet"
+    devient litteralement le "mot-cle", qui ne correspond alors plus a
+    rien dans la taxonomie meme quand le CV demontre clairement la
+    competence. Le recruteur rapportait devoir le supprimer lui-meme a
+    chaque fois avant d'enregistrer."""
+    raw = (
+        "Mots Clés :\n\n"
+        "• Chef de projet\n"
+        "• MOA / AMOA\n"
+        "• IARD\n"
+        "• Assurance\n"
+        "• gestion des sinistres / Sinistre\n"
+        "• gestion des risques\n"
+        "• cycle en V\n"
+        "• Agile\n"
+        "• Recette"
+    )
+    assert split_priority_keywords(raw) == [
+        "Chef de projet", "MOA / AMOA", "IARD", "Assurance",
+        "gestion des sinistres / Sinistre", "gestion des risques",
+        "cycle en V", "Agile", "Recette",
+    ]
+
+
+def test_split_priority_keywords_strips_other_common_bullet_and_number_styles():
+    assert split_priority_keywords("- SQL\n- Python\n") == ["SQL", "Python"]
+    assert split_priority_keywords("* SQL\n* Python\n") == ["SQL", "Python"]
+    assert split_priority_keywords("1. SQL\n2) Python\n(3) Java\n") == ["SQL", "Python", "Java"]
+    # Un vrai terme technique contenant un tiret ou une barre, sans etre
+    # une puce (pas d'espace juste apres), ne doit pas etre altere.
+    assert split_priority_keywords("CI/CD\nFull-Stack\n") == ["CI/CD", "Full-Stack"]
+
+
+def test_split_priority_keywords_header_variants_beyond_the_exact_hardcoded_set():
+    """Le detecteur d'en-tete doit couvrir les variantes reelles courantes,
+    pas seulement une poignee de chaines figees."""
+    assert split_priority_keywords("MOTS CLES\nSQL\n") == ["SQL"]
+    assert split_priority_keywords("Liste des mots-clés :\nSQL\n") == ["SQL"]
+    assert split_priority_keywords("Mot clé recherché :\nSQL\n") == ["SQL"]
+
+
 def test_split_priority_keywords_handles_none_and_empty():
     assert split_priority_keywords(None) == []
     assert split_priority_keywords("") == []
