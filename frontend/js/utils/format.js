@@ -6,12 +6,30 @@ export const scoreTone = (score) => {
   return             { key: "low",  label: "À vérifier" };
 };
 
-export const renderScoreChip = (score) => {
+// A match whose score came only from the cheap vector-similarity
+// pre-filter (see matcher.py's embedding overflow path) has a real,
+// often misleadingly high `score` but no skill/keyword breakdown at all
+// -- every component is computed together or not at all (see
+// _upsert_match_result's cs={} case), so the absence of just one
+// (score_skills) reliably means none of them landed yet. The automatic
+// follow-up rescore that corrects it can take a while if the processing
+// queue is backed up, so showing that provisional number as a confident
+// "Fort"/"Moyen" result in the meantime would read as the platform
+// reporting a wrong answer, not a working one.
+export const isProvisionalScore = (match) => match?.score_skills == null;
+
+export const renderScoreChip = (score, provisional = false) => {
+  if (provisional) {
+    return `<span class="score-chip score-chip--pending" title="Analyse complète en cours — ce score n'est pas encore fiable">Analyse en cours…</span>`;
+  }
   const { key, label } = scoreTone(score);
   return `<span class="score-chip score-chip--${key}" title="${label}">${score}%</span>`;
 };
 
-export const renderScoreBar = (score) => {
+export const renderScoreBar = (score, provisional = false) => {
+  if (provisional) {
+    return `<div class="score-bar"><div class="score-bar__fill" style="width:100%;opacity:.25"></div></div>`;
+  }
   const { key } = scoreTone(score);
   return `<div class="score-bar"><div class="score-bar__fill score-bar__fill--${key}" style="width:${score}%"></div></div>`;
 };
