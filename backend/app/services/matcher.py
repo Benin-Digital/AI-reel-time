@@ -946,7 +946,13 @@ def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
             canonical = _normalize_priority_keyword(raw_term) or raw_term
             if canonical in core:
                 continue
-            if _fold(raw_term) not in title_folded:
+            term_folded = _fold(raw_term)
+            # Word-boundary match, not a plain substring check: a short
+            # keyword (e.g. "BI") can otherwise match inside an unrelated
+            # title word by pure coincidence ("...bi..." inside a French
+            # word like "bienveillant") and get wrongly flagged as the
+            # job's headline requirement.
+            if not term_folded or not re.search(rf"\b{re.escape(term_folded)}\b", title_folded):
                 continue
             core.add(canonical)
             if canonical in cv_skills or raw_term in cv_skills:

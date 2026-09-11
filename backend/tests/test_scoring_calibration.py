@@ -242,6 +242,40 @@ def test_keyword_mentioned_once_but_present_in_job_title_becomes_core():
     )
 
 
+def test_short_keyword_does_not_match_a_substring_inside_an_unrelated_title_word():
+    """Le titre check doit exiger une vraie frontiere de mot, pas une
+    simple inclusion de texte : un mot-cle court ("BI") ne doit pas
+    matcher par accident a l'interieur d'un mot francais sans rapport
+    ("bienveillant") juste parce que la sous-chaine 'bi' y apparait."""
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    pk_raw = "BI\nSQL\n"
+    job = parse_document(
+        "Consultant bienveillant et rigoureux.\nOffre technique.", kind="job"
+    )
+    job.priority_keyword_terms = split_priority_keywords(pk_raw)
+    cv = parse_document("Compétences: SQL, Python.", kind="cv")
+    _apply_priority_keywords(cv, job)
+    assert _core_keyword_coverage(cv, job) == 1.0, (
+        "'BI' ne doit pas etre detecte comme mot-cle coeur juste parce que "
+        "la sous-chaine apparait dans 'bienveillant'"
+    )
+
+
+def test_short_keyword_as_a_real_standalone_word_in_the_title_still_works():
+    """Non-regression : un mot-cle court qui apparait comme un VRAI mot
+    entier dans le titre (pas une sous-chaine accidentelle) doit toujours
+    etre detecte comme mot-cle coeur."""
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    pk_raw = "BI\nSQL\n"
+    job = parse_document("Consultant Expert BI.\nOffre technique.", kind="job")
+    job.priority_keyword_terms = split_priority_keywords(pk_raw)
+    cv_no_bi = parse_document("Compétences: SQL, Python.", kind="cv")
+    _apply_priority_keywords(cv_no_bi, job)
+    assert _core_keyword_coverage(cv_no_bi, job) == 0.0
+
+
 def test_slash_joined_compound_title_does_not_trigger_the_title_core_mechanism():
     """Regression reelle (offre "Data Analyst / Concepteur Decisionnel
     Senior H/F", 2026-09-11) : un titre compose de deux libelles de poste
