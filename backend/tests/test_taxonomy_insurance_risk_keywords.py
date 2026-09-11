@@ -60,6 +60,18 @@ def test_deliberately_excluded_terms_stay_unresolved():
         assert normalize_skill(word) is None, f"{word!r} doit rester hors taxonomie globale"
 
 
+def test_back_office_plural_hyphenated_form_resolves():
+    """Regression reelle (CV Abas Konate, offre "Developpeur Full Stack
+    PHP/Laravel/VueJS", 2026-09-11) : le profil ecrit "des outils metiers
+    et des back-offices" (pluriel, trait d'union) -- ce candidat construit
+    reellement des back-offices, mais le mot-cle restait invisible car seul
+    le singulier etait enregistre (find_skills ne fait pas de stemming,
+    voir le precedent "declaration de sinistre")."""
+    assert normalize_skill("back-offices") == "Back-office"
+    assert normalize_skill("backoffices") == "Back-office"
+    assert "Back-office" in find_skills("des outils metiers et des back-offices")
+
+
 def test_sector_word_invariant_still_holds():
     """Non-regression explicite sur le principe touche par cet ajout : un
     secteur d'activite ne doit toujours jamais devenir une 'competence',

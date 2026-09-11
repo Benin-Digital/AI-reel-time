@@ -160,7 +160,18 @@ _SKILLS: dict[str, list[str]] = {
     "ORM": ["orm", "object-relational mapping", "object relational mapping"],
     "Développeur Full Stack": ["full stack", "fullstack", "full-stack"],
     "Frontend": ["frontend", "front-end", "front end"],
-    "Back-office": ["backoffice", "back-office", "back office"],
+    "Back-office": [
+        "backoffice", "back-office", "back office",
+        # Plural form, unreachable without stemming (find_skills does exact
+        # n-gram lookup, see the "sinistre(s)" precedent above): a real CV
+        # wrote "des outils metiers et des back-offices" and it stayed
+        # invisible to the taxonomy despite the singular alias existing.
+        # "back offices" (space) is the form find_skills() actually builds
+        # its n-grams against -- its tokenizer (`[a-z0-9#+.]+`) treats the
+        # hyphen as a plain word separator, so "back-offices" the raw
+        # string never reaches the lookup as a single hyphenated token.
+        "backoffices", "back-offices", "back offices",
+    ],
     "ERP": ["erp", "enterprise resource planning", "progiciel de gestion integre", "pgi"],
     "UML": ["uml", "unified modeling language"],
     "UX/UI Design": ["ux", "ui", "ux design", "ui design", "user experience", "user interface",
