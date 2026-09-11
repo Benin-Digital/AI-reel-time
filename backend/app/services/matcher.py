@@ -217,7 +217,18 @@ _DEFAULT_W = {
     # priority by scoring well on generic semantic similarity, because
     # that similarity's share of the total shrinks too, not just skills'.
     "priority_keywords": 0.40,
-    "experience": 0.12,
+    # Raised from 0.12 (2026-09-11), after a real production comparison
+    # (job "Developpeur Full Stack PHP/Laravel/VueJS", 5 ans requis) showed
+    # a junior profile (~3 ans reels, 1 mot-cle prioritaire de plus) scoring
+    # ABOVE a senior profile (8 ans, exact same stack used in a comparable
+    # mission) -- 67.53% vs 66.93%. At 0.12, a whole extra/missing priority
+    # keyword (weighted 0.40) always outweighs even a severe experience
+    # shortfall, which is backwards for a role that states an explicit
+    # years requirement: a human recruiter would treat "half the required
+    # experience" as more disqualifying than one missing keyword. Not
+    # raised further to keep skills/priority_keywords (the least ambiguous
+    # signals when present) as the dominant components.
+    "experience": 0.20,
     "education": 0.08,
     "languages": 0.05,
     "contract": 0.05,
