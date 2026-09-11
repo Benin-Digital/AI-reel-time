@@ -222,3 +222,88 @@ def test_job_offer_experience_requise_heading_still_maps_to_experience_section()
     doc = parse_document(job_text, kind="job")
     assert "8 ans" in doc.experience_text
     assert doc.experience_years == 8
+
+
+def test_inline_skills_label_inside_experience_does_not_persist_the_switch():
+    """Regression reelle (production, Gilles Gnayoro, 2026-09-11) : chaque
+    poste de son CV se termine par "Outils & technologies : ..." (variante
+    avec "&" de la meme regression que Morchid) -- "outils" ET
+    "technologies" etant tous deux des alias Competences, la ligne entiere
+    passait la verification de _match_section stricte ("&" est un
+    connecteur, les deux mots restants resolvent au meme groupe). Le titre
+    de poste ET la plage de dates du poste SUIVANT (juste apres cette ligne)
+    disparaissaient alors dans Competences jusqu'a la prochaine ligne
+    "Realisations :" -- qui ne restaure la section qu'a partir du contenu,
+    trop tard pour recuperer le titre/les dates deja perdus."""
+    cv_text = (
+        "Experience\n"
+        "Poste A chez ACME\n"
+        "2022 - 2024\n"
+        "Outils & technologies : Python, SQL\n"
+        "Poste B chez Beta\n"
+        "2018 - 2020\n"
+        "Realisations : mission reussie\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert "Poste B" in doc.experience_text, (
+        "le titre du poste suivant ne doit pas etre bascule hors de Experience"
+    )
+    assert "2018" in doc.experience_text
+    # 2022-2024 (2) + 2018-2020 (2), non contigus -> pas fusionnes -> 4
+    assert doc.experience_years == 4
+
+
+# ── Plage de dates coupee par une colonne laterale (bug trouve en audit) ─────
+# Certains modeles de CV rendent les dates dans une colonne separee du
+# contenu principal ; l'extraction PDF interlace alors "De <mois> <annee> a"
+# / <ligne societe/lieu> / "<mois de fin> <annee de fin>" sur 3 lignes
+# distinctes au lieu d'une seule plage contigue.
+
+def test_date_range_split_across_a_side_column_is_still_counted():
+    cv_text = (
+        "Experience\n"
+        "Data Engineer; Euro Information\n"
+        "De mai 2020 à\n"
+        "UTI GROUP Dijon, France\n"
+        "déc. 2022\n"
+        "Realisations : mission reussie\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert doc.experience_years == 2
+
+
+def test_date_range_split_across_a_side_column_handles_ongoing():
+    cv_text = (
+        "Experience\n"
+        "Data Engineer; Euro Information\n"
+        "De mai 2020 à\n"
+        "UTI GROUP Dijon, France\n"
+        "Aujourd’hui\n"
+        "Realisations : mission reussie\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert doc.experience_years == CURRENT_YEAR - 2020
+
+
+# ── L'affirmation explicite prime, meme hors de la section Experience ───────
+# _extract_years() ne regardait que exp_src (section Experience isolee, ou
+# tout le document seulement si aucune section Experience n'etait identifiee
+# du tout). Un CV de consultant qui annonce "25 ans d'experience" dans son
+# profil, puis liste des missions SANS aucune date absolue ("PROJET 1 : ...",
+# "PROJET 2 : ...") ou dont les projets sont mal rattaches a une section
+# reconnue, perdait cette affirmation des qu'une section (meme erronee)
+# finissait par etre non vide, empechant le repli sur le document entier.
+
+def test_explicit_statement_outside_the_experience_section_still_wins():
+    cv_text = (
+        "Guillaume SAHA\n"
+        "25 ans d’expérience\n"
+        "Competences\n"
+        "Pilotage de projets data, Architecture, Formation\n"
+        "References Projets\n"
+        "PROJET 1 : Mise en place des evolutions BCE\n"
+        "Assistance du chef de Projet sur les taches de pilotage.\n"
+        "PROJET 2 : Implementation des schemas XSD\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert doc.experience_years == 25

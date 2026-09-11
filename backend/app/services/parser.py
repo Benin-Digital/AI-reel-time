@@ -433,6 +433,23 @@ _YEAR_RANGE_RE = re.compile(
 _SINCE_RE = re.compile(rf"\bdepuis\s+{_MONTH_PREFIX}(19[7-9]\d|20\d\d)\b", re.IGNORECASE)
 _ONGOING_RE = re.compile(_ONGOING, re.IGNORECASE)
 
+# Some CV templates lay job dates out in a side column, rendered by PDF
+# extraction as their own short lines interleaved with the main column's
+# content -- e.g. "De mai 2024 à" / "UTI GROUP Dijon, France" / "déc. 2025"
+# instead of one contiguous "mai 2024 - déc. 2025". _YEAR_RANGE_RE can't see
+# this as a range at all: the company/location line sitting between the
+# start and end tokens isn't whitespace, so nothing bridges them. Detected
+# separately by pairing a "De/Du/Depuis/D' <month> <year> à/au" line-ending
+# with the next bare "<month> <year>" (or ongoing-token) line within a
+# small window.
+_SPLIT_RANGE_START_RE = re.compile(
+    rf"\b(?:de|du|depuis|d['’´`])\s*{_MONTH_NAME}\.?\s*(19[7-9]\d|20\d\d)\s*(?:à|au)\s*$",
+    re.IGNORECASE,
+)
+_SPLIT_RANGE_END_RE = re.compile(
+    rf"^\s*{_MONTH_NAME}\.?\s*(19[7-9]\d|20\d\d)\s*$", re.IGNORECASE
+)
+
 
 def _merge_intervals(intervals: list[tuple[int, int]]) -> int:
     """Total number of years covered by a set of [start, end] year intervals,
@@ -491,8 +508,41 @@ def _years_from_date_ranges(text: str) -> int:
         if start <= current_year:
             intervals.append((start, current_year))
 
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        m_start = _SPLIT_RANGE_START_RE.search(line.strip())
+        if not m_start:
+            continue
+        start = int(m_start.group(1))
+        for candidate in lines[i + 1 : i + 4]:
+            candidate = candidate.strip()
+            m_end = _SPLIT_RANGE_END_RE.match(candidate)
+            if m_end:
+                end = int(m_end.group(1))
+                if start <= end <= current_year:
+                    intervals.append((start, end))
+                break
+            if _ONGOING_RE.fullmatch(candidate):
+                intervals.append((start, current_year))
+                break
+
     total = _merge_intervals(intervals)
     return total if 1 <= total <= 40 else 0
+
+
+def _explicit_years_statement(text: str) -> int:
+    """Priority 1: explicit "N ans d'expérience" phrasing (most reliable).
+    Returns 0 when no such statement is found."""
+    if not text:
+        return 0
+    folded = _fold(text)
+    for m in _YEAR_CTX_RE.finditer(folded):
+        groups = [g for g in m.groups() if g and g.isdigit()]
+        if groups:
+            v = int(groups[0])
+            if 1 <= v <= 40:
+                return v
+    return 0
 
 
 def _extract_years(text: str) -> int:
@@ -500,13 +550,9 @@ def _extract_years(text: str) -> int:
         return 0
     folded = _fold(text)
 
-    # Priority 1: explicit "N ans d'expérience" phrasing (most reliable).
-    for m in _YEAR_CTX_RE.finditer(folded):
-        groups = [g for g in m.groups() if g and g.isdigit()]
-        if groups:
-            v = int(groups[0])
-            if 1 <= v <= 40:
-                return v
+    explicit = _explicit_years_statement(text)
+    if explicit:
+        return explicit
 
     # Priority 2: dated job periods (many CVs never write "N ans" and instead
     # list positions with date ranges — those previously returned 0). Runs on
@@ -721,9 +767,22 @@ def parse_document(
                 head, _, payload = line.partition(":")
                 section = _match_section(head.strip())
                 if section:
-                    current = section
-                    if payload.strip():
-                        sections.setdefault(current, []).append(payload.strip())
+                    # "Outils & technologies : Semarchy; Vertica; ..." /
+                    # "Technologies utilisees : SSIS; SSAS; ..." are per-role
+                    # tool call-outs that recur once per job entry inside
+                    # Experience -- not a real, lasting switch to Skills.
+                    # Persisting `current` here dropped every following job
+                    # entry's own title/date-range line (misclassified as
+                    # Skills content) until the next "Realisations :" bullet
+                    # happened to reset it back. A real Skills SECTION only
+                    # shows up here once; keep the payload but don't move
+                    # `current` off Experience for whatever comes after it.
+                    if section == "skills" and current == "experience" and payload.strip():
+                        sections.setdefault(section, []).append(payload.strip())
+                    else:
+                        current = section
+                        if payload.strip():
+                            sections.setdefault(current, []).append(payload.strip())
                     continue
 
             # Full-line heading
@@ -794,13 +853,27 @@ def parse_document(
     contract_src = "\n".join(p for p in [contract_text, cleaned[:2000]] if p)
     contract_type = _detect_contract(contract_src)
 
-    # Prefer the actual experience section: scanning the whole document as
-    # well used to let date ranges from Education (e.g. "Master 2015-2017")
-    # merge into the total, inflating experience_years with years spent in
-    # school. Only fall back to the whole document when no experience
-    # section was identified at all (some CVs never label one explicitly).
-    exp_src = experience_text or cleaned
-    experience_years = _extract_years(exp_src)
+    # An explicit "N ans d'experience" statement is checked against the
+    # WHOLE document first: it's almost always written in the summary/
+    # profile section, above wherever the CV's own "Experience" heading
+    # starts (or with no such heading at all, e.g. a mission-based
+    # consultant CV listing dateless "PROJET 1 / PROJET 2 / ..." entries) --
+    # so restricting it to exp_src below would silently throw it away on
+    # exactly the CVs most likely to state it plainly instead of listing
+    # calendar dates.
+    #
+    # Failing that, prefer the actual experience section for date-RANGE
+    # scanning: scanning the whole document as well used to let date ranges
+    # from Education (e.g. "Master 2015-2017") merge into the total,
+    # inflating experience_years with years spent in school. Only fall back
+    # to the whole document for that scan when no experience section was
+    # identified at all (some CVs never label one explicitly).
+    explicit_years = _explicit_years_statement(cleaned)
+    if explicit_years:
+        experience_years = explicit_years
+    else:
+        exp_src = experience_text or cleaned
+        experience_years = _extract_years(exp_src)
 
     return ParsedDocument(
         kind=kind,
