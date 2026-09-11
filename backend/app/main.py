@@ -1500,6 +1500,22 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                 }
             _insert_score_result(changed_path, job_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common, cs)
+
+        if job_distances:
+            # Some counterparts above only got the cheap vector-only score
+            # (the embedding_top_k prefilter, meant to bound cost when there
+            # are many jobs) -- raw document-embedding cosine similarity is a
+            # poor proxy for actual fit (generic professional CV boilerplate
+            # dominates it over specific skills), badly miscalibrated
+            # against the full weighted/capped engine: observed in
+            # production, several candidates with none of a job's required
+            # skills scored 90%+ this way. Queue a follow-up rescore so they
+            # get upgraded to the full score shortly after, instead of
+            # silently staying wrong until someone happens to click
+            # "Relancer l'IA". "rescore" forces force=True, which skips the
+            # vector step entirely (see _process_watch_event) -- this can't
+            # recurse into cheap-scoring more overflow candidates.
+            _on_watch_event(WatchEvent(path=changed_path, event_type="rescore", observed_at=time()))
     else:
         previous_hash = None
         with SessionLocal() as session:
@@ -1613,6 +1629,12 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                 }
             _insert_score_result(cv_path, changed_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common, cs)
+
+        if cv_distances:
+            # Mirrors the same follow-up in the CV-role branch above -- see
+            # that comment for why the cheap vector-only score can't be left
+            # standing unattended.
+            _on_watch_event(WatchEvent(path=changed_path, event_type="rescore", observed_at=time()))
 
 
 def _structure_document(path: Path, role: str) -> None:
