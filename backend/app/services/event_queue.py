@@ -25,6 +25,32 @@ _client: redis.Redis | None = None
 _memory_queue: Deque[str] = deque()
 _lock = threading.Lock()
 
+# A message that reaches XREADGROUP's consumer-group pending entries list
+# (PEL) but never gets XACK'd -- because the process handling it died first,
+# e.g. an app-container restart on every deploy killing whatever event the
+# single worker thread was mid-handler on -- stays in the PEL forever under
+# that now-nonexistent consumer's name. dequeue_event() only ever reads with
+# id "> " (XREADGROUP's "never delivered to any consumer" marker), which by
+# design NEVER revisits another consumer's pending entries, dead or alive.
+# With no reclaim, every one of those orphaned messages permanently inflates
+# the queue-depth metric (pending + lag, see _stream_queue_depth) and its
+# rescore/extraction work is silently dropped -- confirmed in production:
+# redis_queue_length sat at 400+ for an entire multi-hour session with
+# ~7 deploys, never draining despite worker_alive=true and no reported
+# errors. XAUTOCLAIM (Redis 6.2+) is the standard fix: periodically claim
+# messages idle longer than _RECLAIM_IDLE_MS under ANY consumer (dead or
+# alive) and hand them to whichever worker asks next.
+#
+# The idle threshold is a deliberate tradeoff, not "as short as possible":
+# too short risks claiming a message a DIFFERENT, still-alive-but-slow
+# worker is legitimately still processing, causing it to be handled twice
+# (the handlers here are idempotent-ish re-scoring/extraction upserts, so a
+# duplicate run is wasteful but not corrupting -- still best avoided). Five
+# minutes comfortably exceeds how long any single rescore/extraction event
+# should ever take, while still recovering promptly after a crash or a
+# deploy relative to how often either happens.
+_RECLAIM_IDLE_MS = 5 * 60 * 1000
+
 
 @dataclass(frozen=True)
 class QueuedEvent:
@@ -248,15 +274,53 @@ def enqueue_event(event: WatchEvent) -> bool:
             return False
 
 
+def _reclaim_stale_pending(client: redis.Redis, consumer: str) -> QueuedEvent | None:
+    """Claim one message that's been sitting unacked for longer than
+    _RECLAIM_IDLE_MS under any consumer (dead or alive) -- see the module
+    comment above _RECLAIM_IDLE_MS for why this exists. Returns None (not
+    an error) when there's nothing old enough to claim, which is the
+    common case."""
+    try:
+        result = client.xautoclaim(
+            _STREAM_NAME, _STREAM_GROUP, consumer,
+            min_idle_time=_RECLAIM_IDLE_MS, start_id="0-0", count=1,
+        )
+    except Exception as exc:
+        logger.warning("xautoclaim failed: %s", exc)
+        return None
+    # redis-py returns (next_cursor, [[id, fields], ...], [deleted_ids]) --
+    # the trailing deleted-ids element was added in newer server/client
+    # versions, so unpack leniently rather than assuming a fixed arity.
+    messages = result[1] if len(result) > 1 else []
+    if not messages:
+        return None
+    message_id, fields = messages[0]
+    event = _deserialize_event(fields)
+    if event is None:
+        client.xack(_STREAM_NAME, _STREAM_GROUP, message_id)
+        return None
+    return QueuedEvent(
+        event=event,
+        backend="stream",
+        stream=_STREAM_NAME,
+        group=_STREAM_GROUP,
+        message_id=str(message_id),
+    )
+
+
 def dequeue_event(timeout: float = 1.0, consumer_suffix: str = "") -> QueuedEvent | None:
     if _is_stream_backend():
         try:
             client = _get_client()
             _ensure_stream_group(client)
+            consumer = _get_consumer_name(consumer_suffix)
+            reclaimed = _reclaim_stale_pending(client, consumer)
+            if reclaimed is not None:
+                return reclaimed
             block_ms = max(1, int(timeout * 1000))
             response = client.xreadgroup(
                 _STREAM_GROUP,
-                _get_consumer_name(consumer_suffix),
+                consumer,
                 {_STREAM_NAME: ">"},
                 count=1,
                 block=block_ms,
