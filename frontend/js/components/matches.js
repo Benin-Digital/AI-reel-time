@@ -7,7 +7,6 @@ import {
   formatDate,
   clampScore,
   scoreTone,
-  isProvisionalScore,
 } from "../utils/format.js";
 import { buildParams, setPage } from "../utils/docs.js";
 import { canManageUsers } from "../auth.js";
@@ -312,16 +311,14 @@ const _CV_ICON  = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><
 const _JOB_ICON = `<svg width="18" height="18" viewBox="0 0 16 16" fill="none"><rect x="1" y="5" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5" stroke="currentColor" stroke-width="1.5"/></svg>`;
 
 function _renderMatchCard(match) {
-  const score       = clampScore(match.score);
-  const tone        = scoreTone(score);
-  const provisional = isProvisionalScore(match);
-  const keywords    = (match.common_keywords ?? []).filter(Boolean).slice(0, 6);
-  const domain      = match.match_domain ? `<span class="badge badge--primary">${escapeHtml(match.match_domain)}</span>` : "";
+  const score    = clampScore(match.score);
+  const tone     = scoreTone(score);
+  const keywords = (match.common_keywords ?? []).filter(Boolean).slice(0, 6);
+  const domain   = match.match_domain ? `<span class="badge badge--primary">${escapeHtml(match.match_domain)}</span>` : "";
   // Distinct from the general skills coverage below -- specifically what
   // the recruiter flagged as priority for this offer (see the "Mots-clés
   // prioritaires" card on the offer's detail page). Only rendered when the
-  // job actually has any set -- naturally absent while provisional too,
-  // since a cheap vector-only match never populates this count either.
+  // job actually has any set.
   const priorityBadge = match.priority_keywords_total
     ? `<span class="badge badge--${match.priority_keywords_matched_count === match.priority_keywords_total ? "success" : "warning"}"
         title="Mots-clés prioritaires trouvés dans ce CV">
@@ -341,10 +338,8 @@ function _renderMatchCard(match) {
       <button class="btn btn--ghost btn--sm" data-view-doc="cv" data-doc-id="${escapeHtml(String(match.cv_id))}">Voir le CV</button>
     </div>
     <div class="match-faceoff__score">
-      ${provisional
-        ? `<span class="score-chip score-chip--pending match-faceoff__score-chip"><span class="spinner-inline"></span>Analyse en cours…</span>`
-        : `<span class="score-chip score-chip--${tone.key} match-faceoff__score-chip">${score}%</span>
-           <span class="text-xs text-muted">${tone.label}</span>`}
+      <span class="score-chip score-chip--${tone.key} match-faceoff__score-chip">${score}%</span>
+      <span class="text-xs text-muted">${tone.label}</span>
       ${domain}
       <button class="btn btn--ghost btn--sm" data-explain="${escapeHtml(String(match.id))}">Analyser</button>
     </div>
@@ -356,12 +351,10 @@ function _renderMatchCard(match) {
   </div>
   <div class="match-card__body">
     <p class="text-xs text-muted">Match #${escapeHtml(String(match.id))}</p>
-    ${renderScoreBar(score, provisional)}
-    ${provisional
-      ? `<p class="text-xs text-muted">Estimation provisoire par similarité générale — l'analyse détaillée des compétences et mots-clés arrive automatiquement.</p>`
-      : `${priorityBadge ? `<div>${priorityBadge}</div>` : ""}
-         ${_renderComponentScores(match)}
-         <div class="match-card__meta">${renderKeywordChips(keywords)}</div>`}
+    ${renderScoreBar(score)}
+    ${priorityBadge ? `<div>${priorityBadge}</div>` : ""}
+    ${_renderComponentScores(match)}
+    <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
     ${_renderFeedbackBar(match.id, current)}
   </div>
 </article>`.trim();

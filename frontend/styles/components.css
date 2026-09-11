@@ -399,16 +399,6 @@ select:disabled {
 .score-chip--mid  { background: var(--tone-mid-subtle);  color: var(--tone-mid);  border-color: rgba(245,158,11,.25); }
 .score-chip--low  { background: var(--tone-low-subtle);  color: var(--tone-low);  border-color: rgba(239,68,68,.25); }
 
-/* A match still on the cheap vector-similarity pre-filter (no skill/keyword
-   breakdown yet -- see matcher.py's embedding overflow path) has a real
-   number in `score`, but it measures generic text similarity, not skill
-   fit, and is often misleadingly high. Showing that number (with a fake
-   "Fort"/"Moyen" tone) as if it were a real result — hours before the
-   automatic follow-up rescore corrects it, if the queue is backed up — reads
-   as the platform confidently reporting a wrong answer. This neutral,
-   textual state replaces the numeric chip for as long as that's true. */
-.score-chip--pending { background: var(--bg-surface-raised); color: var(--text-muted); border-color: var(--border-subtle); min-width: 0; padding: 0 var(--space-3); font-weight: var(--weight-medium); }
-
 /* Score bar */
 .score-bar {
   height: 4px;
