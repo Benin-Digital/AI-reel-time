@@ -153,6 +153,38 @@ def test_forcing_docling_over_a_plain_text_cache_invalidates_parsed_profile(cv_f
         assert row.parsed_profile_hash is None
 
 
+def test_force_true_invalidates_parsed_profile_even_when_content_and_method_are_unchanged(
+    cv_file, monkeypatch, session_factory
+):
+    """Regression reelle (2026-09-11) : POST /matches/recompute et le
+    "rescore" par document existent specifiquement pour qu'un fix de
+    parser.py/taxonomy.py prenne effet sur des documents deja ingeres,
+    sans re-upload. Mais _upsert_extraction_result n'invalidait
+    parsed_profile que si content_hash OU extraction_method changeait --
+    ce qui n'est JAMAIS le cas pour un simple deploi de code sur un
+    fichier deja present. Un vrai fix (filtrage des mentions "atout" dans
+    parser.py) restait donc sans aucun effet sur une offre deja ingeree
+    meme apres un rescore force, tant que le contenu du fichier lui-meme
+    n'avait pas change."""
+    app_main._extract_and_persist(cv_file)
+
+    with session_factory() as session:
+        row = session.query(ExtractedText).filter_by(file_path=str(cv_file)).one()
+        row.parsed_profile = {"full_name": "stale"}
+        row.parsed_profile_hash = row.content_hash
+        session.commit()
+
+    app_main._extract_and_persist(cv_file, force=True)
+
+    with session_factory() as session:
+        row = session.query(ExtractedText).filter_by(file_path=str(cv_file)).one()
+        assert row.parsed_profile != {"full_name": "stale"}, (
+            "force=True doit reconstruire le profil structure avec le code "
+            "actuel meme quand le contenu et la methode d'extraction "
+            "n'ont pas change"
+        )
+
+
 def test_structure_document_marks_ready_and_rescopes_on_success(cv_file, monkeypatch, session_factory):
     with session_factory() as session:
         doc = CvDocument(path=str(cv_file), status="ready")

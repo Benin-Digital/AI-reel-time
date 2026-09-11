@@ -250,7 +250,9 @@ def _insert_event(payload: EventCreate) -> EventRead:
         return EventRead.model_validate(event)
 
 
-def _upsert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead:
+def _upsert_extraction_result(
+    payload: ExtractedTextCreate, force_rebuild_profile: bool = False
+) -> ExtractedTextRead:
     with SessionLocal() as session:
         existing = session.scalar(
             select(ExtractedText).where(ExtractedText.file_path == payload.file_path)
@@ -261,9 +263,25 @@ def _upsert_extraction_result(payload: ExtractedTextCreate) -> ExtractedTextRead
             # forced on-demand Docling re-extraction over the same file
             # bytes), the cached structured profile no longer reflects the
             # actual extracted_text — invalidate it either way.
+            #
+            # force_rebuild_profile (set when the caller passed force=True to
+            # _extract_and_persist, i.e. POST /matches/recompute or a
+            # per-document "rescore") ALSO invalidates it even when neither
+            # changed: that force path exists specifically so a parser.py/
+            # taxonomy.py code fix takes effect on already-ingested, byte-
+            # for-byte-unchanged documents. Without this, required_skill_
+            # terms/nice_skill_terms/skill_terms/experience_years etc. (all
+            # cached in parsed_profile, keyed only by content_hash) kept
+            # serving the pre-fix structured data forever after a recompute
+            # -- a real production case: a hedge-sentence-filtering fix to
+            # parser.py had zero effect on an existing job posting even
+            # after resaving its priority keywords specifically to trigger
+            # a forced rescore, because content_hash and extraction_method
+            # were (correctly) unchanged.
             if (
                 existing.content_hash != payload.content_hash
                 or existing.extraction_method != payload.extraction_method
+                or force_rebuild_profile
             ):
                 existing.parsed_profile = None
                 existing.parsed_profile_hash = None
@@ -1371,7 +1389,8 @@ def _extract_and_persist(path: Path, force_docling: bool = False, force: bool = 
                 extraction_method=method,
                 extraction_success=success,
                 error_message=None if success else "No text extracted",
-            )
+            ),
+            force_rebuild_profile=force,
         )
     except Exception as exc:
         logger.exception("Extraction failed for %s: %s", path, exc)
