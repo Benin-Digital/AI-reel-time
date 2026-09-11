@@ -242,6 +242,50 @@ def test_keyword_mentioned_once_but_present_in_job_title_becomes_core():
     )
 
 
+def test_slash_joined_compound_title_does_not_trigger_the_title_core_mechanism():
+    """Regression reelle (offre "Data Analyst / Concepteur Decisionnel
+    Senior H/F", 2026-09-11) : un titre compose de deux libelles de poste
+    ALTERNATIFS/equivalents (separes par "/") n'est pas la meme chose
+    qu'un titre nommant UN outil-vedette ("Data Analyst Expert SAS"). Deux
+    candidats reels avec une solide experience BI/decisionnelle (25 et 10
+    ans, Informatica...) mais n'ecrivant jamais litteralement "Data
+    Analyst" voyaient leur score coupe de plus de moitie (penalite
+    plancher 0.45) pour ne pas avoir repete l'AUTRE moitie du titre
+    compose -- alors qu'un candidat moins specialise ayant par hasard
+    ecrit cette expression ailleurs sur son CV scorait bien plus haut.
+    Le titre compose ne doit plus servir a designer un mot-cle coeur."""
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    pk_raw = "Data Analyst\nConcepteur Décisionnel\nInformatica\nSQL\n"
+    job = parse_document(
+        "Data Analyst / Concepteur Décisionnel Sénior H/F.\nOffre technique.",
+        kind="job",
+    )
+    job.priority_keyword_terms = split_priority_keywords(pk_raw)
+
+    cv = parse_document(
+        "Compétences: Concepteur Décisionnel, Informatica, SQL.", kind="cv"
+    )
+    _apply_priority_keywords(cv, job)
+    assert _core_keyword_coverage(cv, job) == 1.0, (
+        "un titre compose (\"X / Y\") ne doit jamais, a lui seul, designer "
+        "'Data Analyst' comme mot-cle coeur obligatoire"
+    )
+
+
+def test_non_slash_title_still_triggers_the_core_mechanism_unchanged():
+    """Non-regression explicite sur le cas d'origine : un titre SIMPLE (pas
+    de "/") continue de designer son outil-vedette comme coeur."""
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    pk_raw = "SAS\nSQL\n"
+    job = parse_document("Data Analyst Expert SAS.\nOffre technique.", kind="job")
+    job.priority_keyword_terms = split_priority_keywords(pk_raw)
+    cv_no_sas = parse_document("Compétences: SQL, Python.", kind="cv")
+    _apply_priority_keywords(cv_no_sas, job)
+    assert _core_keyword_coverage(cv_no_sas, job) == 0.0
+
+
 def test_job_title_does_not_affect_a_cv_without_repeated_or_titled_keywords():
     """Une offre dont le titre ne nomme aucun mot-cle prioritaire, et sans
     repetition, ne doit declencher aucune penalite -- cas le plus courant."""

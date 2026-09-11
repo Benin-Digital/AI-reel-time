@@ -846,6 +846,19 @@ def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
       raw keyword against cv.skill_terms too (not just its canonical)
       credits that candidate correctly.
 
+      Skipped entirely when the title itself joins multiple labels with
+      "/" (e.g. "Data Analyst / Concepteur Decisionnel Senior H/F") -- a
+      real production case: this reads as two ALTERNATIVE/equivalent
+      framings of the same role, not "one headline tool", but the
+      substring check still picked "Data Analyst" out of it and crushed
+      two strong "Concepteur Decisionnel"-side candidates (25 and 10
+      years' real BI/Informatica experience) to less than half their
+      score for not literally writing that one alternate label -- while a
+      less-specialized candidate who happened to write it elsewhere on
+      their CV scored far higher. A single, non-"/"-joined title (the
+      "SAS" case this mechanism was built for) is unambiguous and keeps
+      using it.
+
     Returns 1.0 (no penalty) when no keyword qualifies as emphasized, so
     an ordinary, non-repeated priority-keyword list for a job whose title
     doesn't mention any of them is entirely unaffected by this mechanism.
@@ -855,7 +868,7 @@ def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
     counts = Counter(_normalize_priority_keyword(t) or t for t in job.priority_keyword_terms)
     core = {canonical for canonical, n in counts.items() if n >= _CORE_KEYWORD_MIN_REPEATS}
 
-    title_folded = _fold(job.title_line)
+    title_folded = "" if "/" in job.title_line else _fold(job.title_line)
     cv_skills = set(cv.skill_terms)
     matched = {c for c in core if c in cv_skills}
     if title_folded:
