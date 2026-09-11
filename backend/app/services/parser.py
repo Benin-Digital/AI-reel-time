@@ -765,6 +765,23 @@ class ParsedDocument:
         ]
         return "\n".join(p for p in parts if p).strip()
 
+    @property
+    def title_line(self) -> str:
+        """The document's first non-empty line -- reliably the job title
+        for a job posting (recruiter-authored, almost always leads with a
+        one-line title in a fixed template: "Data Analyst Expert SAS").
+        Much less reliable for a CV (often the candidate's name, a generic
+        document label like "DOSSIER DE COMPETENCES", or a decorative
+        header split across several lines by PDF column extraction) --
+        callers matching against a job's title_line specifically should
+        not assume the same reliability for a CV's.
+        """
+        for line in self.cleaned_text.split("\n"):
+            stripped = line.strip()
+            if stripped:
+                return stripped
+        return ""
+
 
 # ── Main parse function ───────────────────────────────────────────────────────
 
@@ -883,10 +900,22 @@ def parse_document(
     # was dropped in — including a self-match (same document as both CV and
     # job) collapsing to ~0% skill coverage. Aggregate the same full set of
     # sections regardless of kind so extraction only depends on content.
+    # education_text is included here too: a CV whose own headings mix job
+    # history into an "education"-classified section (e.g. a consultant CV
+    # using "Formations professionnelles" loosely for its whole career
+    # timeline, degrees and past job titles together) was silently losing
+    # every skill/job-title mention that happened to land there --
+    # including, in one real production CV, a literal past "Data Analyst"
+    # job title invisible to skill matching purely because of which section
+    # it was structurally classified into. Real degree subjects (e.g.
+    # "Master Mathematiques") occasionally add a generic academic term to
+    # skill_terms as a side effect; that's a much smaller risk than losing
+    # genuine skill/title signal outright.
     skill_src = "\n".join(
         p for p in [
             job_required_text, job_nice_text, skills_text,
             summary_text, other_text, experience_text, certifications_text,
+            education_text,
         ] if p
     )
 

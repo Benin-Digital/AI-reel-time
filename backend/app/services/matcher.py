@@ -689,7 +689,12 @@ def _priority_keyword_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[fl
 # Repetition count is a fully generic signal (position in the list, or the
 # literal word, are NOT used) -- it only reacts to a pattern the recruiter
 # themselves created by typing the same concept multiple times, so it
-# applies to any future job without hardcoding any specific tool name.
+# applies to any future job without hardcoding any specific tool name. A
+# second, independent signal is checked alongside it: whether the keyword
+# also appears in the job's own title line (see _core_keyword_coverage) --
+# together they catch both a recruiter who repeats the headline tool
+# across several keyword lines AND one who only types it once but names it
+# in the job title itself (arguably the more common case).
 _CORE_KEYWORD_MIN_REPEATS = 3
 # Multiplicative, not a hard cap: final *= CORE_PENALTY_FLOOR + (1 -
 # CORE_PENALTY_FLOOR) * core_coverage. A hard min() cap was tried first and
@@ -709,20 +714,50 @@ _SKILL_CAP_FLOOR = 0.30
 
 
 def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
-    """Coverage (0.0-1.0) of the job's "emphasized" priority keywords --
-    canonicals the recruiter typed via at least _CORE_KEYWORD_MIN_REPEATS
-    distinct raw lines. Returns 1.0 (no penalty) when no keyword reaches
-    that repeat threshold, so an ordinary, non-repeated priority-keyword
-    list is entirely unaffected by this mechanism.
+    """Coverage (0.0-1.0) of the job's "emphasized" priority keywords.
+
+    A canonical is emphasized when either:
+    - the recruiter typed it via at least _CORE_KEYWORD_MIN_REPEATS
+      distinct raw lines (see the module comment above), or
+    - its raw keyword text literally appears in the job's title line
+      (ParsedDocument.title_line) -- a job posting's title is
+      recruiter-authored and reliably names the role/headline tool
+      ("Data Analyst Expert SAS"), unlike a CV's first line (often just
+      the candidate's name), so this check is only applied to the job
+      side. This also naturally recovers a taxonomy edge case: bare "SAS"
+      doesn't normalize to "SAS (logiciel)" (excluded as a common French
+      legal-entity suffix, see taxonomy.py), so a candidate who plainly
+      wrote "SAS" on their CV wouldn't otherwise match the canonical the
+      recruiter's other SAS-variant keywords resolved to -- checking the
+      raw keyword against cv.skill_terms too (not just its canonical)
+      credits that candidate correctly.
+
+    Returns 1.0 (no penalty) when no keyword qualifies as emphasized, so
+    an ordinary, non-repeated priority-keyword list for a job whose title
+    doesn't mention any of them is entirely unaffected by this mechanism.
     """
     if not job.priority_keyword_terms:
         return 1.0
     counts = Counter(normalize_skill(t) or t for t in job.priority_keyword_terms)
     core = {canonical for canonical, n in counts.items() if n >= _CORE_KEYWORD_MIN_REPEATS}
+
+    title_folded = _fold(job.title_line)
+    cv_skills = set(cv.skill_terms)
+    matched = {c for c in core if c in cv_skills}
+    if title_folded:
+        for raw_term in job.priority_keyword_terms:
+            canonical = normalize_skill(raw_term) or raw_term
+            if canonical in core:
+                continue
+            if _fold(raw_term) not in title_folded:
+                continue
+            core.add(canonical)
+            if canonical in cv_skills or raw_term in cv_skills:
+                matched.add(canonical)
+
     if not core:
         return 1.0
-    cv_skills = set(cv.skill_terms)
-    return len(core & cv_skills) / len(core)
+    return len(matched) / len(core)
 
 
 def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScore:

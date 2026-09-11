@@ -191,3 +191,82 @@ def test_core_penalty_scales_the_score_instead_of_flooring_it():
         "sur le reste, ne doivent pas etre ecrases a un score identique"
     )
     assert result_strong.score > result_weak.score
+
+
+# ── Point 4 (suite a l'audit) : titre du poste comme second signal "coeur" ──
+# Le seuil de repetition (>= 3 lignes) rate un cas tres courant : un
+# recruteur qui ne tape l'outil-coeur qu'UNE seule fois comme mot-cle
+# prioritaire, mais le nomme dans le TITRE du poste ("Data Analyst Expert
+# SAS"). Le titre d'une offre est redige par le recruteur dans un gabarit
+# fixe et nomme quasi systematiquement le role/l'outil central -- un signal
+# bien plus fiable que la repetition seule. Cote CV, la premiere ligne
+# n'est PAS utilisee de la meme facon (souvent juste le nom du candidat).
+
+def test_keyword_mentioned_once_but_present_in_job_title_becomes_core():
+    """Regression reelle (offre "Data Analyst Expert SAS", 2026-09-11) :
+    un candidat ecrivant simplement "SAS" (sans variante) restait en dehors
+    du canonique "SAS (logiciel)" (bare "SAS" exclu de la taxonomie, voir
+    taxonomy.py) meme quand le titre du poste nommait explicitement SAS.
+    Le titre doit permettre de detecter ce candidat correctement."""
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    # "SAS" est tape par le recruteur comme sa PROPRE ligne (en plus des
+    # variantes) -- cas reel : le recruteur liste a la fois le nom court et
+    # des variantes precises du meme outil.
+    pk_raw = "SAS\nSAS Enterprise Guide\nSAS Base\nSAS Grid\n"
+    job = parse_document("Data Analyst Expert SAS.\nOffre technique.", kind="job")
+    job.priority_keyword_terms = split_priority_keywords(pk_raw)
+
+    # Deux concepts-coeur distincts ici : le mot-cle court "SAS" (nomme
+    # dans le titre) et le canonique "SAS (logiciel)" (issu des 3 variantes
+    # repetees). Un candidat qui n'ecrit que "SAS" en satisfait un sur
+    # deux -- c'est correct : il n'a demontre aucune des variantes
+    # precises, seulement la mention generique.
+    cv_bare_sas = parse_document("Competences: SAS, Python.", kind="cv")
+    _apply_priority_keywords(cv_bare_sas, job)
+    assert _core_keyword_coverage(cv_bare_sas, job) == 0.5, (
+        "le mot-cle court 'SAS' (tape tel quel par le recruteur, nomme dans le titre) "
+        "doit etre credite meme sans les variantes precises -- mais reste a 1 concept "
+        "sur 2 puisque 'SAS (logiciel)' (issu des variantes repetees) n'est pas satisfait"
+    )
+
+    cv_no_sas = parse_document("Competences: Python.", kind="cv")
+    job2 = parse_document("Data Analyst Expert SAS.\nOffre technique.", kind="job")
+    job2.priority_keyword_terms = split_priority_keywords(pk_raw)
+    _apply_priority_keywords(cv_no_sas, job2)
+    assert _core_keyword_coverage(cv_no_sas, job2) == 0.0, (
+        "le candidat sans aucune mention de SAS doit etre penalise plus fortement "
+        "que celui qui ecrit au moins la forme simple"
+    )
+
+
+def test_job_title_does_not_affect_a_cv_without_repeated_or_titled_keywords():
+    """Une offre dont le titre ne nomme aucun mot-cle prioritaire, et sans
+    repetition, ne doit declencher aucune penalite -- cas le plus courant."""
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    job = parse_document("Chef de Projet IT.\nOffre generaliste.", kind="job")
+    job.priority_keyword_terms = split_priority_keywords("Gestion de projet\nAgile\n")
+    cv = parse_document("Competences: Excel.", kind="cv")
+    _apply_priority_keywords(cv, job)
+    assert _core_keyword_coverage(cv, job) == 1.0
+
+
+# ── Point 5 (suite a l'audit) : education_text inclus dans l'extraction ─────
+
+def test_skill_mentioned_only_in_the_education_section_is_still_detected():
+    """Regression reelle (Boubacar Mainassara, 2026-09-11) : son CV liste un
+    veritable intitule de poste passe ("Data Analyst") sous un titre de
+    section non-standard ("FORMATIONS PROFESSIONNELLES", utilise pour
+    melanger postes et diplomes) qui se classe comme Education. Ce terme
+    etait invisible pour la detection de competences car education_text
+    n'etait pas inclus dans le texte source de find_skills()."""
+    cv_text = (
+        "Experience\n"
+        "2020-2023 : Ingenieur logiciel chez ACME.\n"
+        "Formations professionnelles\n"
+        "2015 - Diplome d ingenieur\n"
+        "Mai 2024 - Novembre 2024 : Data Analyst\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert "Data Analyst" in doc.skill_terms
