@@ -70,6 +70,22 @@ def test_accountant_is_finance():
 
 # ── Cas limites ──────────────────────────────────────────────────────────────
 
+def test_short_signal_glued_inside_unrelated_word_does_not_win():
+    """Regression reelle (production, offre "Data Analyst Expert SAS",
+    2026-09-11) : les signaux courts "ide" (fort, sante) et "soins" (sante)
+    matchaient en simple sous-chaine dans "SAS Enterprise Guide" et
+    "besoins", suffisant a lui seul (ide compte double) pour classer une
+    offre Data Analyst / SQL / SAS en domaine "health"."""
+    job = (
+        "Data Analyst Expert SAS. Developper et maintenir des traitements "
+        "sous SAS Enterprise Guide, SAS Grid et SAS Base. Concevoir, "
+        "optimiser et executer des requetes SQL. Analyser les besoins des "
+        "utilisateurs internes. Connaissance du secteur de l'assurance "
+        "appreciee."
+    )
+    assert detect_domain(job) == "tech"
+
+
 def test_no_signal_is_general():
     assert detect_domain("Texte sans aucun signal metier particulier.") == "general"
     assert detect_domain("") == "general"

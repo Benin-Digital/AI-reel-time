@@ -145,6 +145,11 @@ _STRONG_SIGNALS: dict[str, set[str]] = {
 }
 
 
+@lru_cache(maxsize=256)
+def _domain_signal_pattern(signal: str) -> re.Pattern:
+    return re.compile(r"\b" + re.escape(_fold(signal)) + r"\b")
+
+
 def detect_domain(text: str) -> str:
     """
     Detect the primary professional domain of a document.
@@ -159,6 +164,13 @@ def detect_domain(text: str) -> str:
     domains first) rather than by dict insertion order, so a transverse
     profile (e.g. an IT project manager working in banking) doesn't fall
     into an arbitrary domain on a 1-1 keyword tie.
+
+    Signals are matched on word boundaries, not as plain substrings: a
+    naive `signal in folded` check let short health signals like "ide" and
+    "soins" match inside completely unrelated words -- "SAS Enterprise
+    Guide" contains "ide", "besoins" contains "soins" -- which alone was
+    enough to mislabel an actual "Data Analyst Expert SAS" job posting as
+    the "health" domain in production.
     """
     folded = _fold(text[:3000])
     scores: dict[str, int] = {}
@@ -166,7 +178,7 @@ def detect_domain(text: str) -> str:
         strong = _STRONG_SIGNALS.get(domain, set())
         score = 0
         for s in signals:
-            if _fold(s) in folded:
+            if _domain_signal_pattern(s).search(folded):
                 score += 2 if s in strong else 1
         if score > 0:
             scores[domain] = score
