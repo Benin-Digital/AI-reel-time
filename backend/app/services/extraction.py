@@ -137,7 +137,24 @@ def _detect_column_gutter(lines: list[dict], page_width: float) -> float:
         if gap > best_gap:
             best_gap, best_mid = gap, (prev_end + next_start) / 2
 
-    min_gutter = page_width * 0.04  # require a real gap, not noise between close words
+    # Require a real gap, not noise between close words -- but not so strict
+    # that a genuinely narrow (but real) sidebar gutter gets rejected. Real
+    # production case (13k-CV corpus validation, 2026-09-14): a two-column
+    # CV whose actual gutter measured only ~20.5pt on a 595pt-wide page
+    # (3.4% of page width) fell just under the previous 4% threshold, so
+    # this function silently fell back to the page's exact midpoint --
+    # which sat well inside the (wide) right column, splitting it in half
+    # and reducing its own character share to ~3%. _order_lines_by_column's
+    # min-share gate then correctly refused that broken split, but its only
+    # recourse was to give up on column-awareness for the whole page,
+    # reverting to a plain (y, x) sort that interleaved the sidebar's
+    # "profil personnel" paragraph with the main body's job history and
+    # section headings mid-sentence. The width floor is a sanity check
+    # against literal rounding noise (a 1-2pt "gap"), not the real defense
+    # against a false-positive column split -- that job belongs to the
+    # character-share gate downstream, which sees the ACTUAL resulting
+    # left/right text distribution rather than just a raw pixel width.
+    min_gutter = page_width * 0.02
     return best_mid if best_gap >= min_gutter else page_width / 2
 
 

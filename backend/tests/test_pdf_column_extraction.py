@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import fitz
 
-from app.services.extraction import extract_text_from_pdf
+from app.services.extraction import _detect_column_gutter, extract_text_from_pdf
 
 PAGE_WIDTH = 595
 PAGE_HEIGHT = 842
@@ -175,6 +175,70 @@ def test_single_column_with_right_aligned_date_is_not_split_into_columns(tmp_pat
     assert lines.index("Jean Dupont") < next(i for i, l in enumerate(lines) if l.startswith("Experience"))
     assert next(i for i, l in enumerate(lines) if l.startswith("Experience")) < lines.index("2019-2023")
     assert lines.index("2019-2023") < lines.index("Formation Master informatique 2018")
+
+
+def test_narrow_real_gutter_is_not_rejected_as_pixel_noise():
+    """Regression reelle (validation du corpus de 13 715 CV, 2026-09-14,
+    CV Aurelien Torres) : le vrai gouffre entre les deux colonnes de ce CV
+    ne mesurait que ~20.5pt sur une page de 595pt de large (3.4% de la
+    largeur) -- juste sous l'ancien seuil de 4% (23.8pt), qui traitait ce
+    gouffre bien REEL comme du bruit et retombait sur le milieu exact de
+    page (297.75). Ce point de coupure tombait en plein milieu de la
+    colonne de droite (large, plusieurs lignes courtes), donnant une part
+    de caracteres a droite de seulement ~3% -- le garde-fou en aval
+    (_order_lines_by_column) rejetait alors ce point a raison, mais
+    n'avait aucun autre candidat a essayer et abandonnait toute detection
+    de colonnes, retombant sur un tri (y, x) qui entrelacait le paragraphe
+    "Profil Personnel" de la sidebar avec les titres et le corps principal
+    en plein milieu de phrase."""
+    left = [
+        {"bbox": (40.0, 60.0, 113.3, 63.0), "text": "Jean DUPONT"},
+        {"bbox": (40.0, 90.0, 103.6, 93.0), "text": "Certifications"},
+        {"bbox": (40.0, 120.0, 95.6, 123.0), "text": "Profil perso"},
+        {"bbox": (40.0, 150.0, 108.5, 153.0), "text": "Curiosite forte"},
+    ]
+    right = [
+        {"bbox": (134.0, 60.0, 232.4, 63.0), "text": "Chef de Projet MOA"},
+        {"bbox": (134.0, 90.0, 472.1, 93.0), "text": "Pilotage de projets SI en environnement multi-pays"},
+        {"bbox": (134.0, 120.0, 183.5, 123.0), "text": "Formation"},
+        {"bbox": (134.0, 150.0, 258.7, 153.0), "text": "Master informatique 2018"},
+    ]
+    mid = _detect_column_gutter(left + right, page_width=595.0)
+    assert 113.3 < mid < 134.0, (
+        f"le vrai gouffre (113.3-134.0) ne doit pas etre rejete au profit "
+        f"du milieu de page fixe (297.5), obtenu mid={mid}"
+    )
+
+
+def test_narrow_real_gutter_end_to_end_keeps_sections_grouped(tmp_path):
+    """Bout-en-bout : la regression Torres ci-dessus, via un vrai PDF rendu
+    avec exactement ce gouffre de ~20.7pt entre les deux colonnes."""
+    path = tmp_path / "narrow_real_gutter_cv.pdf"
+    _make_pdf(path, [
+        ((40, 60), "Jean DUPONT"),
+        ((40, 90), "Certifications"),
+        ((40, 120), "Profil perso"),
+        ((40, 150), "Curiosite forte"),
+        ((134, 60), "Chef de Projet MOA"),
+        ((134, 90), "Pilotage de projets SI en environnement multi-pays avec coordination"),
+        ((134, 120), "Formation"),
+        ((134, 150), "Master informatique 2018"),
+    ])
+
+    result = extract_text_from_pdf(path)
+    lines = result.splitlines()
+
+    sidebar = ["Jean DUPONT", "Certifications", "Profil perso", "Curiosite forte"]
+    sidebar_positions = [lines.index(l) for l in sidebar]
+    body_first = lines.index("Chef de Projet MOA")
+    body_last = lines.index("Master informatique 2018")
+
+    assert max(sidebar_positions) < body_first, (
+        f"le corps principal ne doit jamais s'intercaler dans la sidebar "
+        f"a cause d'un gouffre etroit mais reel, obtenu sidebar={sidebar_positions} "
+        f"body_first={body_first} dans {lines!r}"
+    )
+    assert body_first < body_last, "le corps principal doit rester groupe dans son ordre naturel"
 
 
 def test_empty_page_returns_empty_string(tmp_path):
