@@ -496,8 +496,8 @@ def _upsert_match_result(
 
 
 def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
-    """True if `doc_id` (a CV or a job) already has a MatchResult against
-    every currently-active (non-archived) counterpart.
+    """True if `doc_id` (a CV or a job) already has a COMPLETE MatchResult
+    against every currently-active (non-archived) counterpart.
 
     Used to decide whether re-processing an unchanged, already-"ready"
     document can safely skip the matching loop entirely. A naive version of
@@ -510,6 +510,24 @@ def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
     case: re-importing an archived CV made it turn "ready" quickly
     (extraction cache hit) but it then never appeared in Correspondances
     against a newly added job, while genuinely new CVs matched normally.
+
+    score_skills IS NOT NULL is also required (2026-09-14): a candidate
+    beyond embedding_top_k gets a cheap vector-only MatchResult first (see
+    the "cheap vector-only score" branches below), with a follow-up
+    "rescore" event queued to upgrade it to the full pipeline. Counting
+    that cheap row as "already matched" here let the shortcut fire before
+    the follow-up ever ran -- e.g. if the counterpart got archived in the
+    gap between the cheap score and the follow-up, or the follow-up event
+    was lost -- permanently freezing a MatchResult with every component
+    score NULL, since nothing would ever touch this pair again. Real
+    production case: 3 matches (2026-09-11) stuck with score_semantic/
+    skills/etc. all NULL for 3+ days, surviving several unrelated
+    ingestion events, because this shortcut kept reporting "fully
+    matched" for a pair that had only ever gotten the cheap placeholder.
+    score_skills specifically is always a real float from the full
+    pipeline (MatchScore's field is never None) and always NULL from the
+    cheap-vector branch, making it a reliable "went through the full
+    pipeline at least once" marker.
     """
     with SessionLocal() as session:
         if role == "cv":
@@ -522,7 +540,11 @@ def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
                 select(func.count(func.distinct(MatchResult.job_id)))
                 .select_from(MatchResult)
                 .join(JobDocument, MatchResult.job_id == JobDocument.id)
-                .where(MatchResult.cv_id == doc_id, JobDocument.session_id.is_(None))
+                .where(
+                    MatchResult.cv_id == doc_id,
+                    JobDocument.session_id.is_(None),
+                    MatchResult.score_skills.isnot(None),
+                )
             ) or 0
         else:
             active_counterpart_count = session.scalar(
@@ -534,7 +556,11 @@ def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
                 select(func.count(func.distinct(MatchResult.cv_id)))
                 .select_from(MatchResult)
                 .join(CvDocument, MatchResult.cv_id == CvDocument.id)
-                .where(MatchResult.job_id == doc_id, CvDocument.session_id.is_(None))
+                .where(
+                    MatchResult.job_id == doc_id,
+                    CvDocument.session_id.is_(None),
+                    MatchResult.score_skills.isnot(None),
+                )
             ) or 0
     return matched_active_count >= active_counterpart_count
 

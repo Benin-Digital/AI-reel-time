@@ -76,9 +76,11 @@ def _setup(session_factory, tmp_path, monkeypatch):
         job = JobDocument(path=str(job_path), content_hash="job-hash", status="ready", session_id=None)
         session.add_all([cv, job])
         session.commit()
-        # Deja matche contre TOUTE contrepartie active -> le raccourci de
-        # saut se declenche normalement (voir _matched_all_active_counterparts).
-        session.add(MatchResult(cv_id=cv.id, job_id=job.id, score=55.0))
+        # Deja matche contre TOUTE contrepartie active, avec un score COMPLET
+        # (score_skills non NULL -- un score "cheap" vectoriel seul ne compte
+        # plus comme "deja matche", voir _matched_all_active_counterparts) ->
+        # le raccourci de saut se declenche normalement.
+        session.add(MatchResult(cv_id=cv.id, job_id=job.id, score=55.0, score_skills=0.5))
         session.commit()
 
     extract_calls: list[bool] = []
