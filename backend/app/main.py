@@ -1513,14 +1513,31 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
 
         changed_text = changed_result.extracted_text or ""
         for job_path in _list_candidate_files(Path(settings.watch_job_dir)):
+            # Cheap pre-check BEFORE paying for extraction: an archived job
+            # (assigned to a closed analysis session) is excluded from
+            # matching regardless, but the check below used to run only
+            # AFTER _extract_and_persist -- with force=True (every
+            # "rescore" event: priority-keywords save, scoring-profile
+            # save, /matches/recompute) that bypasses the content-hash
+            # cache entirely, so EVERY archived job accumulated over the
+            # platform's lifetime got fully re-extracted from disk on
+            # every single rescore, for work whose result was always
+            # going to be thrown away. Real production complaint
+            # (2026-09-14): a rescore for a job with only 2 active CVs
+            # kept "en cours" far longer than 2 CVs' worth of work,
+            # because dozens of archived CVs/jobs were being silently
+            # re-processed first.
+            with SessionLocal() as _precheck_session:
+                _already_archived = _precheck_session.scalar(
+                    select(JobDocument.session_id).where(JobDocument.path == str(job_path))
+                )
+            if _already_archived is not None:
+                continue
             job_result = _extract_and_persist(job_path, force=force)
             job_doc = _upsert_job_document(job_path, job_result)
             if job_doc.session_id is not None:
-                # Archived (assigned to a closed analysis session): stays on
-                # disk, so the file-listing loop would otherwise keep
-                # matching every new CV against it forever — archiving only
-                # ever affected the /job-documents listing filter, not this
-                # loop, which doesn't touch the DB session_id at all.
+                # Still checked here too: a job could have been archived by
+                # a concurrent request in the gap since the pre-check above.
                 continue
             if job_doc.id in matched_job_ids:
                 continue
@@ -1647,10 +1664,19 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
 
         changed_text = changed_result.extracted_text or ""
         for cv_path in _list_candidate_files(Path(settings.watch_cv_dir)):
+            # Cheap pre-check BEFORE extraction: see the matching comment
+            # in the job branch above.
+            with SessionLocal() as _precheck_session:
+                _already_archived = _precheck_session.scalar(
+                    select(CvDocument.session_id).where(CvDocument.path == str(cv_path))
+                )
+            if _already_archived is not None:
+                continue
             cv_result = _extract_and_persist(cv_path, force=force)
             cv_doc = _upsert_cv_document(cv_path, cv_result)
             if cv_doc.session_id is not None:
-                # Archived: see the matching guard in the cv branch above.
+                # Still checked here too: could have been archived by a
+                # concurrent request in the gap since the pre-check above.
                 continue
             if cv_doc.id in matched_cv_ids:
                 continue

@@ -454,14 +454,20 @@ async function _saveScoringProfile(id) {
   const msg    = document.getElementById(`scoringProfileMsg-${id}`);
   if (!select) return;
 
-  // Changing this silently recalculates every existing match for this
-  // offer -- for a job a recruiter has already reviewed and left feedback
-  // on, that reshuffle can be surprising. Confirm with the actual count
-  // instead of assuming it's always a fresh, unreviewed offer.
+  // Changing this silently recalculates every existing ACTIVE match for
+  // this offer -- for a job a recruiter has already reviewed and left
+  // feedback on, that reshuffle can be surprising. Confirm with the
+  // actual count instead of assuming it's always a fresh, unreviewed
+  // offer. Deliberately NOT job-documents/{id}/details' match_count:
+  // that counts every MatchResult row ever created for this job,
+  // including ones against CVs archived long ago (real complaint,
+  // 2026-09-14: a job with 2 active CVs showed "22 correspondances" in
+  // this dialog) -- unassigned_only scopes to currently-active pairs,
+  // matching what a rescore actually recomputes.
   let matchCount = null;
   try {
-    const detail = await safeFetch(`/job-documents/${id}/details?limit=1`);
-    matchCount = detail.match_count ?? null;
+    const active = await safeFetch(`/matches?job_id=${id}&unassigned_only=true&page_size=100`);
+    matchCount = Array.isArray(active) ? active.length : null;
   } catch {
     // Best-effort: if this fails, fall back to a generic confirmation
     // below rather than blocking the action entirely.
