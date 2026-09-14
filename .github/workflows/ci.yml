@@ -55,7 +55,7 @@ jobs:
             --index-url https://download.pytorch.org/whl/cpu \
             torch==2.5.1 torchvision==0.20.1
           pip install --default-timeout=600 -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: Alembic migration drift check (non-blocking)
+      - name: Alembic migration drift check
         working-directory: backend
         # Catches exactly the mistake that caused a real production outage
         # on 2026-09-14: a model column (JobDocument.scoring_profile) added
@@ -65,19 +65,17 @@ jobs:
         # BEFORE pytest's own fixtures touch it) against current models.py
         # and fails if they've diverged -- i.e. "you forgot a migration".
         #
-        # Non-blocking (|| true) for now: this repo has real PRE-EXISTING
-        # drift accumulated over many past migrations (NOT NULL constraints,
-        # FK/index naming) unrelated to any single recent change -- making
-        # this blocking today would fail CI on every future PR for reasons
-        # nobody caused just now. Making it blocking requires first writing
-        # a dedicated cleanup migration for that backlog (a separate, higher-
-        # risk change against the live schema -- do not attempt casually).
-        # Until then, read this step's output on every run: a NEW mismatch
-        # appearing here (beyond the known pre-existing list) most likely
-        # means a migration is missing for a just-added model change.
+        # Blocking since migration 7a52bf516183 (2026-09-14) closed the
+        # pre-existing drift backlog (NOT NULL timestamps, a genuinely
+        # missing parser_feedback FK) that made this non-blocking at
+        # first -- verified zero drift both locally (disposable Postgres,
+        # upgrade/downgrade/re-upgrade round trip) and here in CI before
+        # flipping this to a hard failure. If this step ever fails again,
+        # it means a model change is missing its migration -- write one
+        # rather than silencing this check.
         run: |
           alembic -c alembic.ini upgrade head
-          alembic -c alembic.ini check || echo "::warning::Alembic drift detected (see above) -- non-blocking, but check whether it's a NEW mismatch from this PR before merging"
+          alembic -c alembic.ini check
       - name: Run pytest
         working-directory: backend
         run: pytest tests -q
