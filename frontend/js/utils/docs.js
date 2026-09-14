@@ -171,6 +171,35 @@ export function renderDocDetail(doc, kind) {
     </div>
   </div>` : "";
 
+  // Per-job scoring profile (see JobDocument.scoring_profile / matcher.py's
+  // _SCORING_PROFILES) -- a CLOSED, admin-validated set of weight presets,
+  // deliberately not a free-form weight editor: a recruiter picking raw
+  // weights directly can silently reintroduce a bug already measured and
+  // fixed (see the "semantic" weight history in matcher.py's _DEFAULT_W).
+  const SCORING_PROFILE_OPTIONS = [
+    { value: "", label: "Équilibré (par défaut)" },
+    { value: "priorite_experience", label: "Priorité expérience" },
+    { value: "priorite_mots_cles", label: "Priorité mots-clés" },
+  ];
+  const currentScoringProfile = doc.scoring_profile ?? "";
+  const scoringProfileHtml = kind === "job" ? `
+  <div class="card card--flat" style="padding:var(--space-4)">
+    <div class="card__title text-sm" style="margin-bottom:var(--space-2)">Profil de pondération</div>
+    <p class="text-xs text-muted" style="margin-bottom:var(--space-3)">
+      "Priorité expérience" fait peser un écart d'ancienneté (ex : poste "5 ans
+      minimum") plus qu'un mot-clé de différence. "Priorité mots-clés" privilégie
+      la couverture de la liste de mots-clés du recruteur. "Équilibré" est le
+      réglage par défaut de la plateforme.
+    </p>
+    <div style="display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap">
+      <select id="scoringProfile-${docId}" class="input" style="max-width:260px">
+        ${SCORING_PROFILE_OPTIONS.map((o) => `<option value="${o.value}"${o.value === currentScoringProfile ? " selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}
+      </select>
+      <button class="btn btn--primary btn--sm" data-action="save-scoring-profile" data-doc-id="${docId}">Enregistrer</button>
+      <span class="text-xs text-muted" id="scoringProfileMsg-${docId}"></span>
+    </div>
+  </div>` : "";
+
   return `
 <div class="stack" style="gap:var(--space-4)">
   <div style="display:flex;justify-content:flex-end;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1);flex-wrap:wrap">
@@ -182,6 +211,7 @@ export function renderDocDetail(doc, kind) {
   ${structuringErrorHtml}
   ${structuringWaitHtml}
   ${errorHtml}
+  ${scoringProfileHtml}
   ${priorityKeywordsHtml}
   <div class="doc-preview" id="${previewId}">
     <div class="skeleton doc-preview__frame"></div>

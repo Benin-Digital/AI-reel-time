@@ -224,6 +224,12 @@ async function _loadDetail(id) {
       });
     }
 
+    // wire scoring-profile save (see renderDocDetail, job side only)
+    const saveScoringProfileBtn = detail.querySelector("[data-action='save-scoring-profile']");
+    if (saveScoringProfileBtn) {
+      saveScoringProfileBtn.addEventListener("click", () => _saveScoringProfile(id));
+    }
+
     // wire priority-keywords save/import (see renderDocDetail, job side only)
     const savePriorityBtn = detail.querySelector("[data-action='save-priority-keywords']");
     if (savePriorityBtn) {
@@ -440,6 +446,38 @@ function _setPriorityKeywordsMsg(el, text, tone = "muted") {
   el.innerHTML = tone === "info"
     ? `<span class="spinner-inline"></span>${escapeHtml(text)}`
     : escapeHtml(text);
+}
+
+async function _saveScoringProfile(id) {
+  const select = document.getElementById(`scoringProfile-${id}`);
+  const btn    = document.querySelector(`[data-action='save-scoring-profile'][data-doc-id="${id}"]`);
+  const msg    = document.getElementById(`scoringProfileMsg-${id}`);
+  if (!select) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = "Enregistrement…"; }
+  _setPriorityKeywordsMsg(msg, "");
+  try {
+    await safeFetch(`/job-documents/${id}/scoring-profile`, {
+      method: "PATCH",
+      body: JSON.stringify({ profile: select.value || null }),
+      json: true,
+    });
+    _setPriorityKeywordsMsg(msg, "Enregistré, recalcul des scores en cours…", "info");
+    // Same rescore-in-progress banner/refresh as priority-keywords save
+    // below -- see its comment for why (this PATCH also queues a
+    // background rescore of this offer).
+    window.dispatchEvent(new CustomEvent("load-matches"));
+    window.dispatchEvent(new CustomEvent("matches-rescoring", {
+      detail: {
+        message: "Profil de pondération enregistré, les scores de cette offre se recalculent, "
+          + "ça peut prendre quelques instants.",
+      },
+    }));
+  } catch (err) {
+    _setPriorityKeywordsMsg(msg, err.message, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Enregistrer"; }
+  }
 }
 
 async function _savePriorityKeywords(id) {
