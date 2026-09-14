@@ -55,6 +55,7 @@ from .schemas import (
     JobDocumentDetailRead,
     JobPriorityKeywordsUpdate,
     JobPriorityKeywordsExtracted,
+    JobScoringProfileUpdate,
     AnalysisSessionCreate,
     AnalysisSessionRead,
     AnalysisSessionDetailRead,
@@ -110,7 +111,12 @@ from .services import (
     warn_if_esco_missing,
 )
 from .services.structured import build_document_profile, normalize_job_offer_from_parsed, StructuredDocument
-from .services.matcher import match_cv_to_job, match_parsed_documents, split_priority_keywords
+from .services.matcher import (
+    _SCORING_PROFILES,
+    match_cv_to_job,
+    match_parsed_documents,
+    split_priority_keywords,
+)
 from .services.parser import parse_document
 from .services.explain import build_match_explanation
 from dataclasses import asdict
@@ -1063,6 +1069,7 @@ def _vector_match_cv(
                 JobEmbedding.job_id,
                 JobDocument.path,
                 JobDocument.priority_keywords,
+                JobDocument.scoring_profile,
                 ExtractedText.extracted_text,
                 distance,
             )
@@ -1088,6 +1095,7 @@ def _vector_match_cv(
         if job_text:
             job_parsed = parse_document(job_text, kind="job")
             job_parsed.priority_keyword_terms = split_priority_keywords(row.priority_keywords)
+            job_parsed.scoring_profile = row.scoring_profile
             match_result = match_parsed_documents(cv_parsed, job_parsed)
             score = match_result.score
             common = match_result.common_skills
@@ -1214,6 +1222,7 @@ def _vector_match_job(
     )
     job_parsed = parse_document(job_repr, kind="job")
     job_parsed.priority_keyword_terms = split_priority_keywords(job_doc.priority_keywords)
+    job_parsed.scoring_profile = job_doc.scoring_profile
 
     matched_cv_ids: set[int] = set()
     for row in top_rows:
@@ -1501,7 +1510,8 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                 cs: dict = {}
             else:
                 match_result = match_cv_to_job(
-                    changed_text, job_result.extracted_text or "", job_doc.priority_keywords
+                    changed_text, job_result.extracted_text or "", job_doc.priority_keywords,
+                    scoring_profile=job_doc.scoring_profile,
                 )
                 score = match_result.score
                 common = match_result.common_skills
@@ -1630,7 +1640,8 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                 cs: dict = {}
             else:
                 match_result = match_cv_to_job(
-                    cv_result.extracted_text or "", changed_text, job_doc.priority_keywords
+                    cv_result.extracted_text or "", changed_text, job_doc.priority_keywords,
+                    scoring_profile=job_doc.scoring_profile,
                 )
                 score = match_result.score
                 common = match_result.common_skills
@@ -2886,6 +2897,7 @@ def get_job_document_details(doc_id: int, limit: int = 6) -> JobDocumentDetailRe
             structuring_status=doc.structuring_status,
             structuring_error=doc.structuring_error,
             priority_keywords=doc.priority_keywords,
+            scoring_profile=doc.scoring_profile,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
             match_count=match_count,
@@ -3030,6 +3042,37 @@ def update_job_priority_keywords(doc_id: int, payload: JobPriorityKeywordsUpdate
         if not doc:
             raise HTTPException(status_code=404, detail="JOB document not found")
         doc.priority_keywords = payload.keywords.strip() or None
+        session.commit()
+        doc_path = Path(doc.path)
+
+    _on_watch_event(WatchEvent(path=doc_path, event_type="rescore", observed_at=time()))
+    return get_job_document_details(doc_id)
+
+
+@app.patch("/job-documents/{doc_id}/scoring-profile", response_model=JobDocumentDetailRead)
+def update_job_scoring_profile(doc_id: int, payload: JobScoringProfileUpdate) -> JobDocumentDetailRead:
+    """Let a recruiter pick which pre-calibrated weight profile (see
+    matcher._SCORING_PROFILES) scores THIS job -- e.g. "priorite_experience"
+    for a posting with a hard years requirement, "priorite_mots_cles" for
+    one built around a long recruiter keyword list. Deliberately a closed
+    set of admin-validated presets, not free-form weights: see the
+    comment above _SCORING_PROFILES for why.
+
+    payload.profile=None (or omitted) resets to the platform default
+    ("equilibre"). Immediately re-queues this offer for rescoring, same
+    as the priority-keywords PATCH above, so the recruiter sees the
+    effect without a separate "Relancer l'IA" click.
+    """
+    if payload.profile is not None and payload.profile not in _SCORING_PROFILES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Profil inconnu : {payload.profile!r}. Profils valides : {sorted(_SCORING_PROFILES)}",
+        )
+    with SessionLocal() as session:
+        doc = session.get(JobDocument, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="JOB document not found")
+        doc.scoring_profile = payload.profile
         session.commit()
         doc_path = Path(doc.path)
 

@@ -750,6 +750,11 @@ class ParsedDocument:
     language_terms: list[str] = field(default_factory=list)
     contract_type: str | None = None
     experience_years: int = 0
+    # Job side only: which pre-calibrated weight profile to score with
+    # (see matcher._SCORING_PROFILES). Set by the caller from the job's
+    # own JobDocument.scoring_profile column, same pattern as
+    # priority_keyword_terms above -- None means the platform default.
+    scoring_profile: str | None = None
 
     # NER (filled externally if enabled)
     person_name: str | None = None
