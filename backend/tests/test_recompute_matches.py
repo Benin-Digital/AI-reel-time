@@ -98,7 +98,7 @@ def _setup(session_factory, tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         app_main, "match_cv_to_job",
-        lambda cv_text, job_text, priority_keywords=None, scoring_profile=None: fake_match_result,
+        lambda cv_text, job_text, priority_keywords=None: fake_match_result,
     )
 
     return cv_path, job_path, extract_calls

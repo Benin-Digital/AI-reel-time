@@ -108,7 +108,6 @@ class JobDocumentRead(BaseModel):
     structuring_status: str | None = None
     structuring_error: str | None = None
     priority_keywords: str | None = None
-    scoring_profile: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -337,7 +336,6 @@ class CvDocumentDetailRead(DocumentDetailBase):
 
 class JobDocumentDetailRead(DocumentDetailBase):
     priority_keywords: str | None = None
-    scoring_profile: str | None = None
 
 
 class JobPriorityKeywordsUpdate(BaseModel):
@@ -346,10 +344,6 @@ class JobPriorityKeywordsUpdate(BaseModel):
 
 class JobPriorityKeywordsExtracted(BaseModel):
     keywords: str
-
-
-class JobScoringProfileUpdate(BaseModel):
-    profile: str | None = None  # None (or omitted) = reset to the platform default
 
 
 class ParserCorrection(BaseModel):

@@ -234,50 +234,6 @@ _DEFAULT_W = {
     "contract": 0.05,
 }
 
-# Pre-calibrated, admin-validated weight profiles a recruiter can pick per
-# job (JobDocument.scoring_profile) to shift emphasis for a specific
-# posting -- e.g. a role stating a hard years requirement vs. one built
-# around a long recruiter keyword list. Deliberately a CLOSED set of
-# named presets, not free-form weight values: letting a recruiter set raw
-# weights directly recreates the exact risk that led to removing the old
-# /feedback/apply-weights endpoint (see feedback.py::compute_weights) --
-# a recruiter is not a data scientist, and an intuitive-sounding weight
-# (e.g. "raise semantic, it understands the CV better") can silently
-# reintroduce a bug already measured and fixed (see the comment above
-# _DEFAULT_W's "semantic" key). Each preset here is a deliberate, reviewed
-# variant of _DEFAULT_W, not a user-chosen number.
-_SCORING_PROFILES: dict[str, dict[str, float]] = {
-    "equilibre": dict(_DEFAULT_W),
-    # Real production case (2026-09-11): job stating "au moins 5 ans",
-    # junior (3 ans, 10/12 keywords) and senior (8 ans, 8/12 keywords)
-    # candidates landed EXACTLY tied (72%/72%) under _DEFAULT_W -- the
-    # keyword-count edge exactly offset the experience edge. This profile
-    # is for a recruiter who, for THIS posting, wants a stated years
-    # requirement to matter more than a one- or two-keyword difference.
-    "priorite_experience": {
-        "semantic": 0.10,
-        "skills": 0.35,
-        "priority_keywords": 0.30,
-        "experience": 0.35,
-        "education": 0.08,
-        "languages": 0.05,
-        "contract": 0.05,
-    },
-    # For a posting built around a long, carefully curated recruiter
-    # keyword list (e.g. a "Mots Cles.docx" naming specific tools/tasks)
-    # where hitting those named items matters more than a general years
-    # threshold -- the mirror image of priorite_experience.
-    "priorite_mots_cles": {
-        "semantic": 0.10,
-        "skills": 0.40,
-        "priority_keywords": 0.50,
-        "experience": 0.12,
-        "education": 0.08,
-        "languages": 0.05,
-        "contract": 0.05,
-    },
-}
-
 _DOMAIN_W: dict[str, dict[str, float]] = {
     "tech": {
         "semantic": 0.35,
@@ -426,19 +382,9 @@ def get_skill_embedding_tuning() -> tuple[float, float, bool]:
     return threshold, max_credit, bool(override)
 
 
-def _weights(profile: str | None = None) -> dict[str, float]:
+def _weights() -> dict[str, float]:
     """Weights for the final score. Domain-independent — see the comment
-    above _DOMAIN_W for why per-domain weighting was retired.
-
-    `profile` (JobDocument.scoring_profile, a per-job recruiter choice
-    among _SCORING_PROFILES) takes precedence when set -- it's a more
-    specific, deliberate choice for THIS job than the global learned-
-    weights override below. Falls back to the platform default when the
-    profile name is unrecognized (e.g. a stale value from a removed
-    profile) rather than raising.
-    """
-    if profile and profile in _SCORING_PROFILES:
-        return dict(_SCORING_PROFILES[profile])
+    above _DOMAIN_W for why per-domain weighting was retired."""
     with _learned_weights_lock:
         if _learned_weights is not None:
             return _learned_weights.copy()
@@ -745,12 +691,7 @@ def _semantic_repr(doc: ParsedDocument) -> str:
     return combined[:12000]
 
 
-def match_cv_to_job(
-    cv_text: str,
-    job_text: str,
-    priority_keywords: str | None = None,
-    scoring_profile: str | None = None,
-) -> MatchScore:
+def match_cv_to_job(cv_text: str, job_text: str, priority_keywords: str | None = None) -> MatchScore:
     """
     Full CV↔Job match using cross-encoder + structured scoring.
 
@@ -760,9 +701,6 @@ def match_cv_to_job(
         priority_keywords: Raw text of the job's recruiter-curated priority
             keywords (JobDocument.priority_keywords, one per line) — see
             _apply_priority_keywords for how these are folded in.
-        scoring_profile: JobDocument.scoring_profile -- a recruiter-chosen
-            preset among _SCORING_PROFILES, or None for the platform
-            default ("equilibre").
 
     Returns:
         MatchScore with all component scores and final 0-100 score
@@ -770,7 +708,6 @@ def match_cv_to_job(
     cv = parse_document(cv_text, kind="cv")
     job = parse_document(job_text, kind="job")
     job.priority_keyword_terms = split_priority_keywords(priority_keywords)
-    job.scoring_profile = scoring_profile
     return match_parsed_documents(cv, job)
 
 
@@ -1092,7 +1029,7 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
     # Domain is still detected and returned as a display label (MatchScore.domain)
     # but no longer selects a weight profile — see the comment above _DOMAIN_W.
     domain = job.domain if job.domain != "general" else cv.domain
-    w = _weights(profile=job.scoring_profile)
+    w = _weights()
 
     # Semantic: feed the most relevant section of each document. Section
     # classification (_match_section) is content-driven, not kind-driven
