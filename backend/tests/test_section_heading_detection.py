@@ -164,3 +164,45 @@ def test_education_section_survives_a_sentence_containing_universite():
     doc = parse_document(cv_text, kind="cv")
     assert "Litterature" in doc.education_text
     assert "Lyon" in doc.education_text
+
+
+def test_letter_spaced_heading_still_matches():
+    """Regression reelle (validation du corpus de 13 715 CV reels,
+    2026-09-14) : certains templates de CV rendent leurs titres de section
+    avec un espacement large entre chaque lettre (effet de style
+    decoratif). L'extraction PDF/DOCX restitue alors "C O M P É T E N C E S"
+    au lieu de "COMPÉTENCES" -- une ligne de 11 "mots" d'une seule lettre,
+    qui echouait a la fois au garde-fou de longueur (max 6 mots) et a toute
+    correspondance d'alias. Des CV entiers avec une section Competences
+    parfaitement structuree ressortaient avec ZERO competence detectee,
+    parce que le titre qui aurait du ouvrir cette section n'etait jamais
+    reconnu comme tel."""
+    assert _match_section("C O M P É T E N C E S") == "skills"
+    assert _match_section("F O R M A T I O N") == "education"
+    assert _match_section("C E R T I F I C A T I O N") == "certifications"
+
+
+def test_letter_spaced_skills_heading_actually_opens_the_skills_section():
+    """Bout-en-bout, sur le texte reel (anonymise) d'un CV du corpus de
+    validation : sans le correctif, skill_terms restait vide malgre une
+    liste de competences parfaitement lisible juste en dessous du titre."""
+    cv_text = (
+        "C O N T A C T E Z - M O I\n"
+        "email@example.com\n"
+        "A P E R Ç U D E S\n"
+        "C O M P É T E N C E S\n"
+        "Languages de programation:\n"
+        "C# , C++ , JAVA , JavaScript , PYTHON , PHP\n"
+        "Framework :\n"
+        "Laravel , Django , SpringBoot , Angular , React\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert len(doc.skill_terms) > 0
+    assert "Python" in doc.skill_terms
+
+
+def test_a_handful_of_scattered_single_letter_words_is_not_letter_spacing():
+    """Garde-fou : une ligne normale contenant par hasard quelques mots
+    d'une lettre (initiale, connecteur "a"/"y") ne doit pas etre traitee
+    comme un titre espace-lettre par lettre."""
+    assert _match_section("Jean D a obtenu son diplome") is None

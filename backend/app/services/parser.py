@@ -335,6 +335,34 @@ _SECTION_QUALIFIER_SUFFIX_RE = re.compile(
 _SECTION_LIST_INTRO_RE = re.compile(r"^(?:utilise|employe|maitrise|acquis)e?s?$")
 
 
+def _collapse_letter_spacing(line: str) -> str | None:
+    """Reconstruct a heading whose letters were rendered with wide
+    tracking/spacing by the CV's own template (a common decorative style for
+    section titles). PDF/DOCX text extraction then reads it back as one
+    token per letter -- "C O M P É T E N C E S" for "COMPÉTENCES" -- which
+    fails every heading check below: it is 11 "words" long (over the 6-word
+    cap) and none of them individually is a recognizable alias.
+
+    Real production sample (13k-CV corpus validation, 2026-09-14): entire
+    CVs with genuine, well-organized skills sections came back with ZERO
+    detected skill terms because the "COMPÉTENCES" heading itself was
+    letter-spaced and so never opened the skills section at all -- the
+    skills text underneath was silently attributed to whatever section came
+    before it (or dropped, if it was the first heading in the document).
+
+    Only fires when almost every token is a single letter, so it can't
+    misfire on an ordinary short heading like "R&D" or "CV" (too few
+    tokens) or on real prose with scattered single-letter words.
+    """
+    tokens = line.split()
+    if len(tokens) < 4:
+        return None
+    single_letter = sum(1 for t in tokens if len(t) == 1 and t.isalpha())
+    if single_letter / len(tokens) < 0.8:
+        return None
+    return "".join(tokens)
+
+
 def _match_section(line: str) -> str | None:
     """Return section name if the line matches a known heading alias.
 
@@ -369,12 +397,20 @@ def _match_section(line: str) -> str | None:
     # check on the literal ")") -- silently rejecting an otherwise-ordinary
     # heading and, in one real production CV, emptying its Skills section
     # entirely.
-    folded = re.sub(r"[^\w\s]", " ", _fold(line.strip()))
+    stripped = line.strip()
+    lookup = _section_lookup()
+
+    collapsed = _collapse_letter_spacing(stripped)
+    if collapsed is not None:
+        collapsed_folded = _fold(collapsed)
+        if collapsed_folded in lookup:
+            return lookup[collapsed_folded]
+
+    folded = re.sub(r"[^\w\s]", " ", _fold(stripped))
     words = folded.split()
     if not words or len(words) > 6:
         return None
 
-    lookup = _section_lookup()
     if folded in lookup:
         return lookup[folded]
     for alias, section in lookup.items():
