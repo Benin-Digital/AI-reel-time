@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import fitz
 
-from app.services.extraction import extract_text_from_pdf
+from app.services.extraction import _is_plausible_table, extract_text_from_pdf
 
 PAGE_WIDTH = 595
 PAGE_HEIGHT = 842
@@ -122,6 +122,51 @@ def test_wrapped_table_cell_no_longer_interleaves_with_the_next_row(tmp_path):
         f"row B's label must no longer be split by row A's wrapped value, got:\n{result}"
     )
     assert "Langages" in result and "SAS Fundation" in result
+
+
+def test_whole_page_misdetected_as_a_table_is_rejected():
+    """Regression reelle (validation du corpus de 13 715 CV, 2026-09-14,
+    CV Rachid Aissaoui) : sur un CV a deux colonnes SANS AUCUN cadre de
+    tableau, page.find_tables() a quand meme detecte la page ENTIERE comme
+    un tableau a 2 lignes / 2 colonnes -- chaque "cellule" etant le texte
+    complet d'une colonne (nom, contact, tout un paragraphe...), soit une
+    douzaine de lignes. _render_table_rows joignait alors ces deux cellules
+    geantes par une tabulation, que clean_text() reduit ensuite a un simple
+    espace comme n'importe quel autre blanc -- fusionnant le dernier titre
+    de la colonne de gauche ("DIPLÔMES / CERTIFICATIONS") avec le premier
+    titre de la colonne de droite ("EXPÉRIENCE PROFESSIONNELLE") en une
+    seule chaine illisible qui ne correspondait plus a aucun des deux.
+    Le nombre de lignes a lui seul ne suffit pas a rejeter ce faux tableau
+    (il avait bien 2 lignes, comme un vrai petit tableau legitime) -- c'est
+    la taille demesuree de ses cellules qui le trahit."""
+    rows = [
+        [
+            "Rachid\nAISSAOUI\nConsultant\nQA\n78280 Guyancourt\n06.24.11.53.98\n"
+            "aissaoui.r@gmail.com\nlinkedin.com/in/riln\nPolyvalent et curieux\n"
+            "d'adaptation et d'apprentissage\nnouveaux defis\nDIPLOMES / CERTIFICATIONS",
+            "EXPERIENCE PROFESSIONNELLE\nCONSULTANT QA\nBig Ben Corp\n"
+            "Qualification de sites\nRealisation de tests\nGestion des retours\n"
+            "CONSULTANT TEST RECETTE\nGMF Assurances\nProjets Evolutions",
+        ],
+        ["2013 Licence Assurance\nUniversite Paris II\nISTQB Foundation\nHP Quality Center", None],
+    ]
+    assert _is_plausible_table(rows) is False
+
+
+def test_a_real_small_table_is_still_accepted():
+    """Garde-fou : un vrai (petit) tableau CV, cellules d'une ou deux
+    lignes, ne doit pas etre rejete par le nouveau garde-fou de taille."""
+    rows = [
+        ["Langages", "Python, Java, SAS, SQL, R et Scala"],
+        ["Outils de\ndeveloppement", "Toad Siebel SAS6 SAS91 SAS92 SAS94"],
+        ["SGBD", "Oracle, PostgreSQL, MySQL, MongoDB"],
+    ]
+    assert _is_plausible_table(rows) is True
+
+
+def test_a_single_row_table_is_rejected():
+    """Un 'tableau' d'une seule ligne n'est pas un vrai tableau."""
+    assert _is_plausible_table([["Langages", "Python, Java"]]) is False
 
 
 def test_plain_two_column_cv_without_any_table_is_unaffected(tmp_path):

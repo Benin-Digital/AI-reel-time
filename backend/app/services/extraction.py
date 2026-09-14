@@ -239,12 +239,51 @@ def _find_tables(page) -> list:
     main.py). Default strategy requires actual ruling lines/fills, so a
     plain two-column CV template with no table framing at all (the case
     _order_lines_by_column below already handles) is correctly left alone.
+
+    Rejects a detected table if any of its cells holds more than a handful
+    of lines of text. Real production case (13k-CV corpus validation,
+    2026-09-14): on an ordinary two-column CV with NO table framing
+    anywhere, PyMuPDF's whitespace-based table detection still mistook the
+    WHOLE PAGE for a 2-row, 2-column table -- each "cell" was an entire
+    column's full multi-paragraph text (a dozen-plus lines: name, contact
+    details, a whole section) with its internal line breaks intact.
+    _render_table_rows then tab-joined each row's two giant cells, so the
+    CV's real content was still there and still line-broken correctly
+    INSIDE each cell -- except at the single seam between the two cells,
+    where a lone tab character (not a newline) separated the last line of
+    the left column from the first line of the right column. clean_text()
+    collapses that tab to a plain space like any other whitespace, fusing
+    an entire left-column heading into the next right-column heading with
+    no separator at all (e.g. "...CERTIFICATIONS EXPÉRIENCE PROFESSIONNELLE"
+    read as one heading, matching neither). Rejecting on row count alone
+    doesn't catch this: the false table had 2 rows, same as a perfectly
+    ordinary short real table. What actually distinguishes it is cell
+    size -- a genuine CV table cell (a job title, a short wrapped skill
+    list) is one line, occasionally two; a "cell" holding a dozen-plus
+    lines is an entire section that was never really tabular at all.
     """
     try:
-        return list(page.find_tables().tables)
+        tables = list(page.find_tables().tables)
     except Exception as exc:
         logger.warning("Table detection failed on a page of %s: %s", getattr(page, "number", "?"), exc)
         return []
+    return [t for t in tables if _is_plausible_table(t.extract())]
+
+
+# A real CV table cell (a job title, a short wrapped skill list) is one
+# line, occasionally two -- a "cell" holding this many lines is an entire
+# section that was never really tabular at all (see _find_tables).
+_MAX_PLAUSIBLE_TABLE_CELL_LINES = 5
+
+
+def _is_plausible_table(rows: list[list[str | None]]) -> bool:
+    if len(rows) < 2:
+        return False
+    return not any(
+        (cell or "").count("\n") >= _MAX_PLAUSIBLE_TABLE_CELL_LINES
+        for row in rows
+        for cell in row
+    )
 
 
 def _render_table_rows(rows: list[list[str | None]]) -> str:
