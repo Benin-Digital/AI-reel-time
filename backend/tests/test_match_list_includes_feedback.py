@@ -156,3 +156,48 @@ def test_get_match_includes_persisted_feedback(session_factory):
     assert result.feedback_decision == "reject"
     assert result.feedback_rating == 1
     assert result.feedback_comment == "Pas assez d'experience"
+
+
+def test_list_matches_includes_component_scores(session_factory):
+    """Regression reelle (2026-09-14) : GET /matches ne renvoyait jamais
+    score_skills/score_semantic/etc. -- le detail par composant du
+    frontend (_renderComponentScores) restait donc vide pour TOUS les
+    matches, pas seulement les scores provisoires, et le frontend n'avait
+    aucun moyen de distinguer un score complet d'un score cheap
+    (vectoriel seul, tous les composants a NULL -- voir le meme marqueur
+    dans _matched_all_active_counterparts, main.py)."""
+    with session_factory() as session:
+        cv = CvDocument(path="/cv/1.pdf", status="ready")
+        job = JobDocument(path="/job/1.pdf", status="ready")
+        session.add_all([cv, job])
+        session.commit()
+        session.add(MatchResult(
+            cv_id=cv.id, job_id=job.id, score=80.0,
+            score_semantic=0.7, score_skills=0.9, score_experience=0.6,
+            score_education=0.5, score_languages=1.0, score_contract=0.8,
+            match_domain="tech",
+        ))
+        session.commit()
+
+    results = matches_router.list_matches()
+
+    assert results[0].score_skills == 0.9
+    assert results[0].score_semantic == 0.7
+    assert results[0].score_experience == 0.6
+    assert results[0].score_education == 0.5
+    assert results[0].score_languages == 1.0
+    assert results[0].score_contract == 0.8
+    assert results[0].match_domain == "tech"
+
+
+def test_list_matches_leaves_component_scores_null_for_a_provisional_match(session_factory):
+    """Non-regression : un match encore au stade cheap-vectoriel (voir
+    matcher.py's embedding_top_k) doit continuer a montrer des
+    composants a None, pas des zeros -- c'est ce qui permet au frontend
+    de distinguer 'pas encore calcule' de 'calcule et faible'."""
+    _seed_match(session_factory)  # score=80.0, aucun composant fourni
+
+    results = matches_router.list_matches()
+
+    assert results[0].score_skills is None
+    assert results[0].score_semantic is None

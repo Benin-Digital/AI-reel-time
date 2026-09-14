@@ -79,6 +79,22 @@ def _to_match_read(
         job_label=job_labels.get(row.job_id),
         score=row.score,
         common_keywords=deserialize_keywords(row.common_keywords),
+        # Never populated here before (2026-09-14 audit): the per-component
+        # breakdown bars in the frontend's match card (_renderComponentScores)
+        # checked for these fields but this endpoint never sent them, so
+        # that breakdown silently rendered empty for every match, not just
+        # incomplete ones -- and score_skills specifically is also the
+        # frontend's marker for "still a cheap vector-only provisional
+        # score" (see the matching backend marker in
+        # _matched_all_active_counterparts), which needs this to actually
+        # distinguish a provisional match from a complete one.
+        score_semantic=row.score_semantic,
+        score_skills=row.score_skills,
+        score_experience=row.score_experience,
+        score_education=row.score_education,
+        score_languages=row.score_languages,
+        score_contract=row.score_contract,
+        match_domain=row.match_domain,
         score_priority_keywords=row.score_priority_keywords,
         priority_keywords_matched_count=row.priority_keywords_matched_count,
         priority_keywords_total=row.priority_keywords_total,

@@ -2,7 +2,7 @@ import { safeFetch, fetchBlob } from "../api.js";
 import { $, setBanner, openModal, closeModal, escapeHtml } from "../utils/dom.js";
 import { store, setStore } from "../store.js";
 import { navigateTo } from "../router.js";
-import { openDeleteConfirm } from "../utils/upload.js";
+import { openDeleteConfirm, openConfirm } from "../utils/upload.js";
 import { buildParams, setPage, renderDocItem, renderDocDetail, loadDocPdfPreview } from "../utils/docs.js";
 
 const MAX_MB = 20;
@@ -453,6 +453,27 @@ async function _saveScoringProfile(id) {
   const btn    = document.querySelector(`[data-action='save-scoring-profile'][data-doc-id="${id}"]`);
   const msg    = document.getElementById(`scoringProfileMsg-${id}`);
   if (!select) return;
+
+  // Changing this silently recalculates every existing match for this
+  // offer -- for a job a recruiter has already reviewed and left feedback
+  // on, that reshuffle can be surprising. Confirm with the actual count
+  // instead of assuming it's always a fresh, unreviewed offer.
+  let matchCount = null;
+  try {
+    const detail = await safeFetch(`/job-documents/${id}/details?limit=1`);
+    matchCount = detail.match_count ?? null;
+  } catch {
+    // Best-effort: if this fails, fall back to a generic confirmation
+    // below rather than blocking the action entirely.
+  }
+  const confirmed = await openConfirm(
+    "Changer le profil de pondération",
+    matchCount
+      ? `Les scores des ${matchCount} correspondance${matchCount > 1 ? "s" : ""} déjà calculée${matchCount > 1 ? "s" : ""} pour cette offre vont être recalculés avec le nouveau profil. Continuer ?`
+      : "Les scores déjà calculés pour cette offre vont être recalculés avec le nouveau profil. Continuer ?",
+    "Changer le profil"
+  );
+  if (!confirmed) return;
 
   if (btn) { btn.disabled = true; btn.textContent = "Enregistrement…"; }
   _setPriorityKeywordsMsg(msg, "");

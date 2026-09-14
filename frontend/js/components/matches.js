@@ -328,6 +328,20 @@ function _renderMatchCard(match) {
   const current  = _feedbackCache.get(String(match.id)) ?? null;
   const cvLabel  = escapeHtml(match.cv_label || `CV ${match.cv_id}`);
   const jobLabel = escapeHtml(match.job_label || `Offre ${match.job_id}`);
+  // A candidate beyond the embedding shortlist first gets a cheap,
+  // vector-similarity-only score (see matcher.py's embedding_top_k) while
+  // waiting for a background pass through the full pipeline -- score_skills
+  // is null only during that window (see _matched_all_active_counterparts'
+  // 2026-09-14 fix, which uses the same marker). Without this banner the
+  // component breakdown below just renders empty with no explanation, and
+  // the number shown looks like a normal, final score.
+  const isProvisional = match.score_skills == null;
+  const provisionalBanner = isProvisional
+    ? `<div class="banner banner--info text-xs" style="margin-top:var(--space-2)">
+        <span class="spinner-inline"></span>
+        Score provisoire (estimation rapide) — l'analyse complète de ce candidat est en cours.
+      </div>`
+    : "";
 
   return `
 <article class="match-card" data-match-id="${escapeHtml(String(match.id))}">
@@ -352,6 +366,7 @@ function _renderMatchCard(match) {
   <div class="match-card__body">
     <p class="text-xs text-muted">Match #${escapeHtml(String(match.id))}</p>
     ${renderScoreBar(score)}
+    ${provisionalBanner}
     ${priorityBadge ? `<div>${priorityBadge}</div>` : ""}
     ${_renderComponentScores(match)}
     <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
