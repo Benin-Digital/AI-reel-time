@@ -206,3 +206,25 @@ def test_a_handful_of_scattered_single_letter_words_is_not_letter_spacing():
     d'une lettre (initiale, connecteur "a"/"y") ne doit pas etre traitee
     comme un titre espace-lettre par lettre."""
     assert _match_section("Jean D a obtenu son diplome") is None
+
+
+def test_compound_letter_spaced_heading_still_matches():
+    """Regression reelle (meme corpus de validation, CV Aurelien Torres) :
+    un titre espace lettre par lettre compose de PLUSIEURS mots reels
+    ("MA FORMATION", "EXPERIENCES PROFESSIONNELLE") fusionne l'un dans
+    l'autre une fois les lettres recollees ("maformation",
+    "experiencesprofessionnelle") -- aucune des deux ne correspond
+    EXACTEMENT a un alias connu, donc le premier correctif (correspondance
+    exacte uniquement) ne suffisait pas : les sections Formation et
+    Experience de ce CV restaient toujours entierement vides."""
+    assert _match_section("M A F O R M A T I O N") == "education"
+    assert _match_section("E X P É R I E N C E S P R O F E S S I O N N E L L E") == "experience"
+
+
+def test_letter_spaced_name_does_not_false_positive_on_a_short_alias():
+    """Garde-fou : la recherche de sous-chaine (necessaire pour les titres
+    composes ci-dessus) est reservee aux alias longs -- sinon un prenom
+    anodin espace lettre par lettre comme "C A R O L E" declencherait a
+    tort la section job_required, puisque "carole" contient "role"."""
+    assert _match_section("C A R O L E") is None
+    assert _match_section("C A R O L E   D U P O N T") is None

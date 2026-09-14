@@ -335,6 +335,14 @@ _SECTION_QUALIFIER_SUFFIX_RE = re.compile(
 _SECTION_LIST_INTRO_RE = re.compile(r"^(?:utilise|employe|maitrise|acquis)e?s?$")
 
 
+# Minimum alias length eligible for the raw-substring fallback used on a
+# collapsed letter-spaced heading (see _match_section). Below this length,
+# only an EXACT match against the whole collapsed line is trusted -- a
+# substring search on a short alias like "role" or "cv" risks a false hit
+# inside an ordinary letter-spaced name ("CAROLE" contains "role").
+_LETTER_SPACED_SUBSTRING_MIN_ALIAS_LEN = 8
+
+
 def _collapse_letter_spacing(line: str) -> str | None:
     """Reconstruct a heading whose letters were rendered with wide
     tracking/spacing by the CV's own template (a common decorative style for
@@ -405,6 +413,23 @@ def _match_section(line: str) -> str | None:
         collapsed_folded = _fold(collapsed)
         if collapsed_folded in lookup:
             return lookup[collapsed_folded]
+        # A COMPOUND letter-spaced heading ("MA FORMATION", "EXPERIENCES
+        # PROFESSIONNELLE") still fuses onto the alias after collapsing --
+        # letter-spacing destroys the space that would otherwise separate
+        # the connector/qualifier word from the alias itself, so the exact
+        # match above never fires. Real production case (13k-CV corpus
+        # validation, 2026-09-14): "E X P É R I E N C E S P R O F E S S I O
+        # N N E L L E" collapsed to "experiencesprofessionnelle", and "M A F
+        # O R M A T I O N" to "maformation" -- neither equals a bare alias,
+        # so the CV's entire Experience/Formation sections stayed empty.
+        # Falling back to a raw substring search (no word boundary is
+        # possible once spacing information is gone) is restricted to long
+        # aliases only, so a short one like "role" or "cv" can't accidentally
+        # match inside an ordinary letter-spaced NAME ("C A R O L E" ->
+        # "carole" contains "role").
+        for alias, section in sorted(lookup.items(), key=lambda kv: -len(kv[0])):
+            if len(alias) >= _LETTER_SPACED_SUBSTRING_MIN_ALIAS_LEN and alias in collapsed_folded:
+                return section
 
     folded = re.sub(r"[^\w\s]", " ", _fold(stripped))
     words = folded.split()
