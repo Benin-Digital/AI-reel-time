@@ -59,6 +59,12 @@ class ExtractedText(Base):
     __table_args__ = (
         Index("ix_extracted_text_updated_at", "updated_at"),
         Index("ix_extracted_text_content_hash", "content_hash"),
+        # Created directly in migration 0010_add_parsed_profile, never
+        # declared here (2026-09-14 schema-drift audit) -- alembic
+        # autogenerate saw "DB has an index the model doesn't know about"
+        # and proposed dropping it. Declaring it here (no DB change) makes
+        # the model match reality instead.
+        Index("ix_extracted_text_parsed_profile_hash", "parsed_profile_hash"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -116,7 +122,18 @@ class CvDocument(Base):
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="pending")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    session_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_sessions.id"), nullable=True)
+    # ondelete="SET NULL" + explicit name: matches the real production
+    # constraint from migration 0011_analysis_sessions exactly -- this was
+    # missing from the model (2026-09-14 schema-drift audit), which made
+    # `alembic check`/autogenerate propose DROPPING and recreating this FK
+    # WITHOUT "ON DELETE SET NULL", silently losing that cascade behavior
+    # (deleting a session would then fail with a FK violation instead of
+    # gracefully un-assigning affected CVs). Fixing the model to match
+    # reality, not the other way around.
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("analysis_sessions.id", ondelete="SET NULL", name="fk_cv_documents_session"),
+        nullable=True,
+    )
     # On-demand deep structuring (Docling), separate from `status` (which
     # tracks the fast default extraction). None = never requested.
     structuring_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -146,7 +163,11 @@ class JobDocument(Base):
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="pending")
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    session_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_sessions.id"), nullable=True)
+    # See the matching comment on CvDocument.session_id above.
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("analysis_sessions.id", ondelete="SET NULL", name="fk_job_documents_session"),
+        nullable=True,
+    )
     # On-demand deep structuring (Docling), separate from `status` (which
     # tracks the fast default extraction). None = never requested.
     structuring_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -335,6 +356,20 @@ class CvEmbedding(Base):
     __table_args__ = (
         Index("ux_cv_embeddings_doc", "cv_id", unique=True),
         Index("ix_cv_embeddings_updated_at", "updated_at"),
+        # Created directly (raw SQL, ivfflat isn't expressible via a plain
+        # Index(...)) in migration 0004_embeddings_index, never declared
+        # here (2026-09-14 schema-drift audit) -- alembic autogenerate saw
+        # "DB has an index the model doesn't know about" and proposed
+        # DROPPING this vector-similarity index, which would have quietly
+        # killed the performance of every embedding_top_k nearest-neighbor
+        # query in production. Declaring it here (no DB change, matches
+        # the real index exactly) makes the model match reality instead.
+        Index(
+            "ix_cv_embeddings_vector", "embedding",
+            postgresql_using="ivfflat",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"lists": 100},
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -357,6 +392,13 @@ class JobEmbedding(Base):
     __table_args__ = (
         Index("ux_job_embeddings_doc", "job_id", unique=True),
         Index("ix_job_embeddings_updated_at", "updated_at"),
+        # See the matching comment on CvEmbedding above.
+        Index(
+            "ix_job_embeddings_vector", "embedding",
+            postgresql_using="ivfflat",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"lists": 100},
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
