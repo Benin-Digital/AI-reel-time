@@ -158,6 +158,13 @@ class JobDocument(Base):
     # match time instead of going through find_skills() -- see
     # matcher.py::_priority_keyword_terms.
     priority_keywords: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Which pre-calibrated weight profile to score this job with (see
+    # matcher._SCORING_PROFILES) -- None means the platform default
+    # ("equilibre"). Deliberately a closed set of admin-validated presets,
+    # not free-form weight values: letting a recruiter pick raw weights
+    # directly recreates the exact risk that led to removing the old
+    # /feedback/apply-weights endpoint (see feedback.py::compute_weights).
+    scoring_profile: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
