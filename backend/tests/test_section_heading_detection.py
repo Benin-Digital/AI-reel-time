@@ -228,3 +228,33 @@ def test_letter_spaced_name_does_not_false_positive_on_a_short_alias():
     tort la section job_required, puisque "carole" contient "role"."""
     assert _match_section("C A R O L E") is None
     assert _match_section("C A R O L E   D U P O N T") is None
+
+
+def test_realisations_clef_or_majeures_heading_maps_to_experience():
+    """Regression reelle (meme corpus de validation, CV consultant
+    Jean-Philippe Coste) : un titre de gabarit CV-consultant listant les
+    missions passees ("Réalisations Clef", "REALISATIONS MAJEURES")
+    contient bien l'alias Experience "realisations", mais le mot en trop
+    ("clef", vieille orthographe de "cle" ; "majeures") ne correspondait ni
+    a un mot-outil ni a une terminaison d'adjectif reconnue -- le titre
+    entier etait rejete, et la SECTION ENTIERE (une douzaine de missions
+    client reelles) restait attribuee a la section precedente (Formation)
+    au lieu d'Experience."""
+    assert _match_section("Réalisations Clef") == "experience"
+    assert _match_section("REALISATIONS MAJEURES") == "experience"
+
+
+def test_realisations_clef_heading_does_not_swallow_the_mission_history_into_education():
+    """Bout-en-bout : la regression Coste ci-dessus, au niveau document
+    complet -- sans le correctif, tout l'historique de missions finissait
+    dans education_text plutot que experience_text."""
+    cv_text = (
+        "Formations Professionnelles\n"
+        "Gestion de Projets : PMP et Agile\n"
+        "Réalisations Clef\n"
+        "ODDO BHF ASSISTANCE A RSSI - PARIS 2022\n"
+        "Direction de Programme Cybersecurite.\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert "ODDO BHF" in doc.experience_text
+    assert "ODDO BHF" not in doc.education_text

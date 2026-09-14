@@ -315,6 +315,15 @@ _SECTION_STOPWORDS = {
     # don't share a recognizable adjective ending, so _SECTION_QUALIFIER_RE
     # below wouldn't catch them.
     "domaines", "domaine", "cle", "cles",
+    # Same story for a consultant-CV heading listing past missions
+    # ("Réalisations Clef", "REALISATIONS MAJEURES") -- real production case
+    # (13k-CV corpus validation, 2026-09-14): "realisations" is a registered
+    # Experience alias, but "clef" (old-French spelling of "cle") and
+    # "majeures" matched neither a stopword nor the adjective-ending
+    # pattern, so the heading was rejected outright and this consultant's
+    # ENTIRE mission history (a dozen real client engagements) was
+    # attributed to whatever section came before it instead.
+    "clef", "clefs", "majeur", "majeure", "majeurs", "majeures",
 }
 
 # Most French adjectives that legitimately extend a heading share one of a
