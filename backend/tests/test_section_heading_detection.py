@@ -258,3 +258,48 @@ def test_realisations_clef_heading_does_not_swallow_the_mission_history_into_edu
     doc = parse_document(cv_text, kind="cv")
     assert "ODDO BHF" in doc.experience_text
     assert "ODDO BHF" not in doc.education_text
+
+
+def test_diplomes_certifications_compound_heading_resolves_to_education():
+    """Regression reelle (meme corpus de validation, CV Rachid Aissaoui) :
+    "Diplômes / Certifications" est un intitule tres courant qui melange
+    deux mots-alias de sections DIFFERENTES ("diplomes" -> Formation,
+    "certifications" -> Certifications). La regle normale rejette un titre
+    dont le mot en trop nomme une autre section -- a raison pour "Location
+    de véhicule", mais a tort ici : le contenu sous ce titre melange
+    reellement un vrai diplome et de vraies certifications, et ne choisir
+    aucune des deux sections faisait disparaitre tout le bloc dans la
+    section precedente au lieu de Formation."""
+    assert _match_section("Diplômes / Certifications") == "education"
+    assert _match_section("Formation et Certifications") == "education"
+    assert _match_section("Certifications et Diplômes") == "education"
+
+
+def test_letter_spaced_diplomes_certifications_heading_resolves_to_education():
+    """Meme regression, mais sur le titre TEL QU'EXTRAIT REELLEMENT --
+    espace lettre par lettre ("D I P L Ô M E S / C E R T I F I C A T I O N
+    S"). Le chemin de repli par sous-chaine (voir
+    test_compound_letter_spaced_heading_still_matches) trouve les DEUX
+    alias ("certifications", plus long, ET "diplomes") comme sous-chaines
+    de la ligne recollee -- sans le correctif, il retournait tout
+    simplement le plus long des deux ("certifications"), au lieu de
+    resoudre la meme ambiguite que le chemin normal ci-dessus."""
+    assert _match_section("D I P L Ô M E S / C E R T I F I C A T I O N S") == "education"
+
+
+def test_diplomes_certifications_heading_end_to_end_keeps_the_whole_block_in_education():
+    """Bout-en-bout : la regression Aissaoui ci-dessus, au niveau document
+    complet -- sans le correctif, le vrai diplome ET les deux vraies
+    certifications listes sous ce titre disparaissaient tous les deux dans
+    la section precedente (ici, Resume/Profil)."""
+    cv_text = (
+        "Profil\n"
+        "Consultant QA rigoureux et curieux.\n"
+        "Diplômes / Certifications\n"
+        "2013 Licence Assurance, Banque, Finance\n"
+        "ISTQB niveau Foundation\n"
+    )
+    doc = parse_document(cv_text, kind="cv")
+    assert "Licence" in doc.education_text
+    assert "ISTQB" in doc.education_text
+    assert "Licence" not in doc.summary_text

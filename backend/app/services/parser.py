@@ -336,6 +336,23 @@ _SECTION_QUALIFIER_SUFFIX_RE = re.compile(
     r".*(?:ique|iques|el|elle|els|elles|al|ale|aux|ales|aire|aires|if|ive|ifs|ives)$"
 )
 
+# Heading word-pairs that name two DIFFERENT registered sections but are
+# routinely used together as one compound heading for a single real section
+# ("Diplômes / Certifications", "Formation et Certifications") -- real
+# production case (13k-CV corpus validation, 2026-09-14, CV Rachid
+# Aissaoui). _match_section's normal rule rejects a heading whose extra
+# word names a DIFFERENT section than the one already matched (that rule
+# exists to keep two genuinely unrelated sections from merging -- see
+# "Location de véhicule" test), but that's the wrong call here: the content
+# beneath such a heading legitimately mixes real diplomas with real
+# certifications, and picking neither means the ENTIRE section (in the
+# real case, a degree plus two professional certifications) is dropped
+# into whatever section came before it instead. Each pair resolves to one
+# canonical section, listed first in the heading name.
+_COMPATIBLE_SECTION_PAIRS: dict[frozenset[str], str] = {
+    frozenset(("education", "certifications")): "education",
+}
+
 # A per-role bullet label ("Technologies utilisées : ...", "Outils employés
 # par le client : ...") reads exactly like a real compound heading -- one or
 # two Skills-alias words plus a connector -- except for a trailing past-
@@ -436,9 +453,28 @@ def _match_section(line: str) -> str | None:
         # aliases only, so a short one like "role" or "cv" can't accidentally
         # match inside an ordinary letter-spaced NAME ("C A R O L E" ->
         # "carole" contains "role").
-        for alias, section in sorted(lookup.items(), key=lambda kv: -len(kv[0])):
-            if len(alias) >= _LETTER_SPACED_SUBSTRING_MIN_ALIAS_LEN and alias in collapsed_folded:
-                return section
+        substring_matches = [
+            (alias, section) for alias, section in lookup.items()
+            if len(alias) >= _LETTER_SPACED_SUBSTRING_MIN_ALIAS_LEN and alias in collapsed_folded
+        ]
+        if substring_matches:
+            matched_sections = {section for _, section in substring_matches}
+            if len(matched_sections) > 1:
+                # A compound letter-spaced heading ("D I P L Ô M E S /
+                # C E R T I F I C A T I O N S") can match two DIFFERENT
+                # sections' aliases as substrings at once. Real production
+                # case (13k-CV corpus validation, 2026-09-14, CV Rachid
+                # Aissaoui): this collapsed to "diplomes/certifications",
+                # matching both "certifications" (14 chars, checked first
+                # since matches are otherwise ranked by alias length) and
+                # "diplomes" (8 chars) -- returning whichever was longest
+                # picked "certifications" over the heading's own primary
+                # sense, same ambiguity _COMPATIBLE_SECTION_PAIRS already
+                # resolves for the non-letter-spaced path below.
+                resolved = _COMPATIBLE_SECTION_PAIRS.get(frozenset(matched_sections))
+                if resolved is not None:
+                    return resolved
+            return max(substring_matches, key=lambda m: len(m[0]))[1]
 
     folded = re.sub(r"[^\w\s]", " ", _fold(stripped))
     words = folded.split()
@@ -453,18 +489,23 @@ def _match_section(line: str) -> str | None:
         alias_words = set(alias.split())
         extra = [w for w in words if w not in alias_words and w not in _SECTION_STOPWORDS]
         ok = True
+        resolved_section = section
         for w in extra:
             other_section = lookup.get(w)
             if other_section is not None:
-                if other_section != section:
-                    ok = False
-                    break
-                continue  # another alias of the SAME section: fine
+                if other_section == section:
+                    continue  # another alias of the SAME section: fine
+                pair = frozenset((section, other_section))
+                if pair in _COMPATIBLE_SECTION_PAIRS:
+                    resolved_section = _COMPATIBLE_SECTION_PAIRS[pair]
+                    continue
+                ok = False
+                break
             if _SECTION_LIST_INTRO_RE.match(w) or not _SECTION_QUALIFIER_SUFFIX_RE.match(w):
                 ok = False
                 break
         if ok:
-            return section
+            return resolved_section
     return None
 
 
