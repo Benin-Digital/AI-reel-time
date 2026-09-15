@@ -513,6 +513,28 @@ async function _savePriorityKeywords(id) {
   const msg      = document.getElementById(`priorityKeywordsMsg-${id}`);
   if (!textarea) return;
 
+  // Same reasoning as _saveScoringProfile above: this silently recalculates
+  // every active match for this offer, which can be surprising for one a
+  // recruiter has already reviewed. Real user feedback (2026-09-15): this
+  // save had no confirmation at all while the scoring-profile one right
+  // above it did -- same rescore side effect, same warning should apply.
+  let matchCount = null;
+  try {
+    const active = await safeFetch(`/matches?job_id=${id}&unassigned_only=true&page_size=100`);
+    matchCount = Array.isArray(active) ? active.length : null;
+  } catch {
+    // Best-effort: if this fails, fall back to a generic confirmation
+    // below rather than blocking the action entirely.
+  }
+  const confirmed = await openConfirm(
+    "Changer les mots-clés prioritaires",
+    matchCount
+      ? `Les scores des ${matchCount} correspondance${matchCount > 1 ? "s" : ""} déjà calculée${matchCount > 1 ? "s" : ""} pour cette offre vont être recalculés avec les nouveaux mots-clés. Continuer ?`
+      : "Les scores déjà calculés pour cette offre vont être recalculés avec les nouveaux mots-clés. Continuer ?",
+    "Enregistrer"
+  );
+  if (!confirmed) return;
+
   if (btn) { btn.disabled = true; btn.textContent = "Enregistrement…"; }
   _setPriorityKeywordsMsg(msg, "");
   try {
