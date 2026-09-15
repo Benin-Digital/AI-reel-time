@@ -284,11 +284,12 @@ def _upsert_extraction_result(
             # after resaving its priority keywords specifically to trigger
             # a forced rescore, because content_hash and extraction_method
             # were (correctly) unchanged.
-            if (
+            profile_invalidated = (
                 existing.content_hash != payload.content_hash
                 or existing.extraction_method != payload.extraction_method
                 or force_rebuild_profile
-            ):
+            )
+            if profile_invalidated:
                 existing.parsed_profile = None
                 existing.parsed_profile_hash = None
                 existing.parsed_profile_updated_at = None
@@ -300,6 +301,23 @@ def _upsert_extraction_result(
             existing.error_message = payload.error_message
             session.commit()
             session.refresh(existing)
+            # Real bug reported live (2026-09-15): invalidating the cached
+            # profile above (needed so a parser.py/taxonomy.py fix actually
+            # takes effect) used to just leave it at None forever -- nothing
+            # in THIS branch ever rebuilt it, unlike the brand-new-document
+            # branch below. Every forced rescore this whole session (a
+            # scoring-profile or priority-keywords save, /matches/recompute,
+            # "Relancer l'IA") invalidates parsed_profile for every ACTIVE
+            # counterpart it touches, so this silently emptied person_name/
+            # job_title for any CV or job matched against a job whose
+            # settings changed -- with no automatic repair, since nothing
+            # else routinely calls _get_or_build_profile for an existing
+            # document. The match list's cv_label/job_label then fell back
+            # to the raw filename stem (see _cv_label/_job_label in
+            # routers/matches.py) for every one of them, permanently.
+            if profile_invalidated and existing.extraction_success:
+                kind = _resolve_role(Path(payload.file_path)) or "cv"
+                _get_or_build_profile(session, existing, kind)
             return ExtractedTextRead.model_validate(existing)
 
         extraction = ExtractedText(

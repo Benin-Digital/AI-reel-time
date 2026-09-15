@@ -149,8 +149,18 @@ def test_forcing_docling_over_a_plain_text_cache_invalidates_parsed_profile(cv_f
         row = session.query(ExtractedText).filter_by(file_path=str(cv_file)).one()
         assert row.extraction_method == "docling"
         assert row.extracted_text == "richer structured text"
-        assert row.parsed_profile is None, "changing extraction method must invalidate the stale cached profile"
-        assert row.parsed_profile_hash is None
+        # Regression reelle (2026-09-15) : invalider le profil perime ne
+        # suffit pas -- s'il n'est jamais RECONSTRUIT dans la foulee, il
+        # reste a None indefiniment (rien d'autre ne le regenere pour un
+        # document deja connu), et le nom du candidat/titre de poste
+        # disparait de partout ou le cache est lu (voir cv_label/job_label,
+        # routers/matches.py) jusqu'a une action manuelle non garantie.
+        assert row.parsed_profile is not None, (
+            "le profil perime doit etre RECONSTRUIT avec le nouveau texte "
+            "extrait, pas seulement invalide puis laisse a None"
+        )
+        assert row.parsed_profile != {"full_name": "stale"}
+        assert row.parsed_profile_hash == row.content_hash
 
 
 def test_force_true_invalidates_parsed_profile_even_when_content_and_method_are_unchanged(
@@ -178,10 +188,54 @@ def test_force_true_invalidates_parsed_profile_even_when_content_and_method_are_
 
     with session_factory() as session:
         row = session.query(ExtractedText).filter_by(file_path=str(cv_file)).one()
+        # Une simple inegalite a l'ancienne valeur perimee ne suffit pas a
+        # prouver une reconstruction : None satisfait aussi "!= stale" (voir
+        # la regression reelle du 2026-09-15 -- ce test passait deja avec le
+        # bug present, puisque le profil restait bloque a None au lieu
+        # d'etre reconstruit).
+        assert row.parsed_profile is not None, (
+            "force=True doit RECONSTRUIRE le profil structure, pas "
+            "seulement l'invalider et le laisser a None"
+        )
         assert row.parsed_profile != {"full_name": "stale"}, (
             "force=True doit reconstruire le profil structure avec le code "
             "actuel meme quand le contenu et la methode d'extraction "
             "n'ont pas change"
+        )
+
+
+def test_candidate_name_survives_a_forced_rescore(tmp_path, monkeypatch, session_factory):
+    """Bout-en-bout, avec le vrai symptome signale en direct par
+    l'utilisateur (2026-09-15) : "avant je voyais le nom des candidats,
+    maintenant je vois le nom du fichier". Chaque recalcul force (un
+    changement de profil de ponderation ou de mots-cles prioritaires,
+    POST /matches/recompute, "Relancer l'IA") invalide parsed_profile pour
+    CHAQUE CV actif matche contre l'offre concernee -- sans reconstruction
+    automatique, person_name (et donc cv_label dans la liste des
+    correspondances) disparaissait purement et simplement pour tous les
+    CV touches par un recalcul force, jusqu'a une action manuelle."""
+    cv_path = tmp_path / "cv.txt"
+    cv_path.write_text("Jean DUPONT\nDéveloppeur Python, 5 ans d'expérience. Compétences : Python, Django.")
+
+    app_main._extract_and_persist(cv_path)
+
+    with session_factory() as session:
+        row = session.query(ExtractedText).filter_by(file_path=str(cv_path)).one()
+        assert row.parsed_profile is not None
+        name_before = row.parsed_profile.get("person_name")
+    assert name_before, "le nom doit etre detecte des la premiere extraction"
+
+    # Same forced rescore every job-side save (scoring profile, priority
+    # keywords) or /matches/recompute triggers for every active CV matched
+    # against that job.
+    app_main._extract_and_persist(cv_path, force=True)
+
+    with session_factory() as session:
+        row = session.query(ExtractedText).filter_by(file_path=str(cv_path)).one()
+        assert row.parsed_profile is not None
+        assert row.parsed_profile.get("person_name") == name_before, (
+            "le nom du candidat doit survivre a un recalcul force, pas "
+            "disparaitre (repli sur le nom de fichier cote frontend)"
         )
 
 
