@@ -14,7 +14,6 @@ import { initDeleteConfirm, initGenericConfirm } from "./utils/upload.js";
 
 document.addEventListener("DOMContentLoaded", () => {
   initAuth();
-  initRouter();
   initDeleteConfirm();
   initGenericConfirm();
 
@@ -44,4 +43,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (panel === "admin")          window.dispatchEvent(new CustomEvent("load-admin"));
     if (panel === "feedback-stats") window.dispatchEvent(new CustomEvent("load-feedback-stats"));
   });
+
+  // initRouter() calls navigateTo(store.activePanel) synchronously as its
+  // last step, which immediately runs every onPanelChange callback above --
+  // it must run AFTER those registrations, or the very first navigation on
+  // a fresh page load (there is no earlier one) fires with an empty
+  // listener list. Real bug this caused: the dashboard's "Meilleure
+  // correspondance active" card only ever loads via the "load-dashboard"
+  // event dispatched here, so on every reload it stayed empty until the
+  // user clicked the sidebar's own "Tableau de bord" link (a SECOND,
+  // later navigation, by which point this callback was registered) --
+  // while the other two dashboard cards looked unaffected only because
+  // initMetrics() fetches its own data directly, independent of routing.
+  initRouter();
 });
