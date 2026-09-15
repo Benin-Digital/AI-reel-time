@@ -540,6 +540,11 @@
               <input id="filterJob" type="number" placeholder="ID offre" style="width:90px" />
               <input id="minScore"  type="number" placeholder="Score min" min="0" max="100" style="width:90px" />
               <input id="maxScore"  type="number" placeholder="Score max" min="0" max="100" style="width:90px" />
+              <label style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--text-sm);color:var(--text-secondary);white-space:nowrap">
+                Score min :
+                <input type="range" id="minScoreSlider" min="0" max="100" step="1" value="0" style="width:120px" />
+                <strong id="minScoreSliderValue" style="min-width:2.5em">0%</strong>
+              </label>
               <select id="sortMatches" style="width:auto">
                 <option value="score_desc">Score ↓</option>
                 <option value="score_asc">Score ↑</option>

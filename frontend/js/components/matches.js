@@ -14,6 +14,14 @@ import { canManageUsers } from "../auth.js";
 let _page = 1;
 // Local cache: matchId → decision ("accept" | "reject" | "review")
 const _feedbackCache = new Map();
+
+function _setMinScoreSlider(value) {
+  const n = Math.max(0, Math.min(100, Number(value) || 0));
+  const slider = $("#minScoreSlider");
+  if (slider) slider.value = String(n);
+  const label = $("#minScoreSliderValue");
+  if (label) label.textContent = `${n}%`;
+}
 let _progressPollTimer = null;
 let _progressPollAttempts = 0;
 // Documents flip to "ready" as soon as extraction succeeds, before
@@ -48,9 +56,27 @@ export function initMatches() {
     if (sort) sort.value = "score_desc";
     const includeArchived = $("#includeArchived");
     if (includeArchived) includeArchived.checked = false;
+    _setMinScoreSlider(0);
     _page = 1;
     _load();
   });
+
+  // Quick score-threshold slider: dragging it re-filters live instead of
+  // needing "Appliquer" -- the label updates on every tick of the drag,
+  // and the actual (network) refilter is debounced so sliding across the
+  // whole range doesn't fire a request per pixel.
+  let _minScoreDebounce = null;
+  $("#minScoreSlider")?.addEventListener("input", (e) => {
+    const value = e.target.value;
+    const label = $("#minScoreSliderValue");
+    if (label) label.textContent = `${value}%`;
+    const minScoreInput = $("#minScore");
+    if (minScoreInput) minScoreInput.value = value;
+    clearTimeout(_minScoreDebounce);
+    _minScoreDebounce = setTimeout(() => { _page = 1; _load(); }, 250);
+  });
+  // Typing an exact value in the number field keeps the slider in sync too.
+  $("#minScore")?.addEventListener("input", (e) => _setMinScoreSlider(e.target.value));
 
   $("#matchesPrev")?.addEventListener("click", () => { if (_page > 1) { _page--; _load(); } });
   $("#matchesNext")?.addEventListener("click", () => { _page++; _load(); });
