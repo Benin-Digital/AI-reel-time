@@ -226,6 +226,19 @@ def assign_documents_to_session(session_id: int, payload: SessionAssignRequest) 
 
 @router.post("/sessions/{session_id}/unassign", response_model=AnalysisSessionDetailRead)
 def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
+    """Detach every CV/offre from this archive session and delete the
+    now-empty session record.
+
+    Real bug reported live (2026-09-15): this used to only detach the
+    documents and reopen the session (status="open"), leaving the empty
+    AnalysisSession row behind forever -- the Archives list kept showing
+    it ("0 CV, 0 offres, 0 matches") after every unarchive, since nothing
+    ever removed the session record itself, only its documents. An
+    archive session with nothing left in it serves no purpose, so
+    unarchiving now dissolves it entirely instead of leaving a ghost
+    entry -- matching delete_analysis_session's own behavior when
+    delete_documents is requested, just without touching the files.
+    """
     with SessionLocal() as session:
         session_obj = session.get(AnalysisSession, session_id)
         if not session_obj:
@@ -236,16 +249,12 @@ def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
         session.execute(
             update(JobDocument).where(JobDocument.session_id == session_id).values(session_id=None)
         )
-        session_obj.status = "open"
-        session_obj.closed_at = None
-        session.commit()
-        session.refresh(session_obj)
-        return AnalysisSessionDetailRead(
+        result = AnalysisSessionDetailRead(
             id=session_obj.id,
             name=session_obj.name,
             description=session_obj.description,
-            status=session_obj.status,
-            closed_at=session_obj.closed_at,
+            status="open",
+            closed_at=None,
             cv_count=0,
             job_count=0,
             match_count=0,
@@ -254,6 +263,9 @@ def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
             cv_documents=[],
             job_documents=[],
         )
+        session.delete(session_obj)
+        session.commit()
+        return result
 
 
 @router.delete("/sessions/{session_id}", status_code=204, response_model=None)
