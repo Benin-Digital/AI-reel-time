@@ -201,3 +201,33 @@ def test_list_matches_leaves_component_scores_null_for_a_provisional_match(sessi
 
     assert results[0].score_skills is None
     assert results[0].score_semantic is None
+
+
+def test_list_matches_includes_priority_keywords_missing(session_factory):
+    """La carte de correspondance (frontend) affiche desormais le NOM de
+    chaque mot-cle prioritaire manquant, pas seulement le compte -- sans
+    passer par GET /matches/{id}/explain (recalcul complet, couteux).
+    Necessite que GET /matches transporte bien la colonne persistee."""
+    with session_factory() as session:
+        cv = CvDocument(path="/cv/1.pdf", status="ready")
+        job = JobDocument(path="/job/1.pdf", status="ready")
+        session.add_all([cv, job])
+        session.commit()
+        session.add(MatchResult(
+            cv_id=cv.id, job_id=job.id, score=80.0, score_skills=0.9,
+            priority_keywords_matched_count=1, priority_keywords_total=3,
+            priority_keywords_missing="DORA,TRM",
+        ))
+        session.commit()
+
+    results = matches_router.list_matches()
+
+    assert set(results[0].priority_keywords_missing) == {"DORA", "TRM"}
+
+
+def test_list_matches_priority_keywords_missing_defaults_to_empty_list(session_factory):
+    _seed_match(session_factory)
+
+    results = matches_router.list_matches()
+
+    assert results[0].priority_keywords_missing == []

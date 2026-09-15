@@ -645,6 +645,12 @@ select:disabled {
   border-radius: var(--radius-full);
 }
 
+.chip--missing {
+  color: var(--color-warning);
+  background: var(--color-warning-subtle);
+  border-color: var(--color-warning-border);
+}
+
 /* ---- MODALS ---- */
 .modal {
   position: fixed;

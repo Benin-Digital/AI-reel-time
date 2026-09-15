@@ -688,6 +688,7 @@ class MatchScore:
     # from "priorities set, none found in this CV".
     score_priority_keywords: float | None = None
     priority_keywords_matched: list[str] = field(default_factory=list)
+    priority_keywords_missing: list[str] = field(default_factory=list)
     priority_keywords_total: int = 0
     # Components whose score is a neutral/default value driven by MISSING
     # information rather than a real comparison (e.g. no language requirement
@@ -1205,6 +1206,7 @@ def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScor
         low_confidence_components=low_confidence,
         score_priority_keywords=round(priority_kw_score, 4) if priority_kw_ok else None,
         priority_keywords_matched=sorted(priority_matched),
+        priority_keywords_missing=sorted(set(priority_all) - set(priority_matched)),
         priority_keywords_total=len(priority_all),
     )
 

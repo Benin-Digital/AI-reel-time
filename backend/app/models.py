@@ -278,14 +278,19 @@ class MatchResult(Base):
     score_contract: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Recruiter-curated priority keywords (see JobDocument.priority_keywords),
     # a component distinct from score_skills -- see matcher.py's
-    # _priority_keyword_score. NULL when the job has none set. Only the
-    # counts are persisted (for the match card, which lists many rows at
-    # once); the full matched/missing term lists are only ever computed
-    # live by GET /matches/{id}/explain, which already re-parses both
-    # documents from scratch.
+    # _priority_keyword_score. NULL when the job has none set.
     score_priority_keywords: Mapped[float | None] = mapped_column(Float, nullable=True)
     priority_keywords_matched_count: Mapped[int | None] = mapped_column(nullable=True)
     priority_keywords_total: Mapped[int | None] = mapped_column(nullable=True)
+    # The MISSING terms' actual names (comma-joined, like common_keywords) --
+    # added so the match card can show which specific priority keywords a
+    # candidate lacks without the cost of GET /matches/{id}/explain (a full
+    # re-parse of both documents). The matched-count columns above predate
+    # this and stayed cheap on purpose; this one is small by construction
+    # (a job's priority keyword list is recruiter-curated and short, unlike
+    # the full auto-detected skill set), so persisting the names here adds
+    # negligible row size for a real UI win.
+    priority_keywords_missing: Mapped[str | None] = mapped_column(Text, nullable=True)
     match_domain: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

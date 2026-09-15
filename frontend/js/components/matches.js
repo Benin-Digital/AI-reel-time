@@ -325,6 +325,16 @@ function _renderMatchCard(match) {
         ${match.priority_keywords_matched_count}/${match.priority_keywords_total} mots-clés prioritaires
       </span>`
     : "";
+  // Which specific priority keywords are absent -- previously only the
+  // count above was visible on the card; seeing the actual missing count
+  // required opening "Analyser" (a full, costly re-parse). Persisted at
+  // scoring time now, so it's free to show here.
+  const missingKeywords = (match.priority_keywords_missing ?? []).filter(Boolean);
+  const missingKeywordsRow = missingKeywords.length
+    ? `<div class="chip-row" style="margin-top:var(--space-2)">
+        ${missingKeywords.map((k) => `<span class="chip chip--missing" title="Mot-clé prioritaire absent de ce CV">${escapeHtml(k)}</span>`).join("")}
+      </div>`
+    : "";
   const current  = _feedbackCache.get(String(match.id)) ?? null;
   const cvLabel  = escapeHtml(match.cv_label || `CV ${match.cv_id}`);
   const jobLabel = escapeHtml(match.job_label || `Offre ${match.job_id}`);
@@ -368,6 +378,7 @@ function _renderMatchCard(match) {
     ${renderScoreBar(score)}
     ${provisionalBanner}
     ${priorityBadge ? `<div>${priorityBadge}</div>` : ""}
+    ${missingKeywordsRow}
     ${_renderComponentScores(match)}
     <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
     ${_renderFeedbackBar(match.id, current)}

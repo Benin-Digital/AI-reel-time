@@ -435,6 +435,7 @@ def _upsert_match_result(
     # (cv_id, job_id) constraint under that overlap.
     cs = component_scores or {}
     common_serialized = serialize_keywords(common)
+    priority_missing_serialized = serialize_keywords(cs.get("priority_keywords_missing") or [])
     insert_values = dict(
         cv_id=cv_id,
         job_id=job_id,
@@ -450,6 +451,7 @@ def _upsert_match_result(
         score_priority_keywords=cs.get("priority_keywords"),
         priority_keywords_matched_count=cs.get("priority_keywords_matched_count"),
         priority_keywords_total=cs.get("priority_keywords_total"),
+        priority_keywords_missing=priority_missing_serialized,
     )
     # A cheap vector-only rescore (no component breakdown) must not blank out
     # a previously-computed detailed breakdown for this pair.
@@ -470,6 +472,7 @@ def _upsert_match_result(
             score_priority_keywords=cs.get("priority_keywords"),
             priority_keywords_matched_count=cs.get("priority_keywords_matched_count"),
             priority_keywords_total=cs.get("priority_keywords_total"),
+            priority_keywords_missing=priority_missing_serialized,
         )
 
     with SessionLocal() as session:
@@ -1136,6 +1139,7 @@ def _vector_match_cv(
                 "priority_keywords": match_result.score_priority_keywords,
                 "priority_keywords_matched_count": len(match_result.priority_keywords_matched),
                 "priority_keywords_total": match_result.priority_keywords_total,
+                "priority_keywords_missing": match_result.priority_keywords_missing,
             }
         else:
             vector_score = _vector_score(float(row.distance))
@@ -1269,6 +1273,7 @@ def _vector_match_job(
                 "priority_keywords": match_result.score_priority_keywords,
                 "priority_keywords_matched_count": len(match_result.priority_keywords_matched),
                 "priority_keywords_total": match_result.priority_keywords_total,
+                "priority_keywords_missing": match_result.priority_keywords_missing,
             }
         else:
             vector_score = _vector_score(float(row.distance))
@@ -1569,6 +1574,7 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                     "priority_keywords": match_result.score_priority_keywords,
                     "priority_keywords_matched_count": len(match_result.priority_keywords_matched),
                     "priority_keywords_total": match_result.priority_keywords_total,
+                    "priority_keywords_missing": match_result.priority_keywords_missing,
                 }
             _insert_score_result(changed_path, job_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common, cs)
@@ -1708,6 +1714,7 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
                     "priority_keywords": match_result.score_priority_keywords,
                     "priority_keywords_matched_count": len(match_result.priority_keywords_matched),
                     "priority_keywords_total": match_result.priority_keywords_total,
+                    "priority_keywords_missing": match_result.priority_keywords_missing,
                 }
             _insert_score_result(cv_path, changed_path, score, common)
             _upsert_match_result(cv_doc.id, job_doc.id, score, common, cs)

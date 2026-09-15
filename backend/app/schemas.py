@@ -242,6 +242,7 @@ class MatchRead(BaseModel):
     score_priority_keywords: float | None = None
     priority_keywords_matched_count: int | None = None
     priority_keywords_total: int | None = None
+    priority_keywords_missing: list[str] = []
     match_domain: str | None = None
     feedback_decision: str | None = None
     feedback_rating: int | None = None

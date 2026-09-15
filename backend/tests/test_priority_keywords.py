@@ -108,6 +108,27 @@ def test_taxonomy_unknown_keyword_absent_from_cv_lowers_the_dedicated_score():
     assert "DORA" not in result.priority_keywords_matched
     assert result.score_priority_keywords == 0.0
     assert result.priority_keywords_total == 1
+    assert result.priority_keywords_missing == ["DORA"]
+
+
+def test_priority_keywords_missing_lists_only_the_unmatched_ones():
+    """priority_keywords_missing doit contenir exactement les mots-cles NON
+    trouves -- ni les trouves, ni des doublons -- pour que la carte de
+    correspondance (frontend) puisse afficher ce qui manque sans rejouer
+    /matches/{id}/explain (recalcul complet, couteux)."""
+    cv = "Développeur backend avec une solide expérience en Python."
+    job = "Poste: Développeur."
+    result = match_cv_to_job(cv, job, priority_keywords="python\nDORA\nTRM")
+    assert result.priority_keywords_matched == ["Python"]
+    assert set(result.priority_keywords_missing) == {"DORA", "TRM"}
+    assert "Python" not in result.priority_keywords_missing
+
+
+def test_priority_keywords_missing_is_empty_when_everything_matches():
+    cv = "Développeur backend avec une solide expérience en Python."
+    job = "Poste: Développeur."
+    result = match_cv_to_job(cv, job, priority_keywords="python")
+    assert result.priority_keywords_missing == []
 
 
 def test_missing_priority_keywords_cap_the_final_score():

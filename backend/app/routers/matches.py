@@ -98,6 +98,7 @@ def _to_match_read(
         score_priority_keywords=row.score_priority_keywords,
         priority_keywords_matched_count=row.priority_keywords_matched_count,
         priority_keywords_total=row.priority_keywords_total,
+        priority_keywords_missing=deserialize_keywords(row.priority_keywords_missing),
         feedback_decision=fb.decision if fb else None,
         feedback_rating=fb.rating if fb else None,
         feedback_comment=fb.comment if fb else None,
