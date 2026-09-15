@@ -1,4 +1,5 @@
 import { initAuth } from "./auth.js";
+import { $ } from "./utils/dom.js";
 import { initRouter, onPanelChange } from "./router.js";
 import { store } from "./store.js";
 import { initMetrics, startAutoRefresh, stopAutoRefresh } from "./components/metrics.js";
@@ -16,6 +17,15 @@ document.addEventListener("DOMContentLoaded", () => {
   initAuth();
   initDeleteConfirm();
   initGenericConfirm();
+
+  // Real full reload (not just a client-side navigateTo("dashboard")):
+  // fetches index.html and every JS/CSS file fresh from the server. This
+  // is the direct fix for the SPA-staleness gotcha hit repeatedly this
+  // session -- a tab left open across a deploy keeps running the OLD
+  // in-memory module even after the new files are live, so a one-click
+  // "actualiser" on the logo (a familiar convention) is a deliberate way
+  // out of that without needing devtools or a manual hard-refresh.
+  $("#sidebarLogoBtn")?.addEventListener("click", () => { window.location.href = "/"; });
 
   initMetrics();
   initCvLibrary();
