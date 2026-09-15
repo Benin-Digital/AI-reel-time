@@ -561,7 +561,7 @@ function _renderExplainContent(data) {
 
 const _SCORE_COMPONENTS = [
   { key: "score_skills",            label: "Compétences" },
-  { key: "score_priority_keywords", label: "Mots-clés prioritaires" },
+  { key: "score_priority_keywords", label: "Mots-clés prio" },
   { key: "score_semantic",          label: "Sémantique" },
   { key: "score_experience",        label: "Expérience" },
   { key: "score_education",         label: "Formation" },
