@@ -607,6 +607,7 @@ select:disabled {
 }
 .score-breakdown__bar {
   flex: 1;
+  min-width: 40px;
   height: 4px;
   background: var(--border-subtle);
   border-radius: var(--radius-full);
