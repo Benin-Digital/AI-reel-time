@@ -3,12 +3,12 @@ Universal skill taxonomy for CV/job matching.
 Covers all professional domains (tech, commercial, finance, HR, marketing,
 legal, logistics, health, construction, education, management).
 
-Inspired by ESCO (https://esco.ec.europa.eu) but embedded as Python data
-to avoid runtime downloads. Extend at startup with load_esco_csv().
+Inspired by ESCO (https://esco.ec.europa.eu) and France Travail's ROME 4.0,
+both embedded as generated Python data (see _rome_skills()/_esco_skills())
+to avoid runtime downloads or CSV parsing on every request.
 """
 from __future__ import annotations
 
-import csv
 import difflib
 import json
 import logging
@@ -495,6 +495,16 @@ def _build_lookup() -> dict[str, str]:
             if key and len(key) >= 2 and key not in _ROME_ALIAS_STOPWORDS and key not in lookup:
                 lookup[key] = canonical
 
+    # Lowest-priority layer: bulk ESCO vocabulary, same "fill gaps only"
+    # rule as ROME above, and checked after it so a ROME alias always wins
+    # a conflict (ROME's short keyword-style labels are the better fit for
+    # this dictionary's exact-phrase matching — see _esco_skills()).
+    for canonical, aliases in _esco_skills().items():
+        for alias in aliases:
+            key = _fold(alias)
+            if key and len(key) >= 2 and key not in lookup:
+                lookup[key] = canonical
+
     return lookup
 
 
@@ -713,39 +723,37 @@ def partition_skills(skills: list[str]) -> tuple[list[str], list[str]]:
     return hard, soft
 
 
-def load_esco_csv(csv_path: str | Path) -> int:
-    """
-    Extend the taxonomy from an ESCO skills CSV export.
-    Returns the number of new canonical skills added.
+_ESCO_SKILLS_PATH = Path(__file__).with_name("esco_skills_data.json")
 
-    Download at: https://esco.ec.europa.eu/en/use-esco/download
-    Expected columns: preferredLabel, altLabels
-    """
-    path = Path(csv_path)
-    if not path.exists():
-        logger.warning("ESCO CSV not found: %s", path)
-        return 0
 
-    added = 0
+@lru_cache(maxsize=1)
+def _esco_skills() -> dict[str, list[str]]:
+    """Bulk skill vocabulary from ESCO v1.2.1's French classification
+    (skills_fr.csv), scoped to skillType=="knowledge" rows with a
+    preferredLabel of at most 3 words.
+
+    Unlike ROME's "referentiel savoir", ESCO's skill labels are mostly full
+    task-phrase sentences ("gerer des demandes d'indemnisation"), not
+    keyword-style terms -- see _rome_skills()'s docstring for why ROME was
+    picked first. Importing all ~14k rows verbatim would mostly add dead
+    weight (sentences that never match any CV/job text via find_skills()'s
+    substring matching) and reintroduce the exact bare-generic-sector-word
+    false positive already fixed once for ROME ("informatique", "finance"
+    are real ESCO preferredLabels too). The word-count + skillType filter
+    and a generic-word stoplist are applied once, offline, when generating
+    esco_skills_data.json -- see backend/scripts is not committed (same as
+    rome_skills_data.json's own one-off generator); only the filtered
+    output is.
+
+    Treated as a strictly lower-priority layer than both the hand-curated
+    _SKILLS and the ROME bulk import: a conflicting alias from either of
+    those always wins (see _build_lookup()).
+    """
     try:
-        with open(path, newline="", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                label = (row.get("preferredLabel") or "").strip()
-                if not label:
-                    continue
-                alt_raw = row.get("altLabels") or ""
-                aliases = [a.strip() for a in re.split(r"[\n|]+", alt_raw) if a.strip()]
-                if label not in _SKILLS:
-                    _SKILLS[label] = [label.lower()] + [a.lower() for a in aliases]
-                    added += 1
-                else:
-                    existing = set(_SKILLS[label])
-                    _SKILLS[label].extend(a.lower() for a in aliases if a.lower() not in existing)
-
-        _build_lookup.cache_clear()
-        logger.info("Loaded %d new skills from ESCO CSV: %s", added, path)
-    except Exception as exc:
-        logger.exception("Failed to load ESCO CSV %s: %s", path, exc)
+        with _ESCO_SKILLS_PATH.open(encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning("ESCO skills data file not found: %s", _ESCO_SKILLS_PATH)
+        return {}
 
     return added
