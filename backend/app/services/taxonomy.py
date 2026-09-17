@@ -205,6 +205,142 @@ _SKILLS: dict[str, list[str]] = {
     "Réseaux informatiques": ["vpn", "dns", "dhcp", "lan", "wan", "mpls", "vlan", "ssh",
                                "ftp", "sftp", "ospf", "san", "ldap", "tcp ip"],
 
+    # ── TECH (COMPLÉMENT 2026-09-17) : data/IA, cloud, DevOps, mobile, ────
+    # tests, cybersécurité, réseaux, design, IoT, jeu vidéo, architecture,
+    # low-code, marketing tech. Demande explicite de couverture exhaustive
+    # du domaine tech ; chaque alias verifie contre le dictionnaire existant
+    # (pas de doublon) et contre le risque de collision avec un mot
+    # francais/anglais ordinaire (meme discipline que "Chef"/"SAS"/
+    # "Eclipse" trouves plus tot le meme jour) -- ex: "solid"/"pandas"/
+    # "sketch" gardes uniquement sous leur forme qualifiee, "Consul" sans
+    # alias nu (collision avec le mot francais "consul").
+    "Scikit-learn": ["scikit learn", "scikit-learn", "sklearn"],
+    "Pandas": ["pandas dataframe", "pandas python"],
+    "NumPy": ["numpy"],
+    "Jupyter": ["jupyter", "jupyter notebook", "jupyterlab"],
+    "Hugging Face": ["hugging face", "huggingface", "transformers library"],
+    "LangChain": ["langchain"],
+    "LLM": ["grands modeles de langage", "large language model", "large language models", "llm"],
+    "IA Générative": ["genai", "generative ai", "ia generative"],
+    "Prompt Engineering": ["conception de prompts", "ingenierie de prompt", "prompt engineering"],
+    "RAG": ["rag", "rag llm", "retrieval augmented generation"],
+    "Base de données vectorielle": ["base de donnees vectorielle", "chromadb", "faiss", "milvus", "pinecone", "vector database", "weaviate"],
+    "OpenAI API": ["chatgpt api", "gpt-4", "gpt4", "openai api"],
+    "Computer Vision": ["computer vision", "opencv"],
+    "MLOps": ["mlflow", "mlops"],
+    "XGBoost": ["xgboost"],
+    "LightGBM": ["lightgbm"],
+    "Reinforcement Learning": ["apprentissage par renforcement", "reinforcement learning"],
+    "Feature Engineering": ["feature engineering", "ingenierie des caracteristiques"],
+    "Databricks": ["databricks"],
+    "PySpark": ["py spark", "pyspark"],
+    "dbt": ["data build tool", "dbt"],
+    "Apache Flink": ["apache flink", "flink"],
+    "Presto/Trino": ["presto db", "presto/trino", "trino sql"],
+    "ClickHouse": ["clickhouse"],
+    "AWS Lambda": ["amazon lambda", "aws lambda"],
+    "Amazon S3": ["amazon s3", "aws s3"],
+    "Amazon RDS": ["amazon rds", "aws rds"],
+    "Amazon EKS": ["amazon eks", "aws eks", "elastic kubernetes service"],
+    "Amazon ECS": ["amazon ecs", "aws ecs", "elastic container service"],
+    "Amazon SQS": ["amazon sqs", "aws sqs"],
+    "Amazon SNS": ["amazon sns", "aws sns"],
+    "Amazon CloudFront": ["amazon cloudfront", "aws cloudfront"],
+    "Amazon VPC": ["amazon vpc", "aws vpc"],
+    "Amazon Route 53": ["amazon route 53", "aws route53", "route 53"],
+    "Azure Functions": ["azure functions"],
+    "Azure DevOps": ["azure devops"],
+    "AKS": ["aks", "aks cluster", "azure kubernetes service"],
+    "Azure Cosmos DB": ["azure cosmos db", "cosmosdb"],
+    "Azure Blob Storage": ["azure blob storage", "blob storage"],
+    "Google BigQuery": ["bigquery", "google bigquery"],
+    "Google Cloud Functions": ["cloud functions gcp", "google cloud functions"],
+    "GKE": ["gke", "gke cluster", "google kubernetes engine"],
+    "Google Pub/Sub": ["google pub sub", "google pub/sub", "pub/sub gcp"],
+    "Multi-cloud": ["cloud hybride", "hybrid cloud", "multi-cloud", "multicloud"],
+    "Helm": ["helm", "helm charts", "helm kubernetes"],
+    "ELK Stack": ["elk stack", "kibana", "logstash"],
+    "HashiCorp Vault": ["hashicorp vault", "vault secrets"],
+    # "Consul" (HashiCorp) sans alias nu : collision avec le mot francais
+    # "consul" (representant diplomatique) -- meme risque que "chef"/"sas".
+    "Consul": ["hashicorp consul"],
+    "ArgoCD": ["argo cd", "argocd"],
+    "GitOps": ["gitops"],
+    "Istio": ["istio", "istio service mesh"],
+    "Service Mesh": ["maillage de services", "service mesh"],
+    "Nginx": ["nginx"],
+    "Apache HTTP Server": ["apache http server", "apache2", "httpd"],
+    "HAProxy": ["haproxy"],
+    "Load Balancing": ["equilibrage de charge", "load balancing", "repartition de charge"],
+    "Packer": ["hashicorp packer", "packer"],
+    "Site Reliability Engineering": ["site reliability engineering", "sre"],
+    "SwiftUI": ["swiftui"],
+    "Jetpack Compose": ["jetpack compose"],
+    "Flutter": ["dart", "flutter"],
+    "Xamarin": ["xamarin"],
+    "Ionic": ["ionic", "ionic framework"],
+    "Neo4j": ["base de donnees graphe", "graph database", "neo4j"],
+    "InfluxDB": ["base de donnees temporelle", "influxdb", "time series database"],
+    "CouchDB": ["apache couchdb", "couchdb"],
+    "JMeter": ["apache jmeter", "jmeter"],
+    "Gatling": ["gatling", "gatling load testing"],
+    "k6": ["grafana k6", "k6", "k6 load testing"],
+    "Appium": ["appium", "appium mobile testing"],
+    "Robot Framework": ["robot framework"],
+    "Burp Suite": ["burp suite", "burpsuite"],
+    "Nmap": ["nmap"],
+    "SOAR": ["security orchestration", "soar", "soar security"],
+    "EDR": ["edr", "edr endpoint", "endpoint detection and response"],
+    "XDR": ["extended detection and response", "xdr", "xdr security"],
+    "Zero Trust": ["architecture zero trust", "zero trust"],
+    "MFA": ["2fa", "authentification a deux facteurs", "authentification multifacteur", "mfa"],
+    "OAuth": ["oauth", "oauth 2.0", "oauth2"],
+    "OpenID Connect": ["oidc", "openid connect"],
+    "JWT": ["json web token", "jwt"],
+    "TLS/SSL": ["certificat ssl", "certificat tls", "ssl", "tls", "tls/ssl"],
+    "IDS/IPS": ["ids ips", "ids/ips", "intrusion detection system", "intrusion prevention system"],
+    "Threat Intelligence": ["renseignement sur la menace", "threat intelligence"],
+    "Red Team / Blue Team": ["blue team", "purple team", "red team", "red team / blue team"],
+    "CTF": ["capture the flag", "ctf", "ctf hacking"],
+    "CVE": ["common vulnerabilities and exposures", "cve"],
+    "Bug Bounty": ["bug bounty"],
+    "Firewall Palo Alto": ["firewall palo alto", "palo alto firewall", "palo alto networks"],
+    "Fortinet": ["fortigate", "fortinet"],
+    "Check Point": ["check point", "check point firewall", "checkpoint firewall"],
+    "SD-WAN": ["sd-wan", "sdwan"],
+    "CDN": ["cdn", "content delivery network", "reseau de diffusion de contenu"],
+    "IPv6": ["ipv6"],
+    # "Sketch" sans alias nu : "sketch" est aussi un mot francais courant
+    # (sketch comique).
+    "Sketch": ["sketch app design"],
+    "Adobe XD": ["adobe xd"],
+    "InVision": ["invision", "invision app"],
+    "Arduino": ["arduino"],
+    "Raspberry Pi": ["raspberry pi"],
+    "RTOS": ["real time operating system", "rtos", "systeme d exploitation temps reel"],
+    "MQTT": ["mqtt"],
+    "IoT": ["internet of things", "iot", "objets connectes"],
+    "Unity": ["unity", "unity 3d", "unity engine"],
+    "Godot": ["godot", "godot engine"],
+    "Design Patterns": ["design patterns", "patrons de conception"],
+    # "SOLID" sans alias nu : "solid" est un mot anglais tres courant dans
+    # les phrases de CV ("solid experience", "solid understanding of...").
+    "SOLID": ["principes solid", "solid principles"],
+    "Domain-Driven Design": ["ddd", "domain driven design", "domain-driven design"],
+    "Event-Driven Architecture": ["architecture evenementielle", "event-driven architecture"],
+    "Architecture Hexagonale": ["architecture hexagonale", "hexagonal architecture", "ports and adapters"],
+    "CQRS": ["command query responsibility segregation", "cqrs"],
+    "Clean Code": ["clean code", "code propre"],
+    "Power Apps": ["microsoft power apps", "power apps"],
+    "Bubble.io": ["bubble no-code", "bubble.io"],
+    "Airtable": ["airtable"],
+    "Zapier": ["zapier"],
+    "Make (Integromat)": ["integromat", "make (integromat)", "make automation"],
+    "Google Tag Manager": ["google tag manager", "gtm"],
+    "SEO/SEA": ["ahrefs", "referencement payant", "semrush", "seo/sea"],
+    "FFmpeg": ["ffmpeg"],
+    "WebRTC": ["webrtc"],
+
     # ── GESTION DE PROJET & MANAGEMENT ────────────────────────────────────
     "Gestion de projet": ["gestion de projet", "project management", "chef de projet", "pilotage de projet", "project manager"],
     "Leadership": ["leadership", "direction d equipe", "team leadership", "encadrement"],
@@ -228,6 +364,67 @@ _SKILLS: dict[str, list[str]] = {
     "Parties prenantes": ["parties prenantes", "stakeholders", "stakeholder management", "gestion des parties prenantes"],
     "Cycle en V": ["cycle en v", "v-model", "v model"],
 
+    # ── MANAGEMENT (COMPLÉMENT 2026-09-17) : outils, méthodologies, ──────
+    # gouvernance, certifications, leadership, entrepreneuriat. Même
+    # discipline que le lot tech : pas d'alias nu risquant de collisionner
+    # avec un mot francais/anglais ordinaire ou un prenom courant (ex:
+    # "notion"/"miro"/"delegation" gardes uniquement sous forme qualifiee).
+    "Trello": ["trello"],
+    "Asana": ["asana"],
+    "Monday.com": ["monday.com", "monday com"],
+    "Microsoft Project": ["microsoft project", "ms project", "msproject"],
+    "Smartsheet": ["smartsheet"],
+    "Notion": ["notion app", "outil notion"],
+    "ClickUp": ["clickup", "click up"],
+    "Wrike": ["wrike"],
+    "Basecamp": ["basecamp"],
+    "OpenProject": ["openproject"],
+    "Miro": ["miro board", "tableau miro"],
+    "OKR": ["okr", "objectifs et resultats cles", "objectives and key results"],
+    "Balanced Scorecard": ["balanced scorecard", "tableau de bord prospectif"],
+    "Analyse SWOT": ["swot", "analyse swot", "forces faiblesses opportunites menaces"],
+    "PESTEL": ["pestel", "analyse pestel"],
+    "Business Model Canvas": ["business model canvas", "bmc"],
+    "Value Proposition Canvas": ["value proposition canvas"],
+    "Benchmarking": ["benchmarking", "benchmark concurrentiel"],
+    "TQM": ["tqm", "total quality management", "management total de la qualite"],
+    "5S": ["methode 5s", "5s lean"],
+    "PDCA": ["pdca", "roue de deming", "plan do check act"],
+    "TPM (maintenance)": ["total productive maintenance", "maintenance productive totale"],
+    "Value Stream Mapping": ["value stream mapping", "cartographie des flux de valeur"],
+    "Hoshin Kanri": ["hoshin kanri"],
+    "Diagramme d'Ishikawa": ["ishikawa", "diagramme d ishikawa", "diagramme causes effets", "arete de poisson"],
+    "COSO": ["coso", "cadre coso", "coso framework"],
+    "ISO 31000": ["iso 31000"],
+    "Due diligence": ["due diligence", "audit d acquisition"],
+    "MBA": ["mba", "master of business administration"],
+    "Executive MBA": ["executive mba", "emba"],
+    "MSP (Managing Successful Programmes)": ["managing successful programmes"],
+    "P3O": ["p3o"],
+    "Gestion de programme": ["gestion de programme", "program management", "programme management"],
+    "Gestion de portefeuille de projets": ["gestion de portefeuille de projets", "portfolio management"],
+    "Comité de direction": ["comite de direction", "codir", "comex", "comite executif"],
+    "Business Unit Management": ["business unit management", "gestion de business unit", "direction de business unit"],
+    "Pilotage d'activité": ["pilotage d activite", "pilotage operationnel"],
+    # "Fusions et acquisitions" existe deja (ROME) sous ce nom exact ; on
+    # ajoute seulement les alias manquants sans creer de canonical rival.
+    "Fusions et acquisitions": ["m&a", "mergers and acquisitions"],
+    "Leadership transformationnel": ["leadership transformationnel", "transformational leadership"],
+    "Leadership situationnel": ["leadership situationnel", "situational leadership"],
+    "Servant Leadership": ["servant leadership", "leadership serviteur"],
+    "Management bienveillant": ["management bienveillant", "management participatif"],
+    "Gestion des fournisseurs": ["gestion des fournisseurs", "vendor management", "supplier management"],
+    "Gestion des sous-traitants": ["gestion des sous-traitants", "management de sous-traitance"],
+    "Gestion de contrats": ["gestion de contrats", "contract management", "suivi contractuel"],
+    "Gestion du temps": ["gestion du temps", "time management"],
+    "Priorisation": ["priorisation", "prioritization", "matrice d eisenhower"],
+    "Prise de décision": ["prise de decision", "decision making", "aide a la decision"],
+    "Délégation": ["delegation de taches", "delegation d equipe"],
+    "Entrepreneuriat": ["entrepreneuriat", "creation d entreprise", "esprit entrepreneurial"],
+    "Intrapreneuriat": ["intrapreneuriat", "intrapreneur"],
+    "Business Plan": ["business plan", "plan d affaires"],
+    "Levée de fonds": ["levee de fonds", "fundraising", "capital-risque", "venture capital"],
+
     # ── COMMERCIAL & VENTE ────────────────────────────────────────────────
     "Développement commercial": ["developpement commercial", "business development", "bizdev", "developpement des affaires", "business developer"],
     "Vente": ["vente", "sales", "commercialisation", "acte de vente", "vendeur", "commercial"],
@@ -241,6 +438,17 @@ _SKILLS: dict[str, list[str]] = {
     "Vente B2C": ["vente b2c", "b2c", "business to consumer", "vente au detail", "vente en magasin"],
     "Trade marketing": ["trade marketing", "animation reseau", "sell-out", "merchandising"],
     "Force de vente": ["force de vente", "animation equipe commerciale", "coaching commercial"],
+
+    # ── COMMERCIAL (COMPLÉMENT 2026-09-17) ───────────────────────────────
+    "SPIN Selling": ["spin selling", "methode spin"],
+    "Challenger Sale": ["challenger sale", "vente challenger"],
+    "Solution Selling": ["solution selling", "vente de solutions"],
+    "Social Selling": ["social selling", "vente sociale"],
+    "Vente à distance": ["vente a distance", "televente"],
+    "Techniques de closing": ["closing commercial", "techniques de closing"],
+    "Vente export": ["vente export", "export sales", "developpement export"],
+    "Sales Navigator": ["sales navigator", "linkedin sales navigator"],
+    "Gestion de rayon": ["gestion de rayon", "chef de rayon"],
 
     # ── MARKETING & COMMUNICATION ──────────────────────────────────────────
     "Marketing digital": ["marketing digital", "digital marketing", "marketing en ligne", "web marketing"],
@@ -256,6 +464,21 @@ _SKILLS: dict[str, list[str]] = {
     "Copywriting": ["copywriting", "redaction publicitaire", "redaction web", "content writing"],
     "Design graphique": ["photoshop", "adobe photoshop", "indesign", "adobe indesign", "illustrator", "canva", "figma", "design graphique", "pao"],
     "WordPress": ["wordpress", "cms", "woocommerce", "prestashop", "shopify"],
+
+    # ── MARKETING (COMPLÉMENT 2026-09-17) ────────────────────────────────
+    # "Marketo" existe deja (ONET) ; on n'y touche pas.
+    "Growth Marketing": ["growth marketing", "growth hacking"],
+    "Marketing Automation": ["marketing automation", "pardot", "activecampaign"],
+    "Études de marché": ["etudes de marche", "market research", "etude marketing"],
+    "Marketing produit": ["marketing produit", "product marketing"],
+    "Influence Marketing": ["influence marketing", "marketing d influence", "influenceurs"],
+    "Publicité": ["publicite", "advertising", "creation publicitaire", "campagne publicitaire"],
+    "Marketing mix": ["marketing mix", "4p marketing"],
+    "Persona marketing": ["persona marketing", "buyer persona"],
+    "A/B Testing": ["a/b testing", "ab testing", "tests ab"],
+    "Marketing international": ["marketing international"],
+    "Storytelling": ["storytelling", "narration de marque", "brand storytelling"],
+    "UGC (contenu généré par les utilisateurs)": ["ugc", "contenu genere par les utilisateurs", "user generated content"],
 
     # ── COMPTABILITÉ & FINANCE ─────────────────────────────────────────────
     "Comptabilité générale": ["comptabilite generale", "comptabilite", "accounting", "tenue de comptabilite", "comptable"],
@@ -273,6 +496,39 @@ _SKILLS: dict[str, list[str]] = {
     "SAP FI": ["sap fi", "sap fico", "sap finance", "finance erp"],
     "Analyse financière": ["analyse financiere", "financial analysis", "analyse de bilan", "analyse des ratios", "modeles financiers"],
 
+    # ── FINANCE (COMPLÉMENT 2026-09-17) ──────────────────────────────────
+    "Finance de marché": ["finance de marche", "capital markets", "salle des marches"],
+    "Trading algorithmique": ["trading algorithmique", "algo trading", "high frequency trading"],
+    "Gestion de patrimoine": ["gestion de patrimoine", "wealth management", "conseiller en gestion de patrimoine", "cgp"],
+    # "Gestion d’actifs" (apostrophe typographique) existe deja via ROME ;
+    # on rejoint EXACTEMENT ce canonical (meme chaine) pour ajouter le seul
+    # alias manquant, plutot que de creer un canonical rival avec une
+    # apostrophe droite.
+    "Gestion d’actifs": ["gestionnaire de portefeuille"],
+    # Idem pour "Finance d'entreprise" (apostrophe droite, deja via ROME).
+    "Finance d'entreprise": ["corporate finance"],
+    "Capital investissement": ["capital investissement", "private equity", "capital developpement"],
+    "Bâle III": ["bale 3", "bale iii", "basel iii"],
+    "Solvabilité II": ["solvabilite 2", "solvabilite ii", "solvency ii"],
+    # "KYC" existe deja (ROME) ; on n'y touche pas et on cree seulement le
+    # volet AML, non couvert.
+    "Lutte anti-blanchiment (AML)": ["aml", "anti money laundering", "lutte anti-blanchiment"],
+    "Crédit bancaire": ["credit bancaire", "analyse credit", "risque de credit", "octroi de credit"],
+    "Middle Office": ["middle office"],
+    "Back Office bancaire": ["back office bancaire", "back office titres"],
+    "Front Office": ["front office"],
+    "Valorisation d'entreprise": ["valorisation d entreprise", "evaluation d entreprise", "dcf valorisation"],
+    "Modélisation financière": ["modelisation financiere", "financial modeling", "excel financier"],
+    "Bloomberg Terminal": ["bloomberg terminal"],
+    "Reuters Eikon": ["reuters eikon", "refinitiv eikon"],
+    "Microfinance": ["microfinance", "institution de microfinance"],
+    "Financement de projet": ["financement de projet", "project finance"],
+    "Titrisation": ["titrisation", "securitization"],
+    "Marchés obligataires": ["marches obligataires", "marche obligataire", "bond market"],
+    "Produits dérivés": ["produits derives", "options et futures"],
+    "Change (Forex)": ["forex", "marche des changes", "trading de devises"],
+    "SWIFT (messagerie bancaire)": ["message swift", "systeme swift", "swift banking"],
+
     # ── RESSOURCES HUMAINES ────────────────────────────────────────────────
     "Recrutement": ["recrutement", "recruitment", "sourcing", "talent acquisition", "chasse de tetes", "recruteur"],
     "GPEC": ["gpec", "gepp", "gestion des emplois et competences", "gestion previsionnelle des emplois"],
@@ -286,6 +542,19 @@ _SKILLS: dict[str, list[str]] = {
     "Qualité de vie au travail": ["qvt", "bien etre au travail", "qualite de vie au travail", "rse", "qualite de vie"],
     "Gestion des conflits": ["gestion des conflits", "mediation", "resolution de conflits"],
 
+    # ── RH (COMPLÉMENT 2026-09-17) ───────────────────────────────────────
+    "Marque employeur": ["marque employeur", "employer branding"],
+    "HRBP (HR Business Partner)": ["hrbp", "hr business partner", "rh de proximite"],
+    "Mobilité interne": ["mobilite interne", "gestion de carriere"],
+    "Entretien annuel": ["entretien annuel", "entretien d evaluation", "entretien professionnel"],
+    "Diversité et inclusion": ["diversite et inclusion", "politique handicap en entreprise"],
+    "Rémunération et avantages sociaux": ["remuneration et avantages sociaux", "compensation and benefits"],
+    "Digitalisation RH": ["digitalisation rh", "digital hr"],
+    "Entretien de recrutement": ["entretien de recrutement", "entretien d embauche"],
+    "LinkedIn Recruiter": ["linkedin recruiter"],
+    "ATS (Applicant Tracking System)": ["ats recrutement", "applicant tracking system", "logiciel de recrutement"],
+    "Bilan de compétences": ["bilan de competences", "bilan professionnel"],
+
     # ── DROIT & JURIDIQUE ─────────────────────────────────────────────────
     "Droit des contrats": ["droit des contrats", "contract law", "redaction de contrats", "droit contractuel"],
     "Droit des affaires": ["droit des affaires", "business law", "droit commercial", "droit des societes"],
@@ -295,6 +564,20 @@ _SKILLS: dict[str, list[str]] = {
     "Contentieux": ["contentieux", "procedure judiciaire", "litige", "plaidoirie"],
     "Droit pénal": ["droit penal", "droit criminel", "procedure penale"],
     "Droit immobilier": ["droit immobilier", "droit de l urbanisme", "droit de la construction"],
+
+    # ── LÉGAL (COMPLÉMENT 2026-09-17) ────────────────────────────────────
+    "Droit international": ["droit international", "droit international prive", "droit international public"],
+    # Bare "arbitrage" exclu : mot francais courant signifiant aussi
+    # "compromis/choix" hors contexte juridique (ex: "faire un arbitrage
+    # entre deux options").
+    "Arbitrage juridique": ["arbitrage juridique", "arbitrage commercial", "procedure d arbitrage"],
+    "Notariat": ["notariat", "notaire", "acte notarie"],
+    "Rédaction juridique": ["redaction juridique", "legal drafting", "redaction d actes"],
+    "Veille juridique": ["veille juridique", "legal watch"],
+    "Droit de la concurrence": ["droit de la concurrence", "droit antitrust"],
+    "Droit bancaire et financier": ["droit bancaire", "droit financier"],
+    "Legal Tech": ["legal tech", "legaltech"],
+    "Juriste d'entreprise": ["juriste d entreprise", "in-house counsel", "corporate counsel"],
 
     # ── ASSURANCE, RISQUE & CONFORMITÉ ──────────────────────────────────────
     # Found empirically: every real job offer sampled from production came
@@ -372,8 +655,30 @@ _SKILLS: dict[str, list[str]] = {
     "Six Sigma": ["six sigma", "6 sigma", "6sigma", "black belt", "green belt", "dmaic"],
     "Qualité": ["management de la qualite", "iso 9001", "certification qualite", "demarche qualite", "smed"],
 
+    # ── LOGISTIQUE (COMPLÉMENT 2026-09-17) ───────────────────────────────
+    "Gestion de flotte": ["gestion de flotte", "fleet management", "gestionnaire de flotte"],
+    "Transport routier": ["transport routier", "affretement routier"],
+    "Transport maritime": ["transport maritime", "fret maritime", "shipping maritime"],
+    "Transport aérien": ["transport aerien", "fret aerien", "air freight"],
+    "Logistique internationale": ["logistique internationale", "chaine logistique internationale"],
+    "Cross-docking": ["cross-docking", "cross docking"],
+    "Gestion des flux": ["gestion des flux", "flux tendus", "juste a temps", "just in time"],
+    "Préparation de commandes": ["preparation de commandes", "picking entrepot", "order picking"],
+    "Traçabilité logistique": ["tracabilite logistique", "suivi de tracabilite"],
+    "Logistique inverse": ["reverse logistics", "logistique inverse", "gestion des retours"],
+    "CACES (chariot élévateur)": ["caces", "chariot elevateur", "conduite de chariot"],
+    "Transitaire": ["transitaire", "commissionnaire de transport"],
+
     # ── SANTÉ & MÉDICAL ───────────────────────────────────────────────────
-    "Soins infirmiers": ["soins infirmiers", "infirmier", "nursing", "soins aux patients", "ide"],
+    # "ide" (Infirmier Diplome d'Etat) deliberately NOT included as a bare
+    # alias: real bug found via testing (2026-09-17) while validating the
+    # O*NET import -- "ide" collides with the extremely common tech
+    # abbreviation IDE (Integrated Development Environment, "Eclipse IDE",
+    # "un bon IDE"...), which this dictionary now covers extensively. A
+    # real nurse's CV says "infirmier"/"soins infirmiers" or spells out
+    # "IDE" with surrounding context far more often than the bare
+    # 3-letter form alone.
+    "Soins infirmiers": ["soins infirmiers", "infirmier", "nursing", "soins aux patients"],
     "Pharmacologie": ["pharmacologie", "pharmacie", "medicaments", "dispensation", "pharmacien"],
     "Soins d'urgence": ["urgences", "soins d urgence", "smur", "reanimation", "samu"],
     "Bloc opératoire": ["bloc operatoire", "chirurgie", "instrumentiste", "aide soignant", "ibode"],
@@ -383,6 +688,28 @@ _SKILLS: dict[str, list[str]] = {
     "Psychologie": ["psychologie", "psychologue", "psychotherapie", "counseling", "therapie"],
     "Nutrition": ["nutrition", "dietetique", "dieteticien", "dietetiste"],
     "Hygiène hospitalière": ["hygiene hospitaliere", "bio-nettoyage", "asepsie", "sterilisation"],
+
+    # ── SANTÉ (COMPLÉMENT 2026-09-17) ────────────────────────────────────
+    # "Odontologie"/"Orthodontie" existent deja (ROME/ESCO) ; on y ajoute
+    # seulement les alias manquants plutot que de creer un "Dentisterie"
+    # rival.
+    "Odontologie": ["chirurgien-dentiste", "soins dentaires"],
+    "Médecine vétérinaire": ["medecine veterinaire", "veterinaire", "soins animaliers"],
+    "Analyses de laboratoire": ["analyses de laboratoire", "laboratoire d analyses medicales"],
+    # "Santé publique"/"Gériatrie" ci-dessous rejoignent des canonicals ROME
+    # deja identiques (meme chaine) ; "epidemiologie"/"gerontologie" deja
+    # couverts separement donc omis ici.
+    "Santé publique": ["promotion de la sante"],
+    "Gestion hospitalière": ["gestion hospitaliere", "administration hospitaliere"],
+    "Aide à domicile": ["aide a domicile", "auxiliaire de vie", "aide medico-psychologique"],
+    "Dispositifs médicaux": ["dispositifs medicaux", "materiel medical"],
+    "Télémédecine": ["telemedecine", "telesante", "teleconsultation"],
+    "Gériatrie": ["soins aux personnes agees", "ehpad"],
+    "Pédiatrie": ["pediatrie", "soins pediatriques"],
+    "Sécurité sociale": ["securite sociale", "assurance maladie", "cpam", "protection sociale"],
+    "Orthophonie": ["orthophonie", "orthophoniste", "reeducation du langage"],
+    "Ergothérapie": ["ergotherapie", "ergotherapeute"],
+    "Sage-femme": ["sage-femme", "maieutique", "obstetrique"],
 
     # ── BTP & CONSTRUCTION ────────────────────────────────────────────────
     "AutoCAD": ["autocad", "cao", "dessin assiste par ordinateur", "dessin technique", "catia", "solidworks"],
@@ -396,12 +723,50 @@ _SKILLS: dict[str, list[str]] = {
     "Métré": ["metre", "metreur", "estimatif", "quantitatif", "bordereau"],
     "QSE": ["qse", "hse", "qhse", "securite chantier", "prevention des risques", "document unique"],
 
+    # ── CONSTRUCTION (COMPLÉMENT 2026-09-17) ─────────────────────────────
+    # "Second oeuvre" et "Economie de la construction" existent deja
+    # (ROME) sous une orthographe legerement differente (oe vs œ, sans
+    # accent vs avec) mais un fold identique ; pas de nouvel alias a
+    # ajouter, donc pas d'entree ici pour eviter un canonical rival.
+    "VRD (Voirie et Réseaux Divers)": ["vrd", "voirie et reseaux divers"],
+    "Permis de construire": ["permis de construire", "dossier de permis", "autorisation d urbanisme"],
+    "RE2020 / Réglementation thermique": ["re2020", "rt2012", "reglementation thermique batiment"],
+    "Matériaux de construction": ["materiaux de construction", "materiaux batiment"],
+    "Engins de chantier": ["engins de chantier", "conduite d engins", "pelleteuse"],
+    "Diagnostic immobilier": ["diagnostic immobilier", "dpe immobilier"],
+    "Economiste de la construction": ["economiste de la construction"],
+    "Coordination SPS": ["coordination sps", "coordinateur sps"],
+    "Topographie": ["topographie", "geometre", "leve topographique"],
+    "Urbanisme": ["urbanisme", "amenagement du territoire", "plan local d urbanisme"],
+
     # ── ÉDUCATION & FORMATION ─────────────────────────────────────────────
     "Pédagogie": ["pedagogie", "pedagogy", "methodes pedagogiques", "ingenierie pedagogique"],
     "E-learning": ["e-learning", "formation en ligne", "enseignement a distance", "mooc", "lms"],
     "Conception pédagogique": ["conception pedagogique", "instructional design", "design pedagogique", "ingenierie de formation"],
     "Tutorat": ["tutorat", "tutoring", "soutien scolaire", "accompagnement scolaire", "tuteur"],
     "Mathématiques": ["mathematiques", "maths", "mathematics", "statistiques appliquees"],
+
+    # ── ÉDUCATION (COMPLÉMENT 2026-09-17) ────────────────────────────────
+    "Andragogie": ["andragogie", "adult learning"],
+    "Différenciation pédagogique": ["differenciation pedagogique", "pedagogie differenciee"],
+    "Classe inversée": ["classe inversee", "flipped classroom"],
+    "Évaluation des apprentissages": ["evaluation des apprentissages", "evaluation formative", "evaluation sommative"],
+    "Moodle": ["moodle"],
+    "Google Classroom": ["google classroom"],
+    "Canvas LMS": ["canvas lms"],
+    "Blackboard": ["blackboard lms"],
+    "Formateur d'adultes": ["formateur d adultes", "formateur professionnel"],
+    "Orientation scolaire et professionnelle": ["orientation scolaire", "orientation professionnelle", "conseiller d orientation"],
+    "Direction d'établissement scolaire": ["direction d etablissement", "chef d etablissement", "proviseur", "principal de college"],
+    "Vie scolaire": ["vie scolaire", "conseiller principal d education", "cpe"],
+    "FLE (Français Langue Étrangère)": ["fle", "francais langue etrangere"],
+    "Didactique": ["didactique", "didactique des disciplines"],
+    "Recherche académique": ["recherche academique", "publication scientifique", "travaux de recherche", "these de doctorat"],
+    "Rédaction de mémoire": ["redaction de memoire", "memoire de recherche"],
+    "Bibliothéconomie": ["bibliotheconomie", "documentaliste", "sciences de l information"],
+    "Petite enfance": ["petite enfance", "eveil de l enfant", "auxiliaire de puericulture"],
+    "Apprentissage par projet": ["apprentissage par projet", "project-based learning", "pedagogie de projet"],
+    "Gamification pédagogique": ["gamification pedagogique", "ludopedagogie", "serious game"],
 
     # ── COMPÉTENCES TRANSVERSALES ──────────────────────────────────────────
     "Travail en équipe": ["travail en equipe", "teamwork", "esprit d equipe", "collaboration", "team player"],
@@ -415,6 +780,22 @@ _SKILLS: dict[str, list[str]] = {
     "Force de proposition": ["force de proposition", "proactif", "proactivite", "initiative", "acteur du changement"],
     "Gestion du stress": ["gestion du stress", "resistance au stress", "sang-froid", "resilience"],
     "Permis B": ["permis b", "permis de conduire", "vehicule leger"],
+
+    # ── GÉNÉRAL / TRANSVERSAL (COMPLÉMENT 2026-09-17) ────────────────────
+    "Multilinguisme": ["multilinguisme", "bilingue", "trilingue", "multilingual"],
+    # Bare "responsabilite" exclu : trop generique, collisionne avec les
+    # en-tetes de section de CV ("Responsabilites : ...") sans indiquer une
+    # competence demontree.
+    "Sens des responsabilités": ["sens des responsabilites", "sens du devoir"],
+    "Curiosité intellectuelle": ["curiosite intellectuelle", "curiosite professionnelle"],
+    "Esprit critique": ["esprit critique", "pensee critique", "critical thinking"],
+    "Capacité d'apprentissage": ["capacite d apprentissage", "apprentissage continu", "learning agility"],
+    "Orientation résultats": ["orientation resultats", "orientation performance"],
+    "Discrétion professionnelle": ["discretion professionnelle", "devoir de reserve"],
+    "Empathie": ["empathie", "ecoute empathique"],
+    # "Ethique professionnelle" (sans accent) existe deja (ROME) sous ce
+    # nom exact ; on y ajoute seulement les alias manquants.
+    "Ethique professionnelle": ["deontologie professionnelle", "integrite professionnelle"],
 }
 
 
@@ -495,11 +876,27 @@ def _build_lookup() -> dict[str, str]:
             if key and len(key) >= 2 and key not in _ROME_ALIAS_STOPWORDS and key not in lookup:
                 lookup[key] = canonical
 
-    # Lowest-priority layer: bulk ESCO vocabulary, same "fill gaps only"
+    # Lower-priority layer: bulk ESCO vocabulary, same "fill gaps only"
     # rule as ROME above, and checked after it so a ROME alias always wins
     # a conflict (ROME's short keyword-style labels are the better fit for
     # this dictionary's exact-phrase matching — see _esco_skills()).
     for canonical, aliases in _esco_skills().items():
+        for alias in aliases:
+            key = _fold(alias)
+            if key and len(key) >= 2 and key not in lookup:
+                lookup[key] = canonical
+
+    # Lowest-priority layer: hand-mapped O*NET "Hot Technology" tools --
+    # see _onet_skills(). Checked last so nothing above it is ever
+    # shadowed; in practice the generation script already excludes any
+    # alias resolvable through an earlier layer.
+    for canonical, aliases in _onet_skills().items():
+        for alias in aliases:
+            key = _fold(alias)
+            if key and len(key) >= 2 and key not in lookup:
+                lookup[key] = canonical
+
+    for canonical, aliases in _ecf_skills().items():
         for alias in aliases:
             key = _fold(alias)
             if key and len(key) >= 2 and key not in lookup:
@@ -754,6 +1151,60 @@ def _esco_skills() -> dict[str, list[str]]:
             return json.load(f)
     except FileNotFoundError:
         logger.warning("ESCO skills data file not found: %s", _ESCO_SKILLS_PATH)
+        return {}
+
+
+_ONET_SKILLS_PATH = Path(__file__).with_name("onet_skills_data.json")
+
+
+@lru_cache(maxsize=1)
+def _onet_skills() -> dict[str, list[str]]:
+    """Named tools/technologies from O*NET 31.0's software_skills.csv
+    (public bulk download, no API key needed: onetcenter.org/database.html),
+    filtered to Hot Technology=="Y" (O*NET's own curation flag for
+    prominent/trending tools) then hand-mapped to clean canonical/alias
+    pairs -- only ~100 entries, small enough to hand-review like _SKILLS
+    rather than bulk-imported like ROME/ESCO. English-labelled (US
+    Dept. of Labor source) but that's immaterial here: these are product/
+    brand names (Kubernetes, Snowflake, Terraform...), not translated
+    skill descriptions, so they match the same in French CV/job text.
+
+    Lowest-priority layer, checked last: a conflicting alias from
+    _SKILLS, ROME, or ESCO always wins (see _build_lookup()). In practice
+    there's no real conflict -- the generation script only ever wrote an
+    entry here for aliases not already resolvable through those layers.
+    """
+    try:
+        with _ONET_SKILLS_PATH.open(encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning("O*NET skills data file not found: %s", _ONET_SKILLS_PATH)
+        return {}
+
+
+_ECF_SKILLS_PATH = Path(__file__).with_name("ecf_skills_data.json")
+
+
+@lru_cache(maxsize=1)
+def _ecf_skills() -> dict[str, list[str]]:
+    """The European e-Competence Framework (e-CF) 3.0's 40 ICT
+    competences (CWA 16234-1:2014, CEN), French edition -- a small,
+    fixed, official EU standard, not a bulk vocabulary import. Hand-
+    reviewed like O*NET's Hot Technology subset: "Innovation" and
+    "Tests" excluded as too generic standalone (same risk class as
+    "informatique"/"migration"), everything else kept as its own
+    multi-word French phrase, which is inherently low false-positive
+    risk (see _rome_skills()'s docstring on why short EXACT phrases,
+    not bare single words, are the safe shape for this dictionary).
+
+    Lowest-priority layer alongside O*NET, checked last: a conflicting
+    alias from any earlier layer always wins (see _build_lookup()).
+    """
+    try:
+        with _ECF_SKILLS_PATH.open(encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning("e-CF skills data file not found: %s", _ECF_SKILLS_PATH)
         return {}
 
     return added
