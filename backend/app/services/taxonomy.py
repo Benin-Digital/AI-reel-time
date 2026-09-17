@@ -885,6 +885,83 @@ _SKILLS: dict[str, list[str]] = {
     "WildFly": ["jboss"],
     "Transact-SQL": ["transact sql"],
     "Base de données": ["entrepot de donnees"],
+
+    # ── COMPLÉMENT ISSU DE 33 574 PROFILS CANDIDATS RÉELS (2026-09-17) ──
+    # Extrait des champs "keywords"/"skills" de mod326_js_job_resume.json
+    # (export production, mots-cles auto-declares par les candidats).
+    # Promotions depuis ROME/ESCO/O*NET/e-CF vers le dictionnaire de confiance
+    # manuel (memes noms canoniques exacts, pas de canonical rival cree).
+    # Mots generiques a risque (Architecture/Cycle/marketing/Logistique/
+    # Statistiques/Francais/Technologie/Ecosystemes/Prevention) deliberement
+    # laisses hors de ce niveau, meme piege que Chef/SAS trouve plus tot.
+    # "Projet social" trouve et exclu au niveau ROME (voir
+    # _ROME_ALIAS_STOPWORDS) : collision avec "Chef de projet social media".
+    "Alteryx": ["alteryx"],
+    "Amazon DynamoDB": ["amazon dynamodb"],
+    "Amazon Redshift": ["amazon redshift"],
+    "Apache Airflow": ["apache airflow"],
+    "Apache Tomcat": ["apache tomcat"],
+    "Apple macOS": ["apple macos"],
+    "Application web": ["application web"],
+    "ArcGIS": ["arcgis"],
+    "Asset management": ["asset management"],
+    "Automatisme": ["automatisme"],
+    "BGP": ["bgp"],
+    "Cisco Webex": ["cisco webex"],
+    "Cobol": ["cobol"],
+    "Cognos": ["cognos"],
+    "Cryptomonnaie": ["cryptomonnaie"],
+    "Drupal": ["drupal"],
+    "Développement de logiciels": ["developpement de logiciels"],
+    "E-commerce": ["e-commerce"],
+    "Electromagnétisme": ["electromagnetisme"],
+    "Electronique": ["electronique"],
+    "Fortran": ["fortran"],
+    "GRH": ["grh"],
+    "Gestion de crise": ["gestion de crise"],
+    "Gestion des services informatiques": ["gestion des services informatiques"],
+    "Graphiques animés": ["graphiques animes"],
+    "Génie logiciel": ["genie logiciel"],
+    "Infographie": ["infographie"],
+    "Informatique industrielle": ["informatique industrielle"],
+    "Intelligence artificielle": ["intelligence artificielle"],
+    "JQuery": ["jquery"],
+    "Knowledge Management": ["knowledge management"],
+    "MATLAB": ["matlab"],
+    "Maintenance prédictive": ["maintenance predictive"],
+    "Maltego": ["maltego"],
+    "Marketing relationnel": ["marketing relationnel"],
+    "Maîtrise de la langue française": ["maitrise de la langue francaise"],
+    "Microprogramme": ["microprogramme"],
+    "Microsoft Active Directory": ["microsoft active directory"],
+    "Microsoft Outlook": ["microsoft outlook"],
+    "Microsoft Teams": ["microsoft teams"],
+    "Modélisation orientée objet": ["modelisation orientee objet"],
+    "Monétique": ["monetique"],
+    "Nessus": ["nessus"],
+    "Oracle Cloud": ["oracle cloud"],
+    "Power Platform": ["power platform"],
+    "Puppet": ["puppet"],
+    "RACI": ["raci"],
+    "Red Hat Enterprise Linux": ["red hat enterprise linux"],
+    "Responsive design": ["responsive design"],
+    "Risques technologiques": ["risques technologiques"],
+    "Rédaction de cahier des charges": ["redaction de cahier des charges"],
+    "Rétro-ingénierie": ["retro-ingenierie"],
+    "SAP Concur": ["sap concur"],
+    "Script Shell": ["script shell"],
+    "Service clients": ["service clients"],
+    "Slack": ["slack"],
+    "SoapUI": ["soapui"],
+    "Splunk": ["splunk"],
+    "Systèmes embarqués": ["systemes embarques"],
+    "Sécurité des applications": ["securite des applications"],
+    "Sécurité des réseaux": ["securite des reseaux"],
+    "TensorFlow": ["tensorflow"],
+    "Tests fonctionnels": ["tests fonctionnels"],
+    "Tests utilisateurs": ["tests utilisateurs"],
+    "Traitement du signal": ["traitement du signal"],
+    "Wireshark": ["wireshark"],
 }
 
 
@@ -933,7 +1010,14 @@ def _rome_skills() -> dict[str, list[str]]:
 # flowing prose); "son" is excluded by name since it's the only length>=2
 # case found so far. Extend this set if find_skills() regression tests
 # surface more (see test_skill_detection_false_positives.py).
-_ROME_ALIAS_STOPWORDS: frozenset[str] = frozenset({"son"})
+#
+# "projet social" found via a 33 574-profile production scan (2026-09-17):
+# it's meant as the HR/labor-relations sense ("plan social d'entreprise"),
+# but as a bare 2-word phrase it also matches inside the unrelated,
+# extremely common CV job title "Chef de projet social media" -- the
+# n-gram matcher has no way to tell "social" belongs to "social media"
+# rather than being the end of the phrase.
+_ROME_ALIAS_STOPWORDS: frozenset[str] = frozenset({"son", "projet social"})
 
 
 @lru_cache(maxsize=1)
