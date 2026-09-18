@@ -106,6 +106,7 @@ export function initMatches() {
   });
 
   $("#matchesRecomputeBtn")?.addEventListener("click", () => _recomputeMatches());
+  $("#matchesExportCsvBtn")?.addEventListener("click", () => _exportMatchesCsv());
 
   window.addEventListener("load-matches", () => {
     const action = $("#matchesRecomputeAction");
@@ -295,6 +296,44 @@ async function _recomputeMatches() {
     setBanner(msg, err.message, "error");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Relancer l'IA"; }
+  }
+}
+
+// Reads the same filter/sort controls _load() uses to fetch the page, so
+// the CSV always matches what's currently on screen (minus pagination --
+// the export is the full filtered list, not just the visible page).
+function _currentMatchFilterParams() {
+  const includeArchived = $("#includeArchived")?.checked ?? false;
+  return {
+    cv_id:           $("#filterCv")?.value,
+    job_id:          $("#filterJob")?.value,
+    min_score:       $("#minScore")?.value,
+    max_score:       $("#maxScore")?.value,
+    sort_by:         $("#sortMatches")?.value,
+    search:          $("#matchSearch")?.value,
+    unassigned_only: includeArchived ? null : "true",
+  };
+}
+
+async function _exportMatchesCsv() {
+  const btn = $("#matchesExportCsvBtn");
+  const originalText = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = "Export en cours…"; }
+  try {
+    const params = buildParams(_currentMatchFilterParams());
+    const blob = await fetchBlob(`/matches/export.csv${params}`, { timeout: 60000 });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `correspondances-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (err) {
+    setBanner($("#matchesRecomputeMsg"), `Export impossible : ${err.message}`, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalText; }
   }
 }
 

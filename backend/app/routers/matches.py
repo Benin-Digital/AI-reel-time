@@ -1,9 +1,11 @@
 """Endpoints /matches/* et sous-routes /cv-documents/{id}/matches, /job-documents/{id}/matches."""
 from __future__ import annotations
+import csv
+import io
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, or_, select
 
 from ..db import SessionLocal
@@ -225,21 +227,21 @@ def get_match_progress() -> MatchProgressRead:
     )
 
 
-@router.get("/matches", response_model=list[MatchRead])
-def list_matches(
-    page: int = 1,
-    page_size: int = 25,
-    cv_id: int | None = None,
-    job_id: int | None = None,
-    session_id: int | None = None,
-    unassigned_only: bool = False,
-    min_score: float | None = None,
-    max_score: float | None = None,
-    sort_by: str = "score_desc",
-    search: str | None = None,
-) -> list[MatchRead]:
-    safe_size = max(1, min(page_size, 100))
-    safe_offset = max(0, (page - 1) * safe_size)
+def _build_match_filter_stmt(
+    *,
+    cv_id: int | None,
+    job_id: int | None,
+    session_id: int | None,
+    unassigned_only: bool,
+    min_score: float | None,
+    max_score: float | None,
+    sort_by: str,
+    search: str | None,
+):
+    """Shared WHERE/ORDER BY builder for GET /matches and GET /matches/export.csv
+    -- kept in one place so the CSV export can never silently drift from
+    what the recruiter sees on screen (same filters, same sort).
+    """
     stmt = select(MatchResult)
     if session_id is not None or unassigned_only or search:
         stmt = stmt.join(CvDocument, MatchResult.cv_id == CvDocument.id)
@@ -280,12 +282,123 @@ def list_matches(
         stmt = stmt.order_by(MatchResult.created_at.desc())
     else:
         stmt = stmt.order_by(MatchResult.score.desc())
+    return stmt
+
+
+@router.get("/matches", response_model=list[MatchRead])
+def list_matches(
+    page: int = 1,
+    page_size: int = 25,
+    cv_id: int | None = None,
+    job_id: int | None = None,
+    session_id: int | None = None,
+    unassigned_only: bool = False,
+    min_score: float | None = None,
+    max_score: float | None = None,
+    sort_by: str = "score_desc",
+    search: str | None = None,
+) -> list[MatchRead]:
+    safe_size = max(1, min(page_size, 100))
+    safe_offset = max(0, (page - 1) * safe_size)
+    stmt = _build_match_filter_stmt(
+        cv_id=cv_id, job_id=job_id, session_id=session_id,
+        unassigned_only=unassigned_only, min_score=min_score, max_score=max_score,
+        sort_by=sort_by, search=search,
+    )
 
     with SessionLocal() as session:
         rows = session.scalars(stmt.offset(safe_offset).limit(safe_size)).all()
         cv_labels, job_labels = _build_labels(session, rows)
         feedback_map = _build_feedback_map(session, rows)
         return [_to_match_read(row, cv_labels, job_labels, feedback_map) for row in rows]
+
+
+# Hard cap on a single CSV export -- this table can realistically reach
+# hundreds of thousands of rows (every active CV scored against every
+# active job), and an unfiltered "export everything" click shouldn't be
+# able to run an unbounded query or hand back a multi-hundred-MB file.
+# A recruiter exporting for one job/CV (the common case) stays far under
+# this; exporting the whole unfiltered library is expected to need the
+# score/cv_id/job_id filters already available on the page.
+_CSV_EXPORT_MAX_ROWS = 20_000
+
+_CSV_COLUMNS = [
+    "match_id", "score", "cv_id", "cv_label", "job_id", "job_label",
+    "match_domain", "score_skills", "score_semantic", "score_experience",
+    "score_education", "score_languages", "score_contract",
+    "score_priority_keywords", "priority_keywords_matched_count",
+    "priority_keywords_total", "priority_keywords_missing",
+    "common_keywords", "feedback_decision", "feedback_rating",
+    "feedback_comment", "created_at", "updated_at",
+]
+
+
+def _match_csv_row(row: MatchResult, cv_labels: dict, job_labels: dict, feedback_map: dict) -> list:
+    fb = feedback_map.get(row.id)
+    return [
+        row.id,
+        row.score,
+        row.cv_id,
+        cv_labels.get(row.cv_id, ""),
+        row.job_id,
+        job_labels.get(row.job_id, ""),
+        row.match_domain or "",
+        row.score_skills,
+        row.score_semantic,
+        row.score_experience,
+        row.score_education,
+        row.score_languages,
+        row.score_contract,
+        row.score_priority_keywords,
+        row.priority_keywords_matched_count,
+        row.priority_keywords_total,
+        "; ".join(deserialize_keywords(row.priority_keywords_missing)),
+        "; ".join(deserialize_keywords(row.common_keywords)),
+        fb.decision if fb else "",
+        fb.rating if fb else "",
+        fb.comment if fb else "",
+        row.created_at.isoformat() if row.created_at else "",
+        row.updated_at.isoformat() if row.updated_at else "",
+    ]
+
+
+@router.get("/matches/export.csv")
+def export_matches_csv(
+    cv_id: int | None = None,
+    job_id: int | None = None,
+    session_id: int | None = None,
+    unassigned_only: bool = False,
+    min_score: float | None = None,
+    max_score: float | None = None,
+    sort_by: str = "score_desc",
+    search: str | None = None,
+) -> StreamingResponse:
+    """Export the current filtered/sorted match list as CSV -- same filters
+    as GET /matches (see _build_match_filter_stmt), no pagination.
+    """
+    stmt = _build_match_filter_stmt(
+        cv_id=cv_id, job_id=job_id, session_id=session_id,
+        unassigned_only=unassigned_only, min_score=min_score, max_score=max_score,
+        sort_by=sort_by, search=search,
+    )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(_CSV_COLUMNS)
+
+    with SessionLocal() as session:
+        rows = session.scalars(stmt.limit(_CSV_EXPORT_MAX_ROWS)).all()
+        cv_labels, job_labels = _build_labels(session, rows)
+        feedback_map = _build_feedback_map(session, rows)
+        for row in rows:
+            writer.writerow(_match_csv_row(row, cv_labels, job_labels, feedback_map))
+
+    buffer.seek(0)
+    headers = {"Content-Disposition": 'attachment; filename="correspondances.csv"'}
+    # UTF-8 BOM so Excel (the realistic recruiter workflow) auto-detects the
+    # encoding instead of mangling accented names/keywords into mojibake.
+    content = "\ufeff" + buffer.getvalue()
+    return StreamingResponse(iter([content]), media_type="text/csv; charset=utf-8", headers=headers)
 
 
 @router.get("/matches/{match_id}", response_model=MatchRead)

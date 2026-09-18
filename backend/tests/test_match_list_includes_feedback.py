@@ -231,3 +231,61 @@ def test_list_matches_priority_keywords_missing_defaults_to_empty_list(session_f
     results = matches_router.list_matches()
 
     assert results[0].priority_keywords_missing == []
+
+
+def _read_csv_body(response) -> str:
+    import asyncio
+
+    async def _collect():
+        return "".join([chunk async for chunk in response.body_iterator])
+
+    return asyncio.run(_collect())
+
+
+def test_export_matches_csv_includes_header_and_row(session_factory):
+    match_id = _seed_match(session_factory)
+    with session_factory() as session:
+        session.add(MatchFeedback(match_id=match_id, decision="accept", rating=4, comment="Bon profil"))
+        session.commit()
+
+    response = matches_router.export_matches_csv()
+    body = _read_csv_body(response)
+    lines = body.lstrip("﻿").splitlines()
+
+    assert lines[0].split(",")[:3] == ["match_id", "score", "cv_id"]
+    assert len(lines) == 2, "une ligne d'en-tete + une ligne de donnees"
+    assert "accept" in lines[1]
+    assert "Bon profil" in lines[1]
+
+
+def test_export_matches_csv_has_utf8_bom_for_excel(session_factory):
+    _seed_match(session_factory)
+
+    response = matches_router.export_matches_csv()
+    body = _read_csv_body(response)
+
+    assert body.startswith("﻿"), "sans BOM, Excel affiche des accents corrompus (mojibake)"
+
+
+def test_export_matches_csv_respects_the_same_filters_as_list_matches(session_factory):
+    """L'export doit refleter exactement ce que le recruteur voit a l'ecran
+    -- pas de derive possible entre GET /matches et /matches/export.csv
+    puisque les deux partagent _build_match_filter_stmt."""
+    with session_factory() as session:
+        cv = CvDocument(path="/cv/1.pdf", status="ready")
+        job1 = JobDocument(path="/job/1.pdf", status="ready")
+        job2 = JobDocument(path="/job/2.pdf", status="ready")
+        session.add_all([cv, job1, job2])
+        session.commit()
+        session.add_all([
+            MatchResult(cv_id=cv.id, job_id=job1.id, score=90.0),
+            MatchResult(cv_id=cv.id, job_id=job2.id, score=10.0),
+        ])
+        session.commit()
+
+    response = matches_router.export_matches_csv(min_score=50.0)
+    body = _read_csv_body(response)
+    lines = body.lstrip("﻿").splitlines()
+
+    assert len(lines) == 2, "seul le match >= 50 doit apparaitre dans l'export"
+    assert "90.0" in lines[1] or "90" in lines[1]
