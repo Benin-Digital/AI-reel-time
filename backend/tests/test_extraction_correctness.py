@@ -12,10 +12,16 @@
 - clean_text (partage PDF/DOCX/TXT) : la deduplication plafonnait a 2
   occurrences n'importe quelle ligne, supprimant du contenu legitime repete
   (ex: une meme competence citee dans 3+ experiences differentes).
+- DOCX : le texte place dans une zone de texte/forme (<w:txbxContent>) etait
+  entierement invisible -- trouve via un scan des 888 DOCX de production
+  (2026-09-18), 165 fichiers avaient plus de 500 caracteres ainsi caches,
+  certains jusqu'a l'integralite du CV (39 594 caracteres).
 """
 from __future__ import annotations
 
 import docx
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 from app.services.extraction import clean_text, extract_text_from_docx, extract_text_from_txt
 
@@ -59,6 +65,38 @@ def test_docx_captures_header_and_footer_text(tmp_path):
     assert "jean.dupont@email.com" in result
     assert "Corps du document normal." in result
     assert "CV genere le 01/01/2026" in result
+
+
+def test_docx_captures_text_hidden_in_a_textbox(tmp_path):
+    doc = docx.Document()
+    doc.add_paragraph("En-tete visible normalement.")
+
+    # Minimal <w:txbxContent> nested inside a run, the way real CV
+    # templates place a whole sidebar/section inside a text box shape.
+    # python-docx has no high-level textbox API, so this is built directly
+    # from the underlying XML the same way python-docx itself would emit it.
+    textbox_xml = (
+        f'<w:r {nsdecls("w")} xmlns:v="urn:schemas-microsoft-com:vml">'
+        '<w:pict><v:shape>'
+        '<v:textbox><w:txbxContent>'
+        '<w:p><w:r><w:t>Competences: Python, Django, PostgreSQL</w:t></w:r></w:p>'
+        '<w:p><w:r><w:t>Experience: 5 ans en developpement backend</w:t></w:r></w:p>'
+        '</w:txbxContent></v:textbox>'
+        '</v:shape></w:pict></w:r>'
+    )
+    p = doc.add_paragraph()
+    p._p.append(parse_xml(textbox_xml))
+    doc.add_paragraph("Pied de page visible normalement.")
+
+    path = tmp_path / "cv_with_textbox.docx"
+    doc.save(path)
+
+    result = extract_text_from_docx(path)
+
+    assert "En-tete visible normalement." in result
+    assert "Pied de page visible normalement." in result
+    assert "Competences: Python, Django, PostgreSQL" in result
+    assert "Experience: 5 ans en developpement backend" in result
 
 
 def test_txt_decodes_windows_cp1252_smart_quotes(tmp_path):

@@ -464,6 +464,28 @@ def _iter_docx_block_items(doc):
             yield Table(child, doc)
 
 
+def _docx_textbox_lines(paragraph_element) -> list[str]:
+    """Return text found in any <w:txbxContent> (text box) nested in this paragraph.
+
+    Found empirically: 165+ real production DOCX CVs (18.6% of all DOCX in
+    the corpus) build their whole layout out of text boxes/shapes for
+    design reasons -- python-docx's Paragraph.text only walks the
+    paragraph's own direct <w:r> runs, so text nested inside a text box's
+    own <w:txbxContent><w:p> structure is silently invisible, sometimes
+    losing the entire CV body (one file had 39,594 hidden characters).
+    Not an OCR problem: the text is real XML text, just unreached by the
+    normal paragraph/table walk.
+    """
+    lines: list[str] = []
+    for txbx in paragraph_element.iter(qn("w:txbxContent")):
+        for inner_p in txbx.iter(qn("w:p")):
+            texts = [t.text for t in inner_p.iter(qn("w:t")) if t.text]
+            line = "".join(texts).strip()
+            if line:
+                lines.append(line)
+    return lines
+
+
 def _docx_header_footer_lines(doc) -> tuple[list[str], list[str]]:
     """Return (header_lines, footer_lines) across all sections.
 
@@ -495,12 +517,16 @@ def extract_text_from_docx(path: Path) -> str:
                 t = block.text.strip()
                 if t:
                     parts.append(t)
+                parts.extend(_docx_textbox_lines(block._p))
             elif isinstance(block, Table):
                 for row in block.rows:
                     # join cells in same row with tab so columns stay readable
                     cells = [c.text.strip() for c in row.cells if c.text.strip()]
                     if cells:
                         parts.append("\t".join(cells))
+                    for cell in row.cells:
+                        for cell_p in cell.paragraphs:
+                            parts.extend(_docx_textbox_lines(cell_p._p))
 
         parts.extend(footer_lines)
 
