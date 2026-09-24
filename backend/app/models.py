@@ -115,6 +115,7 @@ class CvDocument(Base):
         Index("ix_cv_documents_status", "status"),
         Index("ix_cv_documents_updated_at", "updated_at"),
         Index("ix_cv_documents_session_id", "session_id"),
+        Index("ix_cv_documents_created_by_user_id", "created_by_user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -138,6 +139,17 @@ class CvDocument(Base):
     # tracks the fast default extraction). None = never requested.
     structuring_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     structuring_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Nullable: NULL means "legacy/shared" -- every CV bulk-imported before
+    # this column existed, and anything ingested outside an authenticated
+    # request. Reported bug (2026-09-24, follow-up to the archive-visibility
+    # fix): a profile's in-progress work (uploads still active, not yet
+    # archived) was visible to every other profile, including superadmin --
+    # the requested rule for active documents is stricter than archives:
+    # visible only to the uploader, or to everyone if legacy/shared, with
+    # NO role-hierarchy exception (see deps.owns_or_shared).
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -156,6 +168,7 @@ class JobDocument(Base):
         Index("ix_job_documents_status", "status"),
         Index("ix_job_documents_updated_at", "updated_at"),
         Index("ix_job_documents_session_id", "session_id"),
+        Index("ix_job_documents_created_by_user_id", "created_by_user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -186,6 +199,10 @@ class JobDocument(Base):
     # directly recreates the exact risk that led to removing the old
     # /feedback/apply-weights endpoint (see feedback.py::compute_weights).
     scoring_profile: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # See the matching comment on CvDocument.created_by_user_id above.
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

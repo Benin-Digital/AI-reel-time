@@ -15,14 +15,21 @@ de scores -- qui les prend donc deja en compte, sans second recalcul.
 from __future__ import annotations
 
 import io
+from types import SimpleNamespace
 
 import pytest
 from fastapi import UploadFile
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base, CvDocument, JobDocument, MatchResult, ExtractedText
+from app.models import Base, CvDocument, JobDocument, MatchResult, ExtractedText, User
 import app.main as app_main
+
+
+def _fake_request(user: User) -> SimpleNamespace:
+    """POST /ingest now needs request.state.user (2026-09-24 active-document
+    ownership fix, a follow-up to the archive-visibility one)."""
+    return SimpleNamespace(state=SimpleNamespace(user=user))
 
 
 @pytest.fixture
@@ -31,6 +38,7 @@ def session_factory(monkeypatch, tmp_path):
     Base.metadata.create_all(
         engine,
         tables=[
+            User.__table__,
             CvDocument.__table__,
             JobDocument.__table__,
             MatchResult.__table__,
@@ -47,13 +55,25 @@ def session_factory(monkeypatch, tmp_path):
     return factory
 
 
+@pytest.fixture
+def uploader(session_factory) -> User:
+    with session_factory() as session:
+        user = User(email="uploader@test.local", password_hash="x", role="member")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.expunge(user)
+        return user
+
+
 def _make_upload(filename: str, content: bytes) -> UploadFile:
     return UploadFile(filename=filename, file=io.BytesIO(content))
 
 
-def test_ingest_job_with_priority_keywords_sets_them_on_creation(session_factory):
+def test_ingest_job_with_priority_keywords_sets_them_on_creation(session_factory, uploader):
     upload = _make_upload("offre.txt", b"Poste: Analyste risque.")
     app_main.ingest_file(
+        _fake_request(uploader),
         folder="job", upload=upload, filename=None,
         priority_keywords="gouvernance\nLOD2\nISO 27001",
     )
@@ -63,32 +83,32 @@ def test_ingest_job_with_priority_keywords_sets_them_on_creation(session_factory
         assert job.priority_keywords == "gouvernance\nLOD2\nISO 27001"
 
 
-def test_ingest_job_without_priority_keywords_is_unchanged(session_factory):
+def test_ingest_job_without_priority_keywords_is_unchanged(session_factory, uploader):
     upload = _make_upload("offre.txt", b"Poste: Analyste risque.")
-    app_main.ingest_file(folder="job", upload=upload, filename=None, priority_keywords=None)
+    app_main.ingest_file(_fake_request(uploader), folder="job", upload=upload, filename=None, priority_keywords=None)
 
     with session_factory() as session:
         job = session.scalar(select(JobDocument))
         assert job.priority_keywords is None
 
 
-def test_ingest_job_with_blank_priority_keywords_stores_none(session_factory):
+def test_ingest_job_with_blank_priority_keywords_stores_none(session_factory, uploader):
     upload = _make_upload("offre.txt", b"Poste: Analyste risque.")
-    app_main.ingest_file(folder="job", upload=upload, filename=None, priority_keywords="   \n  ")
+    app_main.ingest_file(_fake_request(uploader), folder="job", upload=upload, filename=None, priority_keywords="   \n  ")
 
     with session_factory() as session:
         job = session.scalar(select(JobDocument))
         assert job.priority_keywords is None
 
 
-def test_ingest_cv_with_priority_keywords_is_rejected(session_factory):
+def test_ingest_cv_with_priority_keywords_is_rejected(session_factory, uploader):
     upload = _make_upload("cv.txt", b"Consultant.")
     with pytest.raises(Exception) as exc_info:
-        app_main.ingest_file(folder="cv", upload=upload, filename=None, priority_keywords="gouvernance")
+        app_main.ingest_file(_fake_request(uploader), folder="cv", upload=upload, filename=None, priority_keywords="gouvernance")
     assert getattr(exc_info.value, "status_code", None) == 400
 
 
-def test_reupload_updates_priority_keywords_on_existing_document(session_factory, tmp_path):
+def test_reupload_updates_priority_keywords_on_existing_document(session_factory, uploader, tmp_path):
     job_dir = tmp_path / "jobs"
     job_dir.mkdir()
     job_path = job_dir / "offre.txt"
@@ -102,6 +122,7 @@ def test_reupload_updates_priority_keywords_on_existing_document(session_factory
 
     upload = _make_upload("offre.txt", b"Poste: Analyste risque, mis a jour.")
     app_main.ingest_file(
+        _fake_request(uploader),
         folder="job", upload=upload, filename="offre.txt", priority_keywords="DORA\nTRM",
     )
 

@@ -10,7 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 
 from ..db import SessionLocal
-from ..deps import can_see_unclaimed_archives, require_user, visible_owner_ids
+from ..deps import can_see_unclaimed_archives, owner_visible_to, require_user, visible_owner_ids
 from ..models import AnalysisSession, CvDocument, ExtractedText, JobDocument, MatchFeedback, MatchResult, User
 
 
@@ -228,11 +228,22 @@ def get_match_progress() -> MatchProgressRead:
 
 
 def _apply_archive_visibility(stmt, db_session: OrmSession, current_user: User):
-    """Exclude any MatchResult whose CV or job sits in an AnalysisSession the
-    caller's role hierarchy can't see (deps.visible_owner_ids) -- shared by
-    every /matches* read path so archive visibility can't be bypassed
-    through a side door (a specific match id, a CV's own match list, etc.)
-    that happens to skip _build_match_filter_stmt.
+    """Exclude any MatchResult the caller's role isn't allowed to see, on
+    either side of the archived/active split (2026-09-24 fix, extended
+    from the original archive-only version) -- shared by every /matches*
+    read path so visibility can't be bypassed through a side door (a
+    specific match id, a CV's own match list, etc.) that happens to skip
+    _build_match_filter_stmt.
+
+    - Archived (session_id set): role-hierarchy rule, same as GET /sessions
+      (deps.visible_owner_ids) -- a superadmin sees an admin's archive.
+    - Active (session_id NULL): stricter, no hierarchy exception -- visible
+      only to the document's own uploader, or to everyone if legacy/shared
+      (created_by_user_id NULL). The matching engine itself
+      (_score_against_counterparts) never creates a MatchResult between two
+      different profiles' private documents, so it's enough to exclude an
+      active document owned by someone else entirely; there's no case where
+      that hides a pair that should stay visible to `current_user`.
     """
     visible_sessions = _visible_analysis_session_ids_subq(db_session, current_user)
     return stmt.where(
@@ -246,6 +257,20 @@ def _apply_archive_visibility(stmt, db_session: OrmSession, current_user: User):
             select(JobDocument.id).where(
                 JobDocument.session_id.isnot(None),
                 JobDocument.session_id.notin_(visible_sessions),
+            )
+        ),
+        MatchResult.cv_id.notin_(
+            select(CvDocument.id).where(
+                CvDocument.session_id.is_(None),
+                CvDocument.created_by_user_id.isnot(None),
+                CvDocument.created_by_user_id != current_user.id,
+            )
+        ),
+        MatchResult.job_id.notin_(
+            select(JobDocument.id).where(
+                JobDocument.session_id.is_(None),
+                JobDocument.created_by_user_id.isnot(None),
+                JobDocument.created_by_user_id != current_user.id,
             )
         ),
     )
@@ -453,22 +478,31 @@ def export_matches_csv(
 
 
 def _match_is_archive_visible(session: OrmSession, match: MatchResult, current_user: User) -> bool:
+    """See _apply_archive_visibility's docstring for the two-tier rule this
+    mirrors for a single already-fetched MatchResult (GET /matches/{id} and
+    /matches/{id}/explain, which fetch by id directly rather than through
+    _build_match_filter_stmt).
+    """
     allowed_ids = visible_owner_ids(session, current_user)
     include_unclaimed = can_see_unclaimed_archives(current_user)
 
-    def _session_visible(session_id: int | None) -> bool:
+    def _side_visible(session_id: int | None, owner_id: int | None) -> bool:
         if session_id is None:
-            return True
-        owner = session.scalar(
+            return owner_visible_to(owner_id, current_user)
+        archive_owner = session.scalar(
             select(AnalysisSession.created_by_user_id).where(AnalysisSession.id == session_id)
         )
-        if owner is None:
+        if archive_owner is None:
             return include_unclaimed
-        return owner in allowed_ids
+        return archive_owner in allowed_ids
 
-    cv_session_id = session.scalar(select(CvDocument.session_id).where(CvDocument.id == match.cv_id))
-    job_session_id = session.scalar(select(JobDocument.session_id).where(JobDocument.id == match.job_id))
-    return _session_visible(cv_session_id) and _session_visible(job_session_id)
+    cv_session_id, cv_owner_id = session.execute(
+        select(CvDocument.session_id, CvDocument.created_by_user_id).where(CvDocument.id == match.cv_id)
+    ).first() or (None, None)
+    job_session_id, job_owner_id = session.execute(
+        select(JobDocument.session_id, JobDocument.created_by_user_id).where(JobDocument.id == match.job_id)
+    ).first() or (None, None)
+    return _side_visible(cv_session_id, cv_owner_id) and _side_visible(job_session_id, job_owner_id)
 
 
 @router.get("/matches/{match_id}", response_model=MatchRead)

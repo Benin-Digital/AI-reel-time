@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, Request
 import redis
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select, true
 from sqlalchemy.orm import Session as OrmSession
 
 from .db import SessionLocal
@@ -81,6 +81,53 @@ def visible_owner_ids(session: OrmSession, current_user: User) -> set[int]:
         others = session.scalars(select(User.id).where(User.role.in_(lower_roles))).all()
         ids.update(others)
     return ids
+
+
+def owner_visible_to(owner_id: int | None, current_user: User) -> bool:
+    """Active-document visibility rule (2026-09-24, follow-up bug report):
+    an active CV/job/match (not yet archived) is visible only to whoever
+    created it, or to everyone if it's legacy/shared (no owner on record)
+    -- unlike archives, there is NO role-hierarchy exception here: a
+    superadmin does not see another profile's in-progress work either.
+    Each profile is meant to be able to run its own analysis on the
+    platform at the same time as everyone else without seeing theirs.
+    """
+    return owner_id is None or owner_id == current_user.id
+
+
+def owners_eligible(owner_a: int | None, owner_b: int | None) -> bool:
+    """Plain-Python counterpart to owner_eligibility_clause, for the
+    in-process matching loop (_score_against_counterparts) rather than a
+    SQL query: are a CV owned by `owner_a` and a job owned by `owner_b`
+    allowed to be matched against each other at all?
+    """
+    return owner_a is None or owner_b is None or owner_a == owner_b
+
+
+def owner_eligibility_clause(column, other_owner_id: int | None):
+    """SQLAlchemy WHERE fragment: is `column` (a created_by_user_id column
+    on the *other* side of a CV/job pair) an eligible counterpart for a
+    document owned by `other_owner_id`? Used both to scope the matching
+    engine itself (main.py's _vector_match_cv/_vector_match_job and the
+    _score_against_counterparts candidate loops) and to filter what's
+    displayed, so a private CV/job can never even get a MatchResult
+    against another profile's private counterpart in the first place --
+    legacy/shared (owner NULL) documents remain eligible with everyone.
+    """
+    if other_owner_id is None:
+        return true()
+    return or_(column.is_(None), column == other_owner_id)
+
+
+def analysis_session_visible_to(session_owner_id: int | None, current_user: User, allowed_ids: set[int]) -> bool:
+    """Archive-hierarchy visibility check for a single AnalysisSession,
+    given its created_by_user_id and the caller's `visible_owner_ids()`
+    set -- shared by routers/sessions.py and main.py so the two never
+    silently drift on what "can see this archive" means.
+    """
+    if session_owner_id is None:
+        return can_see_unclaimed_archives(current_user)
+    return session_owner_id in allowed_ids
 
 
 def can_see_unclaimed_archives(current_user: User) -> bool:

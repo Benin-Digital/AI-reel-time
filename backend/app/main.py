@@ -516,7 +516,7 @@ def _upsert_match_result(
         )
 
 
-def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
+def _matched_all_active_counterparts(doc_id: int, role: str, owner_id: int | None = None) -> bool:
     """True if `doc_id` (a CV or a job) already has a COMPLETE MatchResult
     against every currently-active (non-archived) counterpart.
 
@@ -553,7 +553,10 @@ def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
     with SessionLocal() as session:
         if role == "cv":
             active_counterpart_count = session.scalar(
-                select(func.count()).select_from(JobDocument).where(JobDocument.session_id.is_(None))
+                select(func.count()).select_from(JobDocument).where(
+                    JobDocument.session_id.is_(None),
+                    _owner_eligibility_clause(JobDocument.created_by_user_id, owner_id),
+                )
             ) or 0
             if active_counterpart_count == 0:
                 return True
@@ -565,11 +568,15 @@ def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
                     MatchResult.cv_id == doc_id,
                     JobDocument.session_id.is_(None),
                     MatchResult.score_skills.isnot(None),
+                    _owner_eligibility_clause(JobDocument.created_by_user_id, owner_id),
                 )
             ) or 0
         else:
             active_counterpart_count = session.scalar(
-                select(func.count()).select_from(CvDocument).where(CvDocument.session_id.is_(None))
+                select(func.count()).select_from(CvDocument).where(
+                    CvDocument.session_id.is_(None),
+                    _owner_eligibility_clause(CvDocument.created_by_user_id, owner_id),
+                )
             ) or 0
             if active_counterpart_count == 0:
                 return True
@@ -581,6 +588,7 @@ def _matched_all_active_counterparts(doc_id: int, role: str) -> bool:
                     MatchResult.job_id == doc_id,
                     CvDocument.session_id.is_(None),
                     MatchResult.score_skills.isnot(None),
+                    _owner_eligibility_clause(CvDocument.created_by_user_id, owner_id),
                 )
             ) or 0
     return matched_active_count >= active_counterpart_count
@@ -1122,7 +1130,10 @@ def _vector_match_cv(
             )
             .join(JobDocument, JobEmbedding.job_id == JobDocument.id)
             .join(ExtractedText, ExtractedText.file_path == JobDocument.path, isouter=True)
-            .where(JobDocument.session_id.is_(None))
+            .where(
+                JobDocument.session_id.is_(None),
+                _owner_eligibility_clause(JobDocument.created_by_user_id, cv_doc.created_by_user_id),
+            )
             .order_by(distance.asc())
         ).all()
 
@@ -1250,7 +1261,10 @@ def _vector_match_job(
             )
             .join(CvDocument, CvEmbedding.cv_id == CvDocument.id)
             .join(ExtractedText, ExtractedText.file_path == CvDocument.path, isouter=True)
-            .where(CvDocument.session_id.is_(None))
+            .where(
+                CvDocument.session_id.is_(None),
+                _owner_eligibility_clause(CvDocument.created_by_user_id, job_doc.created_by_user_id),
+            )
             .order_by(distance.asc())
         ).all()
 
@@ -1463,6 +1477,13 @@ def _extract_and_persist(path: Path, force_docling: bool = False, force: bool = 
 
 
 from .deps import cleanup_removed_file as _cleanup_removed_file  # noqa: E402
+from .deps import (  # noqa: E402
+    analysis_session_visible_to as _analysis_session_visible_to,
+    owner_eligibility_clause as _owner_eligibility_clause,
+    owner_visible_to as _owner_visible_to,
+    owners_eligible as _owners_eligible,
+    visible_owner_ids as _visible_owner_ids,
+)
 
 
 def _get_or_build_profile(session: Session, extraction: ExtractedText, kind: str) -> StructuredDocument:
@@ -1525,7 +1546,7 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
             and previous_hash
             and changed_result.content_hash == previous_hash
             and previous_status == "ready"
-            and _matched_all_active_counterparts(cv_doc.id, "cv")
+            and _matched_all_active_counterparts(cv_doc.id, "cv", owner_id=cv_doc.created_by_user_id)
         ):
             return
 
@@ -1551,16 +1572,24 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
             # because dozens of archived CVs/jobs were being silently
             # re-processed first.
             with SessionLocal() as _precheck_session:
-                _already_archived = _precheck_session.scalar(
-                    select(JobDocument.session_id).where(JobDocument.path == str(job_path))
-                )
-            if _already_archived is not None:
+                _precheck_row = _precheck_session.execute(
+                    select(JobDocument.session_id, JobDocument.created_by_user_id)
+                    .where(JobDocument.path == str(job_path))
+                ).first()
+            if _precheck_row is not None and _precheck_row[0] is not None:
+                continue
+            if _precheck_row is not None and not _owners_eligible(cv_doc.created_by_user_id, _precheck_row[1]):
+                # Private documents from two different profiles never match
+                # each other (2026-09-24 fix) -- checked before extraction,
+                # same reasoning as the archived-job pre-check above.
                 continue
             job_result = _extract_and_persist(job_path, force=force)
             job_doc = _upsert_job_document(job_path, job_result)
             if job_doc.session_id is not None:
                 # Still checked here too: a job could have been archived by
                 # a concurrent request in the gap since the pre-check above.
+                continue
+            if not _owners_eligible(cv_doc.created_by_user_id, job_doc.created_by_user_id):
                 continue
             if job_doc.id in matched_job_ids:
                 continue
@@ -1677,7 +1706,7 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
             and previous_hash
             and changed_result.content_hash == previous_hash
             and previous_status == "ready"
-            and _matched_all_active_counterparts(job_doc.id, "job")
+            and _matched_all_active_counterparts(job_doc.id, "job", owner_id=job_doc.created_by_user_id)
         ):
             return
 
@@ -1691,16 +1720,24 @@ def _score_against_counterparts(changed_path: Path, role: str, force: bool = Fal
             # Cheap pre-check BEFORE extraction: see the matching comment
             # in the job branch above.
             with SessionLocal() as _precheck_session:
-                _already_archived = _precheck_session.scalar(
-                    select(CvDocument.session_id).where(CvDocument.path == str(cv_path))
-                )
-            if _already_archived is not None:
+                _precheck_row = _precheck_session.execute(
+                    select(CvDocument.session_id, CvDocument.created_by_user_id)
+                    .where(CvDocument.path == str(cv_path))
+                ).first()
+            if _precheck_row is not None and _precheck_row[0] is not None:
+                continue
+            if _precheck_row is not None and not _owners_eligible(_precheck_row[1], job_doc.created_by_user_id):
+                # Private documents from two different profiles never match
+                # each other (2026-09-24 fix) -- checked before extraction,
+                # same reasoning as the archived-CV pre-check above.
                 continue
             cv_result = _extract_and_persist(cv_path, force=force)
             cv_doc = _upsert_cv_document(cv_path, cv_result)
             if cv_doc.session_id is not None:
                 # Still checked here too: could have been archived by a
                 # concurrent request in the gap since the pre-check above.
+                continue
+            if not _owners_eligible(cv_doc.created_by_user_id, job_doc.created_by_user_id):
                 continue
             if cv_doc.id in matched_cv_ids:
                 continue
@@ -2119,7 +2156,7 @@ def recompute_matches(request: Request) -> dict[str, object]:
 
 
 def _ensure_pending_document_and_unarchive(
-    model: type, path: Path, priority_keywords: str | None = None
+    model: type, path: Path, priority_keywords: str | None = None, created_by_user_id: int | None = None
 ) -> None:
     """Create a pending document record for a freshly uploaded file, or, if
     one already exists at this path, unarchive it unconditionally.
@@ -2145,7 +2182,7 @@ def _ensure_pending_document_and_unarchive(
     with SessionLocal() as session:
         existing = session.scalar(select(model).where(model.path == str(path)))
         if existing is None:
-            new_doc = model(path=str(path), status="pending")
+            new_doc = model(path=str(path), status="pending", created_by_user_id=created_by_user_id)
             if priority_keywords is not None:
                 new_doc.priority_keywords = priority_keywords
             session.add(new_doc)
@@ -2158,17 +2195,27 @@ def _ensure_pending_document_and_unarchive(
             if priority_keywords is not None:
                 existing.priority_keywords = priority_keywords
                 changed = True
+            # Re-uploading through /ingest is an explicit action by whoever
+            # is doing it now -- treat them as the new owner of this active
+            # document rather than leaving a stale/previous uploader's id
+            # (or None) in place, consistent with this same function's
+            # unarchive-on-reupload behavior above.
+            if existing.created_by_user_id != created_by_user_id:
+                existing.created_by_user_id = created_by_user_id
+                changed = True
             if changed:
                 session.commit()
 
 
 @app.post("/ingest")
 def ingest_file(
+    request: Request,
     folder: str = Form(...),
     upload: UploadFile = File(...),
     filename: str | None = Form(None),
     priority_keywords: str | None = Form(None),
 ) -> dict[str, str]:
+    current_user = _require_auth(request)
     if folder not in {"cv", "job"}:
         raise HTTPException(status_code=400, detail="Invalid folder")
     if priority_keywords is not None and folder != "job":
@@ -2210,6 +2257,7 @@ def ingest_file(
         CvDocument if folder == "cv" else JobDocument,
         target_path,
         priority_keywords=(priority_keywords or "").strip() or None,
+        created_by_user_id=current_user.id,
     )
 
     _on_watch_event(
@@ -2689,18 +2737,33 @@ def list_scores(limit: int = 50) -> list[ScoreRead]:
 
 @app.get("/cv-documents", response_model=list[CvDocumentRead])
 def list_cv_documents(
+    request: Request,
     page: int = 1,
     page_size: int = 25,
     status: str | None = None,
     query: str | None = None,
     session_id: int | None = None,
 ) -> list[CvDocumentRead]:
+    current_user = _require_auth(request)
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(CvDocument)
     if session_id is None:
-        stmt = stmt.where(CvDocument.session_id.is_(None))
+        # Active (not yet archived) library -- private per profile, no
+        # role-hierarchy exception (2026-09-24 fix): only the uploader, or
+        # everyone for legacy/shared documents with no recorded owner.
+        stmt = stmt.where(
+            CvDocument.session_id.is_(None),
+            _owner_eligibility_clause(CvDocument.created_by_user_id, current_user.id),
+        )
     else:
+        with SessionLocal() as _vis_session:
+            archive = _vis_session.get(AnalysisSession, session_id)
+            allowed_ids = _visible_owner_ids(_vis_session, current_user)
+        if archive is None or not _analysis_session_visible_to(
+            archive.created_by_user_id, current_user, allowed_ids
+        ):
+            return []
         stmt = stmt.where(CvDocument.session_id == session_id)
     if status:
         stmt = stmt.where(CvDocument.status == status)
@@ -2723,11 +2786,22 @@ def list_cv_documents(
 
 
 @app.get("/cv-documents/{doc_id}", response_model=CvDocumentRead)
-def get_cv_document(doc_id: int) -> CvDocumentRead:
+def get_cv_document(doc_id: int, request: Request) -> CvDocumentRead:
+    current_user = _require_auth(request)
     with SessionLocal() as session:
         doc = session.get(CvDocument, doc_id)
         if not doc:
             raise HTTPException(status_code=404, detail="CV document not found")
+        if doc.session_id is None:
+            if not _owner_visible_to(doc.created_by_user_id, current_user):
+                raise HTTPException(status_code=404, detail="CV document not found")
+        else:
+            archive = session.get(AnalysisSession, doc.session_id)
+            allowed_ids = _visible_owner_ids(session, current_user)
+            if archive is None or not _analysis_session_visible_to(
+                archive.created_by_user_id, current_user, allowed_ids
+            ):
+                raise HTTPException(status_code=404, detail="CV document not found")
         return CvDocumentRead.model_validate(doc)
 
 
@@ -2885,18 +2959,31 @@ def structure_cv_document(doc_id: int) -> dict:
 
 @app.get("/job-documents", response_model=list[JobDocumentRead])
 def list_job_documents(
+    request: Request,
     page: int = 1,
     page_size: int = 25,
     status: str | None = None,
     query: str | None = None,
     session_id: int | None = None,
 ) -> list[JobDocumentRead]:
+    current_user = _require_auth(request)
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
     stmt = select(JobDocument)
     if session_id is None:
-        stmt = stmt.where(JobDocument.session_id.is_(None))
+        # See the matching comment in list_cv_documents above.
+        stmt = stmt.where(
+            JobDocument.session_id.is_(None),
+            _owner_eligibility_clause(JobDocument.created_by_user_id, current_user.id),
+        )
     else:
+        with SessionLocal() as _vis_session:
+            archive = _vis_session.get(AnalysisSession, session_id)
+            allowed_ids = _visible_owner_ids(_vis_session, current_user)
+        if archive is None or not _analysis_session_visible_to(
+            archive.created_by_user_id, current_user, allowed_ids
+        ):
+            return []
         stmt = stmt.where(JobDocument.session_id == session_id)
     if status:
         stmt = stmt.where(JobDocument.status == status)
@@ -2919,11 +3006,22 @@ def list_job_documents(
 
 
 @app.get("/job-documents/{doc_id}", response_model=JobDocumentRead)
-def get_job_document(doc_id: int) -> JobDocumentRead:
+def get_job_document(doc_id: int, request: Request) -> JobDocumentRead:
+    current_user = _require_auth(request)
     with SessionLocal() as session:
         doc = session.get(JobDocument, doc_id)
         if not doc:
             raise HTTPException(status_code=404, detail="JOB document not found")
+        if doc.session_id is None:
+            if not _owner_visible_to(doc.created_by_user_id, current_user):
+                raise HTTPException(status_code=404, detail="JOB document not found")
+        else:
+            archive = session.get(AnalysisSession, doc.session_id)
+            allowed_ids = _visible_owner_ids(session, current_user)
+            if archive is None or not _analysis_session_visible_to(
+                archive.created_by_user_id, current_user, allowed_ids
+            ):
+                raise HTTPException(status_code=404, detail="JOB document not found")
         return JobDocumentRead.model_validate(doc)
 
 

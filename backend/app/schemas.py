@@ -88,10 +88,13 @@ class CvDocumentRead(BaseModel):
     path: str
     content_hash: str | None
     status: str
-    last_error: str | None
     session_id: int | None = None
     structuring_status: str | None = None
     structuring_error: str | None = None
+    # None = legacy/shared (bulk-imported before this column existed, or
+    # ingested outside an authenticated request) -- see deps.owner_visible_to.
+    created_by_user_id: int | None = None
+    last_error: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -109,6 +112,7 @@ class JobDocumentRead(BaseModel):
     structuring_error: str | None = None
     priority_keywords: str | None = None
     scoring_profile: str | None = None
+    created_by_user_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
