@@ -137,7 +137,7 @@
   --nav-item-hover-color:  #e8eaf4;
   --nav-item-active-bg:    rgba(16, 185, 129, 0.12);
   --nav-item-active-color: #10b981;
-  --nav-item-active-border:#10b981;
+  --nav-item-active-border: transparent;
 
   /* Shadows */
   --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.30);
@@ -190,7 +190,7 @@
   --nav-item-hover-color:  #111827;
   --nav-item-active-bg:    rgba(16, 185, 129, 0.08);
   --nav-item-active-color: #10b981;
-  --nav-item-active-border:#10b981;
+  --nav-item-active-border: transparent;
 
   /* Shadows */
   --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.07);
