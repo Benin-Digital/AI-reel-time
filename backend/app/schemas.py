@@ -143,6 +143,13 @@ class AnalysisSessionRead(BaseModel):
     match_count: int | None = None
     created_at: datetime
     updated_at: datetime
+    # Populated for every archive (including the caller's own) so the
+    # frontend decides on its own whether to show an owner badge -- see
+    # deps.visible_owner_ids for the role-hierarchy rule that already
+    # filtered this list down to what the caller may see at all.
+    created_by_user_id: int | None = None
+    created_by_label: str | None = None
+    created_by_role: str | None = None
 
 
 class AnalysisSessionDetailRead(AnalysisSessionRead):

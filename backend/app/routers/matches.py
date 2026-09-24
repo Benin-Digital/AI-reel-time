@@ -4,12 +4,14 @@ import csv
 import io
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session as OrmSession
 
 from ..db import SessionLocal
-from ..models import CvDocument, ExtractedText, JobDocument, MatchFeedback, MatchResult
+from ..deps import can_see_unclaimed_archives, require_user, visible_owner_ids
+from ..models import AnalysisSession, CvDocument, ExtractedText, JobDocument, MatchFeedback, MatchResult, User
 
 
 def _cv_label(path: str, parsed_profile: dict | None) -> str:
@@ -142,30 +144,28 @@ def analyze_texts(payload: AnalyzeRequest) -> JSONResponse:
 
 
 @router.get("/cv-documents/{doc_id}/matches", response_model=list[MatchRead])
-def list_matches_for_cv(doc_id: int, limit: int = 50) -> list[MatchRead]:
+def list_matches_for_cv(doc_id: int, request: Request, limit: int = 50) -> list[MatchRead]:
+    current_user = require_user(request)
     safe_limit = max(1, min(limit, 200))
     with SessionLocal() as session:
-        rows = session.scalars(
-            select(MatchResult)
-            .where(MatchResult.cv_id == doc_id)
-            .order_by(MatchResult.score.desc())
-            .limit(safe_limit)
-        ).all()
+        stmt = _apply_archive_visibility(
+            select(MatchResult).where(MatchResult.cv_id == doc_id), session, current_user
+        )
+        rows = session.scalars(stmt.order_by(MatchResult.score.desc()).limit(safe_limit)).all()
         cv_labels, job_labels = _build_labels(session, rows)
         feedback_map = _build_feedback_map(session, rows)
         return [_to_match_read(row, cv_labels, job_labels, feedback_map) for row in rows]
 
 
 @router.get("/job-documents/{doc_id}/matches", response_model=list[MatchRead])
-def list_matches_for_job(doc_id: int, limit: int = 50) -> list[MatchRead]:
+def list_matches_for_job(doc_id: int, request: Request, limit: int = 50) -> list[MatchRead]:
+    current_user = require_user(request)
     safe_limit = max(1, min(limit, 200))
     with SessionLocal() as session:
-        rows = session.scalars(
-            select(MatchResult)
-            .where(MatchResult.job_id == doc_id)
-            .order_by(MatchResult.score.desc())
-            .limit(safe_limit)
-        ).all()
+        stmt = _apply_archive_visibility(
+            select(MatchResult).where(MatchResult.job_id == doc_id), session, current_user
+        )
+        rows = session.scalars(stmt.order_by(MatchResult.score.desc()).limit(safe_limit)).all()
         cv_labels, job_labels = _build_labels(session, rows)
         feedback_map = _build_feedback_map(session, rows)
         return [_to_match_read(row, cv_labels, job_labels, feedback_map) for row in rows]
@@ -227,8 +227,47 @@ def get_match_progress() -> MatchProgressRead:
     )
 
 
+def _apply_archive_visibility(stmt, db_session: OrmSession, current_user: User):
+    """Exclude any MatchResult whose CV or job sits in an AnalysisSession the
+    caller's role hierarchy can't see (deps.visible_owner_ids) -- shared by
+    every /matches* read path so archive visibility can't be bypassed
+    through a side door (a specific match id, a CV's own match list, etc.)
+    that happens to skip _build_match_filter_stmt.
+    """
+    visible_sessions = _visible_analysis_session_ids_subq(db_session, current_user)
+    return stmt.where(
+        MatchResult.cv_id.notin_(
+            select(CvDocument.id).where(
+                CvDocument.session_id.isnot(None),
+                CvDocument.session_id.notin_(visible_sessions),
+            )
+        ),
+        MatchResult.job_id.notin_(
+            select(JobDocument.id).where(
+                JobDocument.session_id.isnot(None),
+                JobDocument.session_id.notin_(visible_sessions),
+            )
+        ),
+    )
+
+
+def _visible_analysis_session_ids_subq(db_session: OrmSession, current_user: User):
+    """Sub-select of AnalysisSession.id the caller's role hierarchy allows
+    seeing -- same rule as sessions.py's archive list (deps.visible_owner_ids),
+    applied here so an archived match can't leak through GET /matches or
+    the CSV export just because the Archives page itself is filtered.
+    """
+    allowed_ids = visible_owner_ids(db_session, current_user)
+    owner_filter = AnalysisSession.created_by_user_id.in_(allowed_ids)
+    if can_see_unclaimed_archives(current_user):
+        owner_filter = or_(owner_filter, AnalysisSession.created_by_user_id.is_(None))
+    return select(AnalysisSession.id).where(owner_filter)
+
+
 def _build_match_filter_stmt(
     *,
+    db_session: OrmSession,
+    current_user: User,
     cv_id: int | None,
     job_id: int | None,
     session_id: int | None,
@@ -241,8 +280,14 @@ def _build_match_filter_stmt(
     """Shared WHERE/ORDER BY builder for GET /matches and GET /matches/export.csv
     -- kept in one place so the CSV export can never silently drift from
     what the recruiter sees on screen (same filters, same sort).
+
+    Also where archive-visibility is enforced (2026-09-24 fix): a match
+    whose CV or job sits in an AnalysisSession the caller's role can't see
+    is excluded, the same way it's excluded from GET /sessions -- without
+    this, toggling "inclure les archives" on the Correspondances page
+    would still show every archived match to every role.
     """
-    stmt = select(MatchResult)
+    stmt = _apply_archive_visibility(select(MatchResult), db_session, current_user)
     if session_id is not None or unassigned_only or search:
         stmt = stmt.join(CvDocument, MatchResult.cv_id == CvDocument.id)
         stmt = stmt.join(JobDocument, MatchResult.job_id == JobDocument.id)
@@ -287,6 +332,7 @@ def _build_match_filter_stmt(
 
 @router.get("/matches", response_model=list[MatchRead])
 def list_matches(
+    request: Request,
     page: int = 1,
     page_size: int = 25,
     cv_id: int | None = None,
@@ -298,15 +344,17 @@ def list_matches(
     sort_by: str = "score_desc",
     search: str | None = None,
 ) -> list[MatchRead]:
+    current_user = require_user(request)
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
-    stmt = _build_match_filter_stmt(
-        cv_id=cv_id, job_id=job_id, session_id=session_id,
-        unassigned_only=unassigned_only, min_score=min_score, max_score=max_score,
-        sort_by=sort_by, search=search,
-    )
 
     with SessionLocal() as session:
+        stmt = _build_match_filter_stmt(
+            db_session=session, current_user=current_user,
+            cv_id=cv_id, job_id=job_id, session_id=session_id,
+            unassigned_only=unassigned_only, min_score=min_score, max_score=max_score,
+            sort_by=sort_by, search=search,
+        )
         rows = session.scalars(stmt.offset(safe_offset).limit(safe_size)).all()
         cv_labels, job_labels = _build_labels(session, rows)
         feedback_map = _build_feedback_map(session, rows)
@@ -364,6 +412,7 @@ def _match_csv_row(row: MatchResult, cv_labels: dict, job_labels: dict, feedback
 
 @router.get("/matches/export.csv")
 def export_matches_csv(
+    request: Request,
     cv_id: int | None = None,
     job_id: int | None = None,
     session_id: int | None = None,
@@ -376,17 +425,19 @@ def export_matches_csv(
     """Export the current filtered/sorted match list as CSV -- same filters
     as GET /matches (see _build_match_filter_stmt), no pagination.
     """
-    stmt = _build_match_filter_stmt(
-        cv_id=cv_id, job_id=job_id, session_id=session_id,
-        unassigned_only=unassigned_only, min_score=min_score, max_score=max_score,
-        sort_by=sort_by, search=search,
-    )
+    current_user = require_user(request)
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(_CSV_COLUMNS)
 
     with SessionLocal() as session:
+        stmt = _build_match_filter_stmt(
+            db_session=session, current_user=current_user,
+            cv_id=cv_id, job_id=job_id, session_id=session_id,
+            unassigned_only=unassigned_only, min_score=min_score, max_score=max_score,
+            sort_by=sort_by, search=search,
+        )
         rows = session.scalars(stmt.limit(_CSV_EXPORT_MAX_ROWS)).all()
         cv_labels, job_labels = _build_labels(session, rows)
         feedback_map = _build_feedback_map(session, rows)
@@ -401,11 +452,31 @@ def export_matches_csv(
     return StreamingResponse(iter([content]), media_type="text/csv; charset=utf-8", headers=headers)
 
 
+def _match_is_archive_visible(session: OrmSession, match: MatchResult, current_user: User) -> bool:
+    allowed_ids = visible_owner_ids(session, current_user)
+    include_unclaimed = can_see_unclaimed_archives(current_user)
+
+    def _session_visible(session_id: int | None) -> bool:
+        if session_id is None:
+            return True
+        owner = session.scalar(
+            select(AnalysisSession.created_by_user_id).where(AnalysisSession.id == session_id)
+        )
+        if owner is None:
+            return include_unclaimed
+        return owner in allowed_ids
+
+    cv_session_id = session.scalar(select(CvDocument.session_id).where(CvDocument.id == match.cv_id))
+    job_session_id = session.scalar(select(JobDocument.session_id).where(JobDocument.id == match.job_id))
+    return _session_visible(cv_session_id) and _session_visible(job_session_id)
+
+
 @router.get("/matches/{match_id}", response_model=MatchRead)
-def get_match(match_id: int) -> MatchRead:
+def get_match(match_id: int, request: Request) -> MatchRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         match = session.get(MatchResult, match_id)
-        if not match:
+        if not match or not _match_is_archive_visible(session, match, current_user):
             raise HTTPException(status_code=404, detail="Match not found")
         cv_labels, job_labels = _build_labels(session, [match])
         feedback_map = _build_feedback_map(session, [match])
@@ -413,10 +484,11 @@ def get_match(match_id: int) -> MatchRead:
 
 
 @router.get("/matches/{match_id}/explain", response_model=MatchExplainRead)
-def explain_match(match_id: int) -> MatchExplainRead:
+def explain_match(match_id: int, request: Request) -> MatchExplainRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         match = session.get(MatchResult, match_id)
-        if not match:
+        if not match or not _match_is_archive_visible(session, match, current_user):
             raise HTTPException(status_code=404, detail="Match not found")
 
         cv_doc = session.get(CvDocument, match.cv_id)
