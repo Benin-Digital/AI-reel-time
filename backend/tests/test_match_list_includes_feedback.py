@@ -15,12 +15,21 @@ MatchFeedback par match_id, cote /matches, /cv-documents/{id}/matches,
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import pytest
 
-from app.models import Base, CvDocument, ExtractedText, JobDocument, MatchFeedback, MatchResult
+from app.models import AnalysisSession, Base, CvDocument, ExtractedText, JobDocument, MatchFeedback, MatchResult, User
 import app.routers.matches as matches_router
+
+
+def _fake_request(user: User) -> SimpleNamespace:
+    """Every /matches* endpoint now needs request.state.user (2026-09-24
+    archive-visibility fix) -- a bare SimpleNamespace is enough since these
+    endpoints only ever read that one attribute off the request."""
+    return SimpleNamespace(state=SimpleNamespace(user=user))
 
 
 @pytest.fixture
@@ -29,6 +38,8 @@ def session_factory(monkeypatch):
     Base.metadata.create_all(
         engine,
         tables=[
+            User.__table__,
+            AnalysisSession.__table__,
             CvDocument.__table__,
             JobDocument.__table__,
             ExtractedText.__table__,
@@ -39,6 +50,17 @@ def session_factory(monkeypatch):
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(matches_router, "SessionLocal", factory)
     return factory
+
+
+@pytest.fixture
+def member_user(session_factory) -> User:
+    with session_factory() as session:
+        user = User(email="member@test.local", password_hash="x", role="member")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.expunge(user)
+        return user
 
 
 def _seed_match(factory: sessionmaker) -> int:
@@ -53,13 +75,13 @@ def _seed_match(factory: sessionmaker) -> int:
         return match.id
 
 
-def test_list_matches_includes_persisted_feedback(session_factory):
+def test_list_matches_includes_persisted_feedback(session_factory, member_user):
     match_id = _seed_match(session_factory)
     with session_factory() as session:
         session.add(MatchFeedback(match_id=match_id, decision="accept", rating=5, comment="Tres bon profil"))
         session.commit()
 
-    results = matches_router.list_matches()
+    results = matches_router.list_matches(_fake_request(member_user))
 
     assert len(results) == 1
     assert results[0].feedback_decision == "accept"
@@ -67,10 +89,10 @@ def test_list_matches_includes_persisted_feedback(session_factory):
     assert results[0].feedback_comment == "Tres bon profil"
 
 
-def test_list_matches_returns_none_when_no_feedback_yet(session_factory):
+def test_list_matches_returns_none_when_no_feedback_yet(session_factory, member_user):
     _seed_match(session_factory)
 
-    results = matches_router.list_matches()
+    results = matches_router.list_matches(_fake_request(member_user))
 
     assert len(results) == 1
     assert results[0].feedback_decision is None
@@ -78,7 +100,7 @@ def test_list_matches_returns_none_when_no_feedback_yet(session_factory):
     assert results[0].feedback_comment is None
 
 
-def test_list_matches_uses_the_most_recent_feedback_row(session_factory):
+def test_list_matches_uses_the_most_recent_feedback_row(session_factory, member_user):
     """Chaque feedback cree une nouvelle ligne (jamais un update) -- la plus
     recente doit gagner, exactement comme GET /matches/{id}/feedback."""
     match_id = _seed_match(session_factory)
@@ -88,7 +110,7 @@ def test_list_matches_uses_the_most_recent_feedback_row(session_factory):
         session.add(MatchFeedback(match_id=match_id, decision="accept", rating=5, comment="Finalement excellent"))
         session.commit()
 
-    results = matches_router.list_matches()
+    results = matches_router.list_matches(_fake_request(member_user))
 
     assert results[0].feedback_decision == "accept"
     assert results[0].feedback_comment == "Finalement excellent"
@@ -145,20 +167,20 @@ def test_match_progress_unreviewed_count_excludes_matches_with_feedback(session_
     assert progress.unreviewed_count == 1
 
 
-def test_get_match_includes_persisted_feedback(session_factory):
+def test_get_match_includes_persisted_feedback(session_factory, member_user):
     match_id = _seed_match(session_factory)
     with session_factory() as session:
         session.add(MatchFeedback(match_id=match_id, decision="reject", rating=1, comment="Pas assez d'experience"))
         session.commit()
 
-    result = matches_router.get_match(match_id)
+    result = matches_router.get_match(match_id, _fake_request(member_user))
 
     assert result.feedback_decision == "reject"
     assert result.feedback_rating == 1
     assert result.feedback_comment == "Pas assez d'experience"
 
 
-def test_list_matches_includes_component_scores(session_factory):
+def test_list_matches_includes_component_scores(session_factory, member_user):
     """Regression reelle (2026-09-14) : GET /matches ne renvoyait jamais
     score_skills/score_semantic/etc. -- le detail par composant du
     frontend (_renderComponentScores) restait donc vide pour TOUS les
@@ -179,7 +201,7 @@ def test_list_matches_includes_component_scores(session_factory):
         ))
         session.commit()
 
-    results = matches_router.list_matches()
+    results = matches_router.list_matches(_fake_request(member_user))
 
     assert results[0].score_skills == 0.9
     assert results[0].score_semantic == 0.7
@@ -190,20 +212,20 @@ def test_list_matches_includes_component_scores(session_factory):
     assert results[0].match_domain == "tech"
 
 
-def test_list_matches_leaves_component_scores_null_for_a_provisional_match(session_factory):
+def test_list_matches_leaves_component_scores_null_for_a_provisional_match(session_factory, member_user):
     """Non-regression : un match encore au stade cheap-vectoriel (voir
     matcher.py's embedding_top_k) doit continuer a montrer des
     composants a None, pas des zeros -- c'est ce qui permet au frontend
     de distinguer 'pas encore calcule' de 'calcule et faible'."""
     _seed_match(session_factory)  # score=80.0, aucun composant fourni
 
-    results = matches_router.list_matches()
+    results = matches_router.list_matches(_fake_request(member_user))
 
     assert results[0].score_skills is None
     assert results[0].score_semantic is None
 
 
-def test_list_matches_includes_priority_keywords_missing(session_factory):
+def test_list_matches_includes_priority_keywords_missing(session_factory, member_user):
     """La carte de correspondance (frontend) affiche desormais le NOM de
     chaque mot-cle prioritaire manquant, pas seulement le compte -- sans
     passer par GET /matches/{id}/explain (recalcul complet, couteux).
@@ -220,15 +242,15 @@ def test_list_matches_includes_priority_keywords_missing(session_factory):
         ))
         session.commit()
 
-    results = matches_router.list_matches()
+    results = matches_router.list_matches(_fake_request(member_user))
 
     assert set(results[0].priority_keywords_missing) == {"DORA", "TRM"}
 
 
-def test_list_matches_priority_keywords_missing_defaults_to_empty_list(session_factory):
+def test_list_matches_priority_keywords_missing_defaults_to_empty_list(session_factory, member_user):
     _seed_match(session_factory)
 
-    results = matches_router.list_matches()
+    results = matches_router.list_matches(_fake_request(member_user))
 
     assert results[0].priority_keywords_missing == []
 
@@ -242,13 +264,13 @@ def _read_csv_body(response) -> str:
     return asyncio.run(_collect())
 
 
-def test_export_matches_csv_includes_header_and_row(session_factory):
+def test_export_matches_csv_includes_header_and_row(session_factory, member_user):
     match_id = _seed_match(session_factory)
     with session_factory() as session:
         session.add(MatchFeedback(match_id=match_id, decision="accept", rating=4, comment="Bon profil"))
         session.commit()
 
-    response = matches_router.export_matches_csv()
+    response = matches_router.export_matches_csv(_fake_request(member_user))
     body = _read_csv_body(response)
     lines = body.lstrip("﻿").splitlines()
 
@@ -258,16 +280,16 @@ def test_export_matches_csv_includes_header_and_row(session_factory):
     assert "Bon profil" in lines[1]
 
 
-def test_export_matches_csv_has_utf8_bom_for_excel(session_factory):
+def test_export_matches_csv_has_utf8_bom_for_excel(session_factory, member_user):
     _seed_match(session_factory)
 
-    response = matches_router.export_matches_csv()
+    response = matches_router.export_matches_csv(_fake_request(member_user))
     body = _read_csv_body(response)
 
     assert body.startswith("﻿"), "sans BOM, Excel affiche des accents corrompus (mojibake)"
 
 
-def test_export_matches_csv_respects_the_same_filters_as_list_matches(session_factory):
+def test_export_matches_csv_respects_the_same_filters_as_list_matches(session_factory, member_user):
     """L'export doit refleter exactement ce que le recruteur voit a l'ecran
     -- pas de derive possible entre GET /matches et /matches/export.csv
     puisque les deux partagent _build_match_filter_stmt."""
@@ -283,7 +305,7 @@ def test_export_matches_csv_respects_the_same_filters_as_list_matches(session_fa
         ])
         session.commit()
 
-    response = matches_router.export_matches_csv(min_score=50.0)
+    response = matches_router.export_matches_csv(_fake_request(member_user), min_score=50.0)
     body = _read_csv_body(response)
     lines = body.lstrip("﻿").splitlines()
 

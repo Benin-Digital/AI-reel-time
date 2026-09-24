@@ -4,13 +4,13 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
-from ..deps import cleanup_removed_file
-from ..models import AnalysisSession, CvDocument, JobDocument, MatchResult
+from ..deps import can_see_unclaimed_archives, cleanup_removed_file, require_user, visible_owner_ids
+from ..models import AnalysisSession, CvDocument, JobDocument, MatchResult, User
 from ..schemas import (
     AnalysisSessionCreate,
     AnalysisSessionDetailRead,
@@ -22,6 +22,41 @@ from ..schemas import (
 )
 
 router = APIRouter(tags=["sessions"])
+
+_ROLE_LABELS = {"member": "utilisateur", "admin": "admin", "superadmin": "superadmin"}
+
+
+def _owner_lookup(session: Session, owner_ids: set[int]) -> dict[int, User]:
+    owner_ids = {i for i in owner_ids if i is not None}
+    if not owner_ids:
+        return {}
+    return {u.id: u for u in session.scalars(select(User).where(User.id.in_(owner_ids))).all()}
+
+
+def _owner_display(user: User | None) -> tuple[str | None, str | None]:
+    if user is None:
+        return None, None
+    name = " ".join(p for p in [user.first_name, user.last_name] if p).strip()
+    label = name or user.email
+    return label, _ROLE_LABELS.get(user.role, user.role)
+
+
+def _visible_session_or_404(session: Session, session_id: int, current_user: User) -> AnalysisSession:
+    """Fetch an AnalysisSession, 404-ing (not 403) if it exists but the
+    caller's role hierarchy doesn't allow seeing it -- a 403 would confirm
+    to a member that *some* archive exists at that id, which is exactly
+    the kind of existence-leak this fix is meant to close.
+    """
+    session_obj = session.get(AnalysisSession, session_id)
+    if not session_obj:
+        raise HTTPException(status_code=404, detail="Analyse session not found")
+    allowed_ids = visible_owner_ids(session, current_user)
+    is_unclaimed = session_obj.created_by_user_id is None
+    if session_obj.created_by_user_id not in allowed_ids and not (
+        is_unclaimed and can_see_unclaimed_archives(current_user)
+    ):
+        raise HTTPException(status_code=404, detail="Analyse session not found")
+    return session_obj
 
 
 def _calculate_session_counts(session: Session, session_id: int) -> tuple[int, int, int]:
@@ -42,30 +77,38 @@ def _calculate_session_counts(session: Session, session_id: int) -> tuple[int, i
 
 @router.get("/sessions", response_model=list[AnalysisSessionRead])
 def list_analysis_sessions(
+    request: Request,
     page: int = 1,
     page_size: int = 25,
     status: str | None = None,
     search: str | None = None,
 ) -> list[AnalysisSessionRead]:
+    current_user = require_user(request)
     safe_size = max(1, min(page_size, 100))
     safe_offset = max(0, (page - 1) * safe_size)
-    stmt = select(AnalysisSession)
-    if status:
-        stmt = stmt.where(AnalysisSession.status == status)
-    if search:
-        search_expr = f"%{search}%"
-        stmt = stmt.where(
-            or_(
-                AnalysisSession.name.ilike(search_expr),
-                AnalysisSession.description.ilike(search_expr),
-            )
-        )
-    stmt = stmt.order_by(AnalysisSession.id.desc()).offset(safe_offset).limit(safe_size)
     with SessionLocal() as session:
+        allowed_ids = visible_owner_ids(session, current_user)
+        owner_filter = AnalysisSession.created_by_user_id.in_(allowed_ids)
+        if can_see_unclaimed_archives(current_user):
+            owner_filter = or_(owner_filter, AnalysisSession.created_by_user_id.is_(None))
+        stmt = select(AnalysisSession).where(owner_filter)
+        if status:
+            stmt = stmt.where(AnalysisSession.status == status)
+        if search:
+            search_expr = f"%{search}%"
+            stmt = stmt.where(
+                or_(
+                    AnalysisSession.name.ilike(search_expr),
+                    AnalysisSession.description.ilike(search_expr),
+                )
+            )
+        stmt = stmt.order_by(AnalysisSession.id.desc()).offset(safe_offset).limit(safe_size)
         rows = session.scalars(stmt).all()
+        owners = _owner_lookup(session, {r.created_by_user_id for r in rows})
         result = []
         for row in rows:
             cv_count, job_count, match_count = _calculate_session_counts(session, row.id)
+            label, role_label = _owner_display(owners.get(row.created_by_user_id))
             result.append(
                 AnalysisSessionRead(
                     id=row.id,
@@ -78,19 +121,24 @@ def list_analysis_sessions(
                     match_count=match_count,
                     created_at=row.created_at,
                     updated_at=row.updated_at,
+                    created_by_user_id=row.created_by_user_id,
+                    created_by_label=label,
+                    created_by_role=role_label,
                 )
             )
         return result
 
 
 @router.post("/sessions", response_model=AnalysisSessionRead)
-def create_analysis_session(payload: AnalysisSessionCreate) -> AnalysisSessionRead:
+def create_analysis_session(payload: AnalysisSessionCreate, request: Request) -> AnalysisSessionRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
         new_session = AnalysisSession(
             name=payload.name.strip(),
             description=payload.description.strip() if payload.description else None,
             status=payload.status,
             closed_at=datetime.utcnow() if payload.status == "closed" else None,
+            created_by_user_id=current_user.id,
         )
         session.add(new_session)
         session.commit()
@@ -107,15 +155,17 @@ def create_analysis_session(payload: AnalysisSessionCreate) -> AnalysisSessionRe
             match_count=match_count,
             created_at=new_session.created_at,
             updated_at=new_session.updated_at,
+            created_by_user_id=new_session.created_by_user_id,
+            created_by_label=None,
+            created_by_role=_ROLE_LABELS.get(current_user.role, current_user.role),
         )
 
 
 @router.get("/sessions/{session_id}", response_model=AnalysisSessionDetailRead)
-def get_analysis_session(session_id: int) -> AnalysisSessionDetailRead:
+def get_analysis_session(session_id: int, request: Request) -> AnalysisSessionDetailRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
-        session_obj = session.get(AnalysisSession, session_id)
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Analyse session not found")
+        session_obj = _visible_session_or_404(session, session_id, current_user)
 
         cv_docs = session.scalars(
             select(CvDocument)
@@ -128,6 +178,9 @@ def get_analysis_session(session_id: int) -> AnalysisSessionDetailRead:
             .order_by(JobDocument.id.desc())
         ).all()
         cv_count, job_count, match_count = _calculate_session_counts(session, session_id)
+        owner_label, owner_role = _owner_display(
+            _owner_lookup(session, {session_obj.created_by_user_id}).get(session_obj.created_by_user_id)
+        )
         return AnalysisSessionDetailRead(
             id=session_obj.id,
             name=session_obj.name,
@@ -139,17 +192,19 @@ def get_analysis_session(session_id: int) -> AnalysisSessionDetailRead:
             match_count=match_count,
             created_at=session_obj.created_at,
             updated_at=session_obj.updated_at,
+            created_by_user_id=session_obj.created_by_user_id,
+            created_by_label=owner_label,
+            created_by_role=owner_role,
             cv_documents=[CvDocumentRead.model_validate(doc) for doc in cv_docs],
             job_documents=[JobDocumentRead.model_validate(doc) for doc in job_docs],
         )
 
 
 @router.patch("/sessions/{session_id}", response_model=AnalysisSessionRead)
-def update_analysis_session(session_id: int, payload: AnalysisSessionUpdate) -> AnalysisSessionRead:
+def update_analysis_session(session_id: int, payload: AnalysisSessionUpdate, request: Request) -> AnalysisSessionRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
-        session_obj = session.get(AnalysisSession, session_id)
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Analyse session not found")
+        session_obj = _visible_session_or_404(session, session_id, current_user)
 
         if payload.name is not None:
             session_obj.name = payload.name.strip()
@@ -179,11 +234,10 @@ def update_analysis_session(session_id: int, payload: AnalysisSessionUpdate) -> 
 
 
 @router.post("/sessions/{session_id}/assign", response_model=AnalysisSessionDetailRead)
-def assign_documents_to_session(session_id: int, payload: SessionAssignRequest) -> AnalysisSessionDetailRead:
+def assign_documents_to_session(session_id: int, payload: SessionAssignRequest, request: Request) -> AnalysisSessionDetailRead:
+    current_user = require_user(request)
     with SessionLocal() as session:
-        session_obj = session.get(AnalysisSession, session_id)
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Analyse session not found")
+        session_obj = _visible_session_or_404(session, session_id, current_user)
 
         if payload.cv_ids:
             cv_rows = session.scalars(select(CvDocument).where(CvDocument.id.in_(payload.cv_ids))).all()
@@ -225,7 +279,7 @@ def assign_documents_to_session(session_id: int, payload: SessionAssignRequest) 
 
 
 @router.post("/sessions/{session_id}/unassign", response_model=AnalysisSessionDetailRead)
-def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
+def unassign_session_documents(session_id: int, request: Request) -> AnalysisSessionDetailRead:
     """Detach every CV/offre from this archive session and delete the
     now-empty session record.
 
@@ -239,10 +293,9 @@ def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
     entry -- matching delete_analysis_session's own behavior when
     delete_documents is requested, just without touching the files.
     """
+    current_user = require_user(request)
     with SessionLocal() as session:
-        session_obj = session.get(AnalysisSession, session_id)
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Session not found")
+        session_obj = _visible_session_or_404(session, session_id, current_user)
         session.execute(
             update(CvDocument).where(CvDocument.session_id == session_id).values(session_id=None)
         )
@@ -269,11 +322,10 @@ def unassign_session_documents(session_id: int) -> AnalysisSessionDetailRead:
 
 
 @router.delete("/sessions/{session_id}", status_code=204, response_model=None)
-def delete_analysis_session(session_id: int, delete_documents: bool = False) -> None:
+def delete_analysis_session(session_id: int, request: Request, delete_documents: bool = False) -> None:
+    current_user = require_user(request)
     with SessionLocal() as session:
-        session_obj = session.get(AnalysisSession, session_id)
-        if not session_obj:
-            raise HTTPException(status_code=404, detail="Session not found")
+        session_obj = _visible_session_or_404(session, session_id, current_user)
 
         if delete_documents:
             cv_docs  = session.scalars(select(CvDocument).where(CvDocument.session_id == session_id)).all()

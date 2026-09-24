@@ -13,12 +13,20 @@ fois ses documents detaches.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 import pytest
 
-from app.models import AnalysisSession, Base, CvDocument, JobDocument
+from app.models import AnalysisSession, Base, CvDocument, JobDocument, User
 import app.routers.sessions as sessions_router
+
+
+def _fake_request(user: User) -> SimpleNamespace:
+    """Every /sessions/* mutation now needs request.state.user (2026-09-24
+    archive-visibility fix)."""
+    return SimpleNamespace(state=SimpleNamespace(user=user))
 
 
 @pytest.fixture
@@ -26,14 +34,30 @@ def session_factory(monkeypatch):
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(
         engine,
-        tables=[AnalysisSession.__table__, CvDocument.__table__, JobDocument.__table__],
+        tables=[User.__table__, AnalysisSession.__table__, CvDocument.__table__, JobDocument.__table__],
     )
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(sessions_router, "SessionLocal", factory)
     return factory
 
 
-def test_unassign_deletes_the_now_empty_session(session_factory):
+@pytest.fixture
+def admin_user(session_factory) -> User:
+    # admin (not member): the seeded archive below has no created_by_user_id
+    # (legacy/unclaimed) -- deps.can_see_unclaimed_archives only grants
+    # visibility to admin/superadmin, matching this test's actual intent
+    # (can an authenticated caller unarchive this session), not the
+    # separate ownership-visibility rules exercised in test_session_visibility.py.
+    with session_factory() as session:
+        user = User(email="admin@test.local", password_hash="x", role="admin")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.expunge(user)
+        return user
+
+
+def test_unassign_deletes_the_now_empty_session(session_factory, admin_user):
     with session_factory() as session:
         archive = AnalysisSession(name="Lot rhconsole - Session 2", status="closed")
         session.add(archive)
@@ -44,7 +68,7 @@ def test_unassign_deletes_the_now_empty_session(session_factory):
         session.add(JobDocument(path="/job/1.pdf", status="ready", session_id=session_id))
         session.commit()
 
-    result = sessions_router.unassign_session_documents(session_id)
+    result = sessions_router.unassign_session_documents(session_id, _fake_request(admin_user))
 
     assert result.cv_count == 0
     assert result.job_count == 0
@@ -61,9 +85,9 @@ def test_unassign_deletes_the_now_empty_session(session_factory):
         assert job.session_id is None, "l'offre doit redevenir active (session_id NULL)"
 
 
-def test_unassign_missing_session_raises_404(session_factory):
+def test_unassign_missing_session_raises_404(session_factory, admin_user):
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc_info:
-        sessions_router.unassign_session_documents(999)
+        sessions_router.unassign_session_documents(999, _fake_request(admin_user))
     assert exc_info.value.status_code == 404
