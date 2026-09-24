@@ -26,8 +26,10 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
+from fastapi import UploadFile
+
 from app.deps import owners_eligible, owner_visible_to
-from app.models import Base, CvDocument, ExtractedText, JobDocument, MatchResult, ScoreResult, User
+from app.models import AnalysisSession, Base, CvDocument, ExtractedText, JobDocument, MatchResult, ScoreResult, User
 from app.schemas import ExtractedTextRead
 import app.main as app_main
 
@@ -43,6 +45,7 @@ def session_factory(monkeypatch):
         engine,
         tables=[
             User.__table__,
+            AnalysisSession.__table__,
             CvDocument.__table__,
             JobDocument.__table__,
             MatchResult.__table__,
@@ -208,3 +211,122 @@ def test_two_different_profiles_private_documents_never_match(session_factory, t
     assert str(bobs_job_path) not in matched_job_paths, (
         "l'offre privee de bob ne doit jamais matcher avec le CV prive d'alice"
     )
+
+
+# ---------------------------------------------------------------------------
+# Filename-collision bug reported live (2026-09-24): two profiles uploading
+# a same-named file (a very plausible case -- an identical CV/job pair
+# tested from two different profiles) shared ONE CvDocument/JobDocument row
+# (path is UNIQUE), so the second profile's "new" upload silently inherited
+# the first's match history and priority keywords, and the re-upload's
+# unarchive-on-reupload behavior ripped the document out of the first
+# profile's archive, turning it into "0 CV, 0 offres".
+# ---------------------------------------------------------------------------
+
+def _make_upload(filename: str, content: bytes) -> UploadFile:
+    import io
+    return UploadFile(filename=filename, file=io.BytesIO(content))
+
+
+@pytest.fixture
+def ingest_env(session_factory, monkeypatch, tmp_path):
+    monkeypatch.setattr(app_main.settings, "watch_job_dir", str(tmp_path / "jobs"))
+    monkeypatch.setattr(app_main.settings, "watch_cv_dir", str(tmp_path / "cvs"))
+    monkeypatch.setattr(app_main, "_on_watch_event", lambda event: None)
+    return session_factory
+
+
+def test_two_profiles_uploading_the_same_filename_get_two_separate_documents(session_factory, ingest_env):
+    alice = _make_user(session_factory, "alice5@test.local")
+    bob = _make_user(session_factory, "bob5@test.local")
+
+    app_main.ingest_file(
+        _fake_request(alice), folder="job", upload=_make_upload("offre.txt", b"Offre d'Alice"), filename=None, priority_keywords=None,
+    )
+    app_main.ingest_file(
+        _fake_request(bob), folder="job", upload=_make_upload("offre.txt", b"Offre de Bob"), filename=None, priority_keywords=None,
+    )
+
+    with session_factory() as session:
+        jobs = session.scalars(select(JobDocument)).all()
+        assert len(jobs) == 2, "deux profils uploadant 'offre.txt' doivent obtenir deux documents distincts"
+        owners = {j.created_by_user_id for j in jobs}
+        assert owners == {alice.id, bob.id}
+
+
+def test_same_profile_reuploading_the_same_filename_updates_in_place(session_factory, ingest_env):
+    alice = _make_user(session_factory, "alice6@test.local")
+
+    app_main.ingest_file(
+        _fake_request(alice), folder="job", upload=_make_upload("offre.txt", b"V1"),
+        filename=None, priority_keywords="gouvernance",
+    )
+    app_main.ingest_file(
+        _fake_request(alice), folder="job", upload=_make_upload("offre.txt", b"V2"),
+        filename=None, priority_keywords=None,
+    )
+
+    with session_factory() as session:
+        jobs = session.scalars(select(JobDocument)).all()
+        assert len(jobs) == 1, "re-uploader son propre fichier ne doit jamais creer un doublon"
+        assert jobs[0].priority_keywords == "gouvernance", (
+            "priority_keywords non fourni au second upload -> ne doit pas etre efface "
+            "(comportement volontaire, voir _ensure_pending_document_and_unarchive)"
+        )
+
+
+def test_uploading_a_name_that_collides_with_a_legacy_document_does_not_hijack_it(session_factory, ingest_env, tmp_path):
+    job_dir = tmp_path / "jobs"
+    job_dir.mkdir(parents=True)
+    legacy_path = job_dir / "offre.txt"
+    legacy_path.write_text("Offre historique partagee")
+    with session_factory() as session:
+        session.add(JobDocument(path=str(legacy_path), status="ready", created_by_user_id=None))
+        session.commit()
+
+    alice = _make_user(session_factory, "alice7@test.local")
+    app_main.ingest_file(
+        _fake_request(alice), folder="job", upload=_make_upload("offre.txt", b"Nouvelle offre d'Alice"), filename=None, priority_keywords=None,
+    )
+
+    with session_factory() as session:
+        jobs = session.scalars(select(JobDocument)).all()
+        assert len(jobs) == 2, "l'upload d'Alice ne doit pas ecraser le document legacy partage"
+        legacy = session.scalar(select(JobDocument).where(JobDocument.path == str(legacy_path)))
+        assert legacy is not None and legacy.created_by_user_id is None, (
+            "le document legacy doit rester intact, toujours sans proprietaire"
+        )
+
+
+def test_uploading_a_colliding_filename_does_not_empty_another_profiles_archive(session_factory, ingest_env, tmp_path):
+    """Reproduit exactement le second symptome rapporte en direct : l'archive
+    d'un profil tombait a '0 CV, 0 offres' des qu'un autre profil uploadait
+    un fichier de meme nom, parce que les deux profils partageaient la
+    meme ligne CvDocument/JobDocument (re-upload = desarchivage automatique
+    -- voir _ensure_pending_document_and_unarchive)."""
+    alice = _make_user(session_factory, "alice8@test.local")
+    bob = _make_user(session_factory, "bob8@test.local")
+
+    app_main.ingest_file(
+        _fake_request(alice), folder="job", upload=_make_upload("offre.txt", b"Offre d'Alice"), filename=None, priority_keywords=None,
+    )
+    with session_factory() as session:
+        alice_job = session.scalar(select(JobDocument).where(JobDocument.created_by_user_id == alice.id))
+        archive = AnalysisSession(name="Lot d'Alice", status="closed", created_by_user_id=alice.id)
+        session.add(archive)
+        session.commit()
+        session.refresh(archive)
+        alice_job_obj = session.get(JobDocument, alice_job.id)
+        alice_job_obj.session_id = archive.id
+        session.commit()
+        archive_id = archive.id
+
+    app_main.ingest_file(
+        _fake_request(bob), folder="job", upload=_make_upload("offre.txt", b"Offre de Bob"), filename=None, priority_keywords=None,
+    )
+
+    with session_factory() as session:
+        alice_job_after = session.scalar(select(JobDocument).where(JobDocument.created_by_user_id == alice.id))
+        assert alice_job_after.session_id == archive_id, (
+            "l'archive d'alice ne doit pas etre videe par l'upload de bob"
+        )

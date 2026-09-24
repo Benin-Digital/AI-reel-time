@@ -109,6 +109,13 @@ def test_ingest_cv_with_priority_keywords_is_rejected(session_factory, uploader)
 
 
 def test_reupload_updates_priority_keywords_on_existing_document(session_factory, uploader, tmp_path):
+    """Re-uploading a file that already belongs to the SAME profile updates
+    it in place -- distinct from the 2026-09-24 filename-collision fix,
+    which only disambiguates when the existing document belongs to
+    someone else (or is legacy/unowned), see
+    test_active_document_owner_visibility.py and the docstring on
+    _disambiguate_filename_for_owner.
+    """
     job_dir = tmp_path / "jobs"
     job_dir.mkdir()
     job_path = job_dir / "offre.txt"
@@ -116,7 +123,7 @@ def test_reupload_updates_priority_keywords_on_existing_document(session_factory
     with session_factory() as session:
         session.add(JobDocument(
             path=str(job_path), status="ready", session_id="archived-session",
-            priority_keywords="gouvernance",
+            priority_keywords="gouvernance", created_by_user_id=uploader.id,
         ))
         session.commit()
 

@@ -2155,6 +2155,44 @@ def recompute_matches(request: Request) -> dict[str, object]:
     return {"queued": len(queued), "files": queued}
 
 
+def _disambiguate_filename_for_owner(model: type, target_dir: Path, safe_name: str, current_user_id: int) -> str:
+    """Real bug reported live (2026-09-24), a direct consequence of storing
+    every profile's uploads in one shared folder keyed only by filename:
+    two different profiles uploading a file with the SAME NAME (a common
+    case -- testing the exact same CV/job pair, or just an ordinary
+    filename like "CV.pdf") silently collided on the same CvDocument/
+    JobDocument row (path is UNIQUE). The second upload then inherited the
+    first profile's match history and priority keywords wholesale, AND
+    un-archived the first profile's session out from under it (re-upload
+    clears session_id -- see _ensure_pending_document_and_unarchive), which
+    is why an archive one profile had just saved turned into "0 CV, 0
+    offres" the moment another profile uploaded a same-named file.
+
+    Renaming the incoming file to a per-owner-disambiguated name whenever
+    the name is already taken by a DIFFERENT owner (or a legacy/shared
+    document with no owner) gives every profile its own row instead of
+    silently overwriting someone else's. Uploading the same name again as
+    the SAME owner still updates their own existing document in place --
+    that update-in-place behavior is intentional (see the "unarchive on
+    reupload" comment below) and unrelated to this collision.
+    """
+    with SessionLocal() as session:
+        existing = session.scalar(select(model).where(model.path == str(target_dir / safe_name)))
+    if existing is None or existing.created_by_user_id == current_user_id:
+        return safe_name
+
+    stem, suffix = Path(safe_name).stem, Path(safe_name).suffix
+    candidate = f"{stem}__u{current_user_id}{suffix}"
+    attempt = 2
+    while True:
+        with SessionLocal() as session:
+            collision = session.scalar(select(model).where(model.path == str(target_dir / candidate)))
+        if collision is None or collision.created_by_user_id == current_user_id:
+            return candidate
+        candidate = f"{stem}__u{current_user_id}-{attempt}{suffix}"
+        attempt += 1
+
+
 def _ensure_pending_document_and_unarchive(
     model: type, path: Path, priority_keywords: str | None = None, created_by_user_id: int | None = None
 ) -> None:
@@ -2233,6 +2271,8 @@ def ingest_file(
     if suffix not in SUPPORTED_SUFFIXES:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
+    model = CvDocument if folder == "cv" else JobDocument
+    safe_name = _disambiguate_filename_for_owner(model, target_dir, safe_name, current_user.id)
     target_path = target_dir / safe_name
     temp_path: Path | None = None
     try:
@@ -2254,7 +2294,7 @@ def ingest_file(
         raise
 
     _ensure_pending_document_and_unarchive(
-        CvDocument if folder == "cv" else JobDocument,
+        model,
         target_path,
         priority_keywords=(priority_keywords or "").strip() or None,
         created_by_user_id=current_user.id,
