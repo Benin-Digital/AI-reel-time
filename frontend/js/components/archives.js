@@ -110,7 +110,7 @@ async function _loadSessions() {
             <span class="badge badge--${s.status === "closed" ? "default" : "success"}">
               ${s.status === "closed" ? "Fermée" : "Ouverte"}
             </span>
-            ${!isMine(s) ? `<span title="Archive d'un autre profil">${escapeHtml(s.created_by_label || "Propriétaire inconnu")}${s.created_by_role ? ` · ${escapeHtml(s.created_by_role)}` : ""}</span>` : ""}
+            ${!isMine(s) ? `<span class="badge badge--primary" title="Archive d'un autre profil">${escapeHtml(s.created_by_label || "Propriétaire inconnu")}${s.created_by_role ? ` · ${escapeHtml(s.created_by_role)}` : ""}</span>` : ""}
             <span>${s.cv_count ?? 0} CV</span>
             <span>${s.job_count ?? 0} offres</span>
             <span>${s.match_count ?? 0} matches</span>
