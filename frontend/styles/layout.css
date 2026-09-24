@@ -467,14 +467,6 @@
   background: var(--bg-surface-active);
 }
 
-/* Archive belonging to another profile (admin/superadmin cross-role view,
-   see archives.js isMine()) -- a distinct left accent keeps it visually
-   separate from "my archives" so it can't be mistaken for one at a glance. */
-.doc-item--foreign-archive {
-  border-left: 3px solid var(--color-primary-border, var(--border-default));
-  background: var(--bg-surface-subtle, var(--bg-surface));
-}
-
 .doc-item__icon {
   width: 36px;
   height: 36px;
