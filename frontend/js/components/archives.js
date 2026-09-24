@@ -94,7 +94,7 @@ async function _loadSessions() {
 
     // Archives created by someone else only ever appear here at all for
     // admin/superadmin (deps.visible_owner_ids on the backend already
-    // filtered the list by role hierarchy) -- this badge exists purely so
+    // filtered the list by role hierarchy) -- this label exists purely so
     // that view doesn't read as "my archives", which is what every role
     // saw before this fix regardless of who actually created what.
     const isMine = (s) => s.created_by_user_id == null || s.created_by_user_id === store.authUser?.id;
@@ -102,7 +102,7 @@ async function _loadSessions() {
     list.innerHTML = sessions
       .map(
         (s) => `
-      <article class="doc-item${isMine(s) ? "" : " doc-item--foreign-archive"}" style="cursor:pointer" data-archive-id="${s.id}">
+      <article class="doc-item" style="cursor:pointer" data-archive-id="${s.id}">
         <div class="doc-item__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="3.5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 5.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-8" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
         <div class="doc-item__body">
           <div class="doc-item__name truncate">${escapeHtml(s.name)}</div>
@@ -110,7 +110,7 @@ async function _loadSessions() {
             <span class="badge badge--${s.status === "closed" ? "default" : "success"}">
               ${s.status === "closed" ? "Fermée" : "Ouverte"}
             </span>
-            ${!isMine(s) ? `<span class="badge badge--primary" title="Archive d'un autre profil">${escapeHtml(s.created_by_label || "Propriétaire inconnu")}${s.created_by_role ? ` · ${escapeHtml(s.created_by_role)}` : ""}</span>` : ""}
+            ${!isMine(s) ? `<span title="Archive d'un autre profil">${escapeHtml(s.created_by_label || "Propriétaire inconnu")}${s.created_by_role ? ` · ${escapeHtml(s.created_by_role)}` : ""}</span>` : ""}
             <span>${s.cv_count ?? 0} CV</span>
             <span>${s.job_count ?? 0} offres</span>
             <span>${s.match_count ?? 0} matches</span>
