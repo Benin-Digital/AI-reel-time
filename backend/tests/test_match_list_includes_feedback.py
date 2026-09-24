@@ -116,7 +116,7 @@ def test_list_matches_uses_the_most_recent_feedback_row(session_factory, member_
     assert results[0].feedback_comment == "Finalement excellent"
 
 
-def test_match_progress_reflects_active_counts_and_computed_pairs(session_factory):
+def test_match_progress_reflects_active_counts_and_computed_pairs(session_factory, member_user):
     """GET /matches/progress lets the frontend show 'calcul en cours' instead
     of 'aucune correspondance' while documents are "ready" but their
     matching loop hasn't finished (status flips to ready before matching
@@ -134,7 +134,7 @@ def test_match_progress_reflects_active_counts_and_computed_pairs(session_factor
         session.add(MatchResult(cv_id=archived_cv.id, job_id=job1.id, score=50.0))
         session.commit()
 
-    progress = matches_router.get_match_progress()
+    progress = matches_router.get_match_progress(_fake_request(member_user))
 
     assert progress.active_cv_count == 2
     assert progress.active_job_count == 1
@@ -142,7 +142,7 @@ def test_match_progress_reflects_active_counts_and_computed_pairs(session_factor
     assert progress.computed_pairs == 1, "le match contre le CV archive ne doit pas etre compte"
 
 
-def test_match_progress_unreviewed_count_excludes_matches_with_feedback(session_factory):
+def test_match_progress_unreviewed_count_excludes_matches_with_feedback(session_factory, member_user):
     """unreviewed_count alimente le badge "Correspondances" de la barre
     laterale -- ne doit compter que les matches actifs sans AUCUNE ligne
     de feedback, jamais ceux deja evalues ni ceux contre un document
@@ -162,7 +162,7 @@ def test_match_progress_unreviewed_count_excludes_matches_with_feedback(session_
         session.add(MatchFeedback(match_id=reviewed.id, decision="accept"))
         session.commit()
 
-    progress = matches_router.get_match_progress()
+    progress = matches_router.get_match_progress(_fake_request(member_user))
 
     assert progress.unreviewed_count == 1
 
@@ -311,3 +311,40 @@ def test_export_matches_csv_respects_the_same_filters_as_list_matches(session_fa
 
     assert len(lines) == 2, "seul le match >= 50 doit apparaitre dans l'export"
     assert "90.0" in lines[1] or "90" in lines[1]
+
+
+def test_match_progress_excludes_another_profiles_private_documents(session_factory, member_user):
+    """Bug reporte en direct (2026-09-24) : la barre 'Calcul des
+    correspondances en cours...' affichait des totaux comme '7/27' pour un
+    profil qui n'avait que 3 documents a lui -- get_match_progress()
+    comptait TOUS les CV/offres actifs de la plateforme, tous profils
+    confondus, au lieu de se limiter a ceux visibles par l'appelant (les
+    siens + le fonds legacy partage)."""
+    other_user = User(email="other@test.local", password_hash="x", role="member")
+    with session_factory() as session:
+        session.add(other_user)
+        session.commit()
+        session.refresh(other_user)
+
+        # Le profil courant : 2 CV + 1 offre a lui (comme dans le rapport).
+        my_cv1 = CvDocument(path="/cv/mine1.pdf", status="ready", created_by_user_id=member_user.id)
+        my_cv2 = CvDocument(path="/cv/mine2.pdf", status="ready", created_by_user_id=member_user.id)
+        my_job = JobDocument(path="/job/mine.pdf", status="ready", created_by_user_id=member_user.id)
+        # Un autre profil : une pile de documents qui ne doit jamais
+        # apparaitre dans le calcul de progression de member_user.
+        other_cv1 = CvDocument(path="/cv/other1.pdf", status="ready", created_by_user_id=other_user.id)
+        other_cv2 = CvDocument(path="/cv/other2.pdf", status="ready", created_by_user_id=other_user.id)
+        other_job1 = JobDocument(path="/job/other1.pdf", status="ready", created_by_user_id=other_user.id)
+        other_job2 = JobDocument(path="/job/other2.pdf", status="ready", created_by_user_id=other_user.id)
+        session.add_all([my_cv1, my_cv2, my_job, other_cv1, other_cv2, other_job1, other_job2])
+        session.commit()
+        session.add(MatchResult(cv_id=my_cv1.id, job_id=my_job.id, score=80.0))
+        session.add(MatchResult(cv_id=other_cv1.id, job_id=other_job1.id, score=70.0))
+        session.commit()
+
+    progress = matches_router.get_match_progress(_fake_request(member_user))
+
+    assert progress.active_cv_count == 2, "seuls les 2 CV du profil courant doivent compter"
+    assert progress.active_job_count == 1, "seule l'offre du profil courant doit compter"
+    assert progress.expected_pairs == 2
+    assert progress.computed_pairs == 1, "le match de l'autre profil ne doit pas etre compte"
