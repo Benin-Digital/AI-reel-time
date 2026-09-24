@@ -238,6 +238,7 @@ class AnalysisSession(Base):
     __tablename__ = "analysis_sessions"
     __table_args__ = (
         Index("ix_analysis_sessions_status", "status"),
+        Index("ix_analysis_sessions_created_by_user_id", "created_by_user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -245,6 +246,13 @@ class AnalysisSession(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="open")
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Nullable: archives created before this column existed (or by a
+    # system/background process with no authenticated request) have no
+    # owner on record -- treated as legacy/unclaimed by the role-visibility
+    # rules in deps.py (visible to admin/superadmin, not to plain members).
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
