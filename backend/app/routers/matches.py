@@ -172,7 +172,7 @@ def list_matches_for_job(doc_id: int, request: Request, limit: int = 50) -> list
 
 
 @router.get("/matches/progress", response_model=MatchProgressRead)
-def get_match_progress() -> MatchProgressRead:
+def get_match_progress(request: Request) -> MatchProgressRead:
     """Lets the frontend distinguish "nothing to match yet" from "matching
     is still being computed" -- CvDocument/JobDocument.status flips to
     "ready" as soon as extraction succeeds, BEFORE _score_against_
@@ -185,20 +185,44 @@ def get_match_progress() -> MatchProgressRead:
     (every active CV against every active job) -- some pairs are legitimately
     never scored (a failed extraction), so 100% is not always reachable,
     but it's enough to know "more are still coming" vs "this is everything".
+
+    Scoped to `current_user`'s own visible active documents (2026-09-24
+    fix, a follow-up missed by the active-document isolation fix): this
+    endpoint counted every active CV/job on the WHOLE platform regardless
+    of owner, so a profile with e.g. 3 documents of its own saw progress
+    like "7/27" -- the denominator included every other profile's private
+    work. own + legacy is exactly the set of CVs/jobs eligible to match
+    with this user's own documents (see deps.owners_eligible), so counting
+    the visible active CVs times the visible active jobs gives the right
+    expected_pairs for what this profile will actually see.
     """
+    current_user = require_user(request)
     with SessionLocal() as session:
+        visible_cv_filter = or_(
+            CvDocument.created_by_user_id.is_(None), CvDocument.created_by_user_id == current_user.id
+        )
+        visible_job_filter = or_(
+            JobDocument.created_by_user_id.is_(None), JobDocument.created_by_user_id == current_user.id
+        )
         active_cv_count = session.scalar(
-            select(func.count()).select_from(CvDocument).where(CvDocument.session_id.is_(None))
+            select(func.count()).select_from(CvDocument).where(
+                CvDocument.session_id.is_(None), visible_cv_filter,
+            )
         ) or 0
         active_job_count = session.scalar(
-            select(func.count()).select_from(JobDocument).where(JobDocument.session_id.is_(None))
+            select(func.count()).select_from(JobDocument).where(
+                JobDocument.session_id.is_(None), visible_job_filter,
+            )
         ) or 0
         computed_pairs = session.scalar(
             select(func.count())
             .select_from(MatchResult)
             .join(CvDocument, MatchResult.cv_id == CvDocument.id)
             .join(JobDocument, MatchResult.job_id == JobDocument.id)
-            .where(CvDocument.session_id.is_(None), JobDocument.session_id.is_(None))
+            .where(
+                CvDocument.session_id.is_(None), JobDocument.session_id.is_(None),
+                visible_cv_filter, visible_job_filter,
+            )
         ) or 0
         # Active matches with no feedback row at all -- feeds the
         # "Correspondances" sidebar badge, distinct from computed_pairs
@@ -215,6 +239,7 @@ def get_match_progress() -> MatchProgressRead:
             .where(
                 CvDocument.session_id.is_(None),
                 JobDocument.session_id.is_(None),
+                visible_cv_filter, visible_job_filter,
                 ~has_feedback,
             )
         ) or 0
