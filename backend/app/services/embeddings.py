@@ -48,6 +48,36 @@ def get_embedder():
     return get_sentence_transformer(settings.embedding_model_name, settings.embedding_device)
 
 
+def _split_for_embedding(text: str, model) -> list[str]:
+    """Split `text` into pieces that each fit within the model's
+    max_seq_length, so a single long chunk is never silently truncated by
+    the underlying tokenizer.
+
+    Residual gap flagged 2026-09-29: structured.py already splits a
+    document into per-section chunks (summary/skills/experience/etc.)
+    before embedding, which keeps most chunks well under the limit -- but
+    one section can still individually exceed it (e.g. a very verbose
+    "Expérience" block for a long career), and that chunk's tail was
+    silently dropped with no warning. This is the fallback safety net for
+    that case, not a replacement for the section-based chunking.
+    """
+    max_len = getattr(model, "max_seq_length", None) or 512
+    # Margin for special tokens ([CLS]/[SEP] etc.) the tokenizer adds on
+    # top of the content tokens.
+    budget = max(1, max_len - 2)
+    try:
+        token_ids = model.tokenizer.encode(text, add_special_tokens=False)
+    except Exception:
+        return [text]
+    if len(token_ids) <= budget:
+        return [text]
+    pieces = [
+        model.tokenizer.decode(token_ids[start : start + budget], skip_special_tokens=True)
+        for start in range(0, len(token_ids), budget)
+    ]
+    return [p for p in pieces if p.strip()] or [text]
+
+
 def embed_texts(texts: Iterable[str]) -> list[list[float]]:
     items = list(texts)
     if not items:
@@ -56,14 +86,33 @@ def embed_texts(texts: Iterable[str]) -> list[list[float]]:
         model = get_embedder()
     except Exception:
         return []
-    embeddings = model.encode(
-        items,
+
+    # Expand any item that's too long for the model into 1+ sub-pieces
+    # (see _split_for_embedding), embed everything in one batch, then
+    # average each item's own piece(s) back together so the return value
+    # still has exactly len(items) vectors, one per input -- every caller
+    # (embed_text, compute_domain_sim, main.py's _vector_match_cv/_job)
+    # relies on that 1:1 correspondence.
+    expanded: list[str] = []
+    spans: list[tuple[int, int]] = []
+    for text in items:
+        pieces = _split_for_embedding(text, model)
+        start = len(expanded)
+        expanded.extend(pieces)
+        spans.append((start, len(expanded)))
+
+    raw = model.encode(
+        expanded,
         batch_size=settings.embedding_batch_size,
         normalize_embeddings=True,
     )
-    if hasattr(embeddings, "tolist"):
-        return embeddings.tolist()
-    return [list(vector) for vector in embeddings]
+    raw_vectors = raw.tolist() if hasattr(raw, "tolist") else [list(vector) for vector in raw]
+
+    results: list[list[float]] = []
+    for start, end in spans:
+        piece_vectors = raw_vectors[start:end]
+        results.append(piece_vectors[0] if len(piece_vectors) == 1 else _average_vectors(piece_vectors))
+    return results
 
 
 def _average_vectors(vectors: list[list[float]]) -> list[float]:
