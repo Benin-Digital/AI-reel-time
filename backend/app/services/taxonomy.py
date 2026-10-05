@@ -464,7 +464,7 @@ _SKILLS: dict[str, list[str]] = {
     "Événementiel": ["evenementiel", "organisation d evenements", "event management", "event planner"],
     "Copywriting": ["copywriting", "redaction publicitaire", "redaction web", "content writing"],
     "Design graphique": ["photoshop", "adobe photoshop", "indesign", "adobe indesign", "illustrator", "canva", "figma", "design graphique", "pao"],
-    "WordPress": ["wordpress", "cms", "woocommerce", "prestashop", "shopify"],
+    "WordPress": ["wordpress", "wp", "cms", "woocommerce", "prestashop", "shopify"],
 
     # ── MARKETING (COMPLÉMENT 2026-09-17) ────────────────────────────────
     # "Marketo" existe deja (ONET) ; on n'y touche pas.
