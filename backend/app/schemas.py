@@ -569,32 +569,6 @@ class SkillEmbeddingTuningUpdate(BaseModel):
     reset: bool = False
 
 
-class ScoringV2TrainResult(BaseModel):
-    sample_count: int
-    auc: float
-    feature_importance: dict[str, float]
-    saved_to: str | None = None
-
-
-class ScoringV2ScoreRequest(BaseModel):
-    cv_path: str
-    job_path: str
-
-
-class ScoringV2ScoreResult(BaseModel):
-    probability: float | None = None
-    signals: dict[str, float]
-    model_available: bool
-
-
-class ScoringV2Status(BaseModel):
-    model_available: bool
-    model_path: str | None = None
-    sample_count: int | None = None
-    auc: float | None = None
-    feature_importance: dict[str, float] | None = None
-
-
 class EscoLookupRequest(BaseModel):
     text: str
     top_k: int = 5

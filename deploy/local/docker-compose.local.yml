@@ -26,7 +26,8 @@ services:
       # preserves them across container rebuilds and lets you replace
       # skills_fr.csv / skills_en.csv manually via docker cp if needed.
       - airealtime_esco:/srv/ai-realtime/esco
-      # scoring_v2 GBM model artifacts (trained pickle persists here).
+      # Locally fine-tuned model artifacts (e.g. a CamemBERT checkpoint
+      # pointed to by AI_REALTIME_CAMEMBERT_NER_MODEL), persisted here.
       - airealtime_models:/srv/ai-realtime/models
       - airealtime_hf_cache:/app/.cache/huggingface
     depends_on:

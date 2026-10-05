@@ -158,9 +158,6 @@ class Settings(BaseSettings):
     # by mapping each extracted skill term to its ESCO concept (top-1, score >= 0.55).
     esco_enrich_skills: bool = True
     esco_enrich_max_uris: int = 30
-    # Layer 4: scoring_v2 GBM aggregator. Path points at the models volume so the
-    # trained pickle survives container rebuilds.
-    scoring_v2_model_path: str = "/srv/ai-realtime/models/scoring_v2_gbm.pkl"
 
     model_config = SettingsConfigDict(env_prefix="AI_REALTIME_", extra="ignore")
 

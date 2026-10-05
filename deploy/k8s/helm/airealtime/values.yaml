@@ -56,7 +56,8 @@ storage:
     storageClass: ""
     accessMode: ReadWriteMany
     size: 20Gi
-  # Volume pour les caches HuggingFace + ESCO + scoring_v2 model artifacts.
+  # Volume pour les artefacts de modeles fine-tunes localement (ex: un
+  # checkpoint CamemBERT pointe par AI_REALTIME_CAMEMBERT_NER_MODEL).
   models:
     enabled: true
     storageClass: ""

@@ -1,30 +1,22 @@
-"""Endpoints ML/IA : /scoring-v2/*, /esco/lookup, /search."""
+"""Endpoints ML/IA : /esco/lookup, /search."""
 from __future__ import annotations
-
-import logging
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 
 from ..db import SessionLocal
-from ..deps import require_admin, require_user
+from ..deps import require_user
 from ..models import (
     CvDocument,
     CvEmbedding,
     ExtractedText,
     JobDocument,
     JobEmbedding,
-    MatchResult,
 )
 from ..schemas import (
     EscoLookupRequest,
     EscoLookupResult,
     EscoMatch,
-    ScoringV2ScoreRequest,
-    ScoringV2ScoreResult,
-    ScoringV2Status,
-    ScoringV2TrainResult,
     SearchHit,
     SearchRequest,
 )
@@ -32,18 +24,8 @@ from ..services import embed_text, score_texts
 from ..settings import get_settings
 
 settings = get_settings()
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ml"])
-
-
-def _scoring_v2_model_path() -> Path | None:
-    raw = getattr(settings, "scoring_v2_model_path", "") or ""
-    if not raw:
-        return None
-    p = Path(raw)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
 
 
 def _vector_score(distance: float) -> float:
@@ -62,83 +44,6 @@ def _hybrid_score_with_weights(
         return vector_score
     combined = (vector_score * vector_weight + lexical_score * lexical_weight) / weight_sum
     return round(combined, 2)
-
-
-@router.post("/scoring-v2/train", response_model=ScoringV2TrainResult)
-def scoring_v2_train(request: Request) -> ScoringV2TrainResult:
-    require_admin(request)
-    from ..services.scoring_v2 import train_aggregator
-    from ..services.embeddings import compute_domain_sim
-    model_path = _scoring_v2_model_path()
-    with SessionLocal() as session:
-        try:
-            agg = train_aggregator(session, model_path=model_path, domain_sim_fn=compute_domain_sim)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        except Exception as exc:
-            logger.exception("scoring_v2 training failed: %s", exc)
-            raise HTTPException(status_code=500, detail=f"training failed: {exc}")
-    return ScoringV2TrainResult(
-        sample_count=agg.sample_count,
-        auc=agg.auc,
-        feature_importance={k: round(v, 4) for k, v in agg.feature_importance.items()},
-        saved_to=str(model_path) if model_path else None,
-    )
-
-
-@router.post("/scoring-v2/score", response_model=ScoringV2ScoreResult)
-def scoring_v2_score(payload: ScoringV2ScoreRequest, request: Request) -> ScoringV2ScoreResult:
-    require_user(request)
-    from ..services.scoring_v2 import score_pair, compute_signals, SIGNAL_KEYS  # noqa: F401
-    from ..services.embeddings import compute_domain_sim
-    with SessionLocal() as session:
-        cv_ext = session.scalar(select(ExtractedText).where(ExtractedText.file_path == payload.cv_path))
-        job_ext = session.scalar(select(ExtractedText).where(ExtractedText.file_path == payload.job_path))
-        if not cv_ext or not job_ext:
-            raise HTTPException(status_code=404, detail="cv_path or job_path not found in extractions")
-        cv_profile = cv_ext.parsed_profile or {}
-        job_profile = job_ext.parsed_profile or {}
-        match = session.scalar(
-            select(MatchResult).where(
-                MatchResult.cv_path == payload.cv_path,
-                MatchResult.job_path == payload.job_path,
-            )
-        )
-        semantic_sim = float(match.score_semantic) if (match and match.score_semantic is not None) else 0.0
-
-    domain_sim = compute_domain_sim(cv_profile, job_profile)
-    result = score_pair(
-        cv_profile=cv_profile,
-        job_profile=job_profile,
-        semantic_sim=semantic_sim,
-        domain_sim=domain_sim,
-        model_path=_scoring_v2_model_path(),
-    )
-    return ScoringV2ScoreResult(
-        probability=result["probability"],
-        signals={k: round(float(result["signals"].get(k, 0.0)), 4) for k in SIGNAL_KEYS},
-        model_available=result["model_available"],
-    )
-
-
-@router.get("/scoring-v2/status", response_model=ScoringV2Status)
-def scoring_v2_status(request: Request) -> ScoringV2Status:
-    require_user(request)
-    from ..services.scoring_v2 import get_aggregator
-    model_path = _scoring_v2_model_path()
-    agg = get_aggregator(model_path)
-    if agg is None:
-        return ScoringV2Status(
-            model_available=False,
-            model_path=str(model_path) if model_path else None,
-        )
-    return ScoringV2Status(
-        model_available=True,
-        model_path=str(model_path) if model_path else None,
-        sample_count=agg.sample_count,
-        auc=agg.auc,
-        feature_importance={k: round(v, 4) for k, v in agg.feature_importance.items()},
-    )
 
 
 @router.post("/esco/lookup", response_model=EscoLookupResult)

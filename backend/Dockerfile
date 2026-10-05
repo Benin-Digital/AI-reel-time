@@ -101,7 +101,8 @@ RUN python -c "from docling.utils.model_downloader import download_models; downl
 #   docker exec -u appuser <container> head -c 100 /srv/ai-realtime/esco/skills_fr.csv
 RUN mkdir -p /srv/ai-realtime/esco
 
-# scoring_v2 model dir (writable volume mount at runtime)
+# Models dir (writable volume mount at runtime, e.g. a fine-tuned CamemBERT
+# checkpoint pointed to by AI_REALTIME_CAMEMBERT_NER_MODEL)
 RUN mkdir -p /srv/ai-realtime/models
 
 COPY alembic.ini ./alembic.ini
