@@ -108,7 +108,38 @@ COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 COPY app ./app
 
-RUN chown -R appuser:appgroup /app /srv/ai-realtime
+# Narrowed from `chown -R /app /srv/ai-realtime` (2026-10-05): that recursive
+# chown touched every file under /app -- several GB of pip-installed
+# packages (torch, transformers, docling...) plus the baked-in model caches
+# -- even though appuser only ever needs to READ those (world-readable by
+# default from a root-owned COPY/pip install, no ownership change needed;
+# the container runs read_only: true anyway, see docker-compose.cloud.yml,
+# so appuser could not write there even if it wanted to). Docker also has
+# to materialize a full copy of every chown'd file in a new layer (chown on
+# a file from an earlier layer is copy-on-write), so that single RUN was
+# both slow (~4min in production) and bloated the image by roughly the
+# size of everything under /app a second time.
+#
+# What actually needs appuser ownership is only what the running container
+# WRITES to: the two named volumes baked into the image at build time
+# (/srv/ai-realtime/esco, /srv/ai-realtime/models -- their *first*
+# population inherits whatever ownership the image has at that path; both
+# are still empty here, just mkdir -p'd above, so this chown is cheap).
+#
+# Deliberately NOT included: /app/.cache (the HuggingFace/sentence-
+# transformers/docling model caches downloaded above, several GB by this
+# point) -- a recursive chown on it would re-copy all of that into a new
+# layer, recreating the exact bloat this change removes, just scoped
+# smaller. Read-only reuse of an already-fully-cached model doesn't need
+# write access to its cache dir, and this has run correctly in production
+# under read_only: true without it.
+#
+# Also NOT included: /srv/ai-realtime/storage. docker-compose mounts it as
+# a HOST bind mount (`/srv/ai-realtime/storage:/srv/ai-realtime/storage`),
+# not a named volume -- that path doesn't exist in the image at build time
+# at all, so chown-ing it here is a no-op. Its ownership is a HOST-side
+# fix, same pitfall already documented above for the ESCO CSV provisioning.
+RUN chown appuser:appgroup /srv/ai-realtime /srv/ai-realtime/esco /srv/ai-realtime/models
 
 USER appuser
 
