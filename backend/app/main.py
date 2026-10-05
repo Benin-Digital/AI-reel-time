@@ -73,8 +73,6 @@ from .schemas import (
     FeedbackComponentScores,
     FeedbackDomainRow,
     FeedbackWeightHint,
-    LearnedWeightsRead,
-    WeightComputeResult,
     EscoLookupRequest,
     EscoMatch,
     EscoLookupResult,

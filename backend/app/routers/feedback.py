@@ -10,7 +10,6 @@ from ..models import (
     CvDocument,
     ExtractedText,
     JobDocument,
-    LearnedWeights,
     MatchFeedback,
     MatchResult,
 )
@@ -20,20 +19,16 @@ from ..schemas import (
     FeedbackDomainRow,
     FeedbackStatsRead,
     FeedbackWeightHint,
-    LearnedWeightsRead,
     MatchFeedbackCreate,
     MatchFeedbackExportRead,
     MatchFeedbackRead,
     SkillEmbeddingTuningRead,
     SkillEmbeddingTuningUpdate,
-    WeightComputeResult,
 )
 from ..services.matcher import (
-    get_active_weights,
     get_skill_embedding_tuning,
     set_skill_embedding_tuning,
 )
-from ..services.weight_learner import compute_learned_weights
 
 router = APIRouter(tags=["feedback"])
 
@@ -261,52 +256,6 @@ def get_feedback_stats(request: Request) -> FeedbackStatsRead:
         )
 
 
-@router.get("/feedback/learned-weights", response_model=LearnedWeightsRead | None)
-def get_learned_weights(request: Request) -> LearnedWeightsRead | None:
-    require_user(request)
-    with SessionLocal() as session:
-        row = session.scalar(
-            select(LearnedWeights)
-            .where(LearnedWeights.is_active == True)
-            .order_by(LearnedWeights.created_at.desc())
-        )
-        return LearnedWeightsRead.model_validate(row) if row else None
-
-
-@router.post("/feedback/compute-weights", response_model=WeightComputeResult)
-def compute_weights(request: Request) -> WeightComputeResult:
-    """Preview-only: computes suggested weights from feedback via logistic
-    regression, for a human (the developer) to review before deciding
-    whether/how to adjust matcher._DEFAULT_W accordingly.
-
-    Deliberately does not activate anything: this is a global weight set
-    with no accuracy validation against the scoring dataset yet — auto-
-    activating it in production without that check is the kind of
-    unvalidated-weight-change risk we removed domain-specific weighting
-    for (see the comment above matcher._DOMAIN_W). See git history for the
-    /feedback/apply-weights endpoint that used to auto-activate this and
-    was removed for that reason.
-    """
-    require_admin(request)
-    with SessionLocal() as session:
-        try:
-            result = compute_learned_weights(session)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-
-    current = get_active_weights() or {
-        "semantic": 0.40, "skills": 0.30, "experience": 0.12,
-        "education": 0.08, "languages": 0.05, "contract": 0.05,
-    }
-    return WeightComputeResult(
-        weights={k: round(v, 4) for k, v in result.items()
-                 if k not in ("sample_count", "accuracy")},
-        sample_count=result["sample_count"],
-        accuracy=result["accuracy"],
-        current_weights={k: round(v, 4) for k, v in current.items()},
-    )
-
-
 @router.get("/admin/skill-embedding-tuning", response_model=SkillEmbeddingTuningRead)
 def get_skill_embedding_tuning_settings(request: Request) -> SkillEmbeddingTuningRead:
     """Current effective threshold/max_credit for the semantic partial-
@@ -327,17 +276,17 @@ def update_skill_embedding_tuning_settings(
 ) -> SkillEmbeddingTuningRead:
     """Adjust the semantic partial-credit threshold/max_credit live, with
     NO redeploy and NO restart -- takes effect on the very next match
-    computed. In-memory only (like matcher._learned_weights): resets to
-    the deployed default on the next restart/deploy, so this is for
-    live experimentation, not a permanent change -- once a value proves
-    itself, bake it into AI_REALTIME_SKILL_EMBEDDING_THRESHOLD/_MAX_CREDIT
-    so it survives a deploy.
+    computed. In-memory only: resets to the deployed default on the next
+    restart/deploy, so this is for live experimentation, not a permanent
+    change -- once a value proves itself, bake it into
+    AI_REALTIME_SKILL_EMBEDDING_THRESHOLD/_MAX_CREDIT so it survives a
+    deploy.
 
     Pass reset=true to clear the override and revert to the deployed
     default. Deliberately requires an explicit admin call rather than
     ever adjusting itself automatically -- same reasoning as the removed
-    /feedback/apply-weights endpoint (see compute_weights above): a
-    scoring-parameter change must be a deliberate, visible action.
+    /feedback/apply-weights endpoint: a scoring-parameter change must be
+    a deliberate, visible action.
     """
     require_admin(request)
     if payload.threshold is not None and not (0.0 < payload.threshold <= 1.0):

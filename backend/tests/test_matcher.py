@@ -114,14 +114,10 @@ def test_weights_are_domain_independent():
     faussant silencieusement le classement).
 
     _weights() ne doit plus varier avec le domaine : c'est toujours
-    _DEFAULT_W (sauf poids appris explicitement actives, hors du perimetre
-    ici). _DOMAIN_W reste dans le code comme reference historique mais n'est
-    plus consulte par _weights().
+    _DEFAULT_W. _DOMAIN_W reste dans le code comme reference historique mais
+    n'est plus consulte par _weights().
     """
     assert matcher._weights() == matcher._DEFAULT_W
-    assert matcher.get_active_weights() is None, (
-        "aucun poids appris ne doit etre actif par defaut dans les tests"
-    )
 
 
 def test_self_match_weights_do_not_depend_on_detected_domain(monkeypatch):

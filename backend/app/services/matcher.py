@@ -240,8 +240,9 @@ _DEFAULT_W = {
 # around a long recruiter keyword list. Deliberately a CLOSED set of
 # named presets, not free-form weight values: letting a recruiter set raw
 # weights directly recreates the exact risk that led to removing the old
-# /feedback/apply-weights endpoint (see feedback.py::compute_weights) --
-# a recruiter is not a data scientist, and an intuitive-sounding weight
+# /feedback/apply-weights endpoint (and, later, the dormant learned-weights
+# override it was replaced by) -- a recruiter is not a data scientist, and
+# an intuitive-sounding weight
 # (e.g. "raise semantic, it understands the CV better") can silently
 # reintroduce a bug already measured and fixed (see the comment above
 # _DEFAULT_W's "semantic" key). Each preset here is a deliberate, reviewed
@@ -370,31 +371,14 @@ _DOMAIN_W: dict[str, dict[str, float]] = {
 }
 
 
-# Learned weights set by the API after loading from DB
-_learned_weights: dict[str, float] | None = None
-_learned_weights_lock = threading.Lock()
-
-
-def set_learned_weights(weights: dict[str, float] | None) -> None:
-    global _learned_weights
-    with _learned_weights_lock:
-        _learned_weights = weights
-
-
-def get_active_weights() -> dict[str, float] | None:
-    with _learned_weights_lock:
-        return _learned_weights.copy() if _learned_weights else None
-
-
 # Live-adjustable override for the skill/priority-keyword semantic-credit
 # tuning (see _semantic_skill_credit) -- an admin can raise or lower these
 # via POST /admin/skill-embedding-tuning and see the effect on the very
-# next match computed, with no redeploy. Same in-memory-only pattern as
-# _learned_weights above (reset to settings' defaults on restart/deploy --
-# deliberately not silently auto-persisted or auto-applied from feedback,
-# per the same reasoning that removed the old /feedback/apply-weights
-# endpoint: a scoring-parameter change should be a deliberate, visible
-# admin action, not something that happens on its own).
+# next match computed, with no redeploy. In-memory-only (reset to settings'
+# defaults on restart/deploy) -- deliberately not silently auto-persisted or
+# auto-applied from feedback, per the same reasoning that removed the old
+# /feedback/apply-weights endpoint: a scoring-parameter change should be a
+# deliberate, visible admin action, not something that happens on its own).
 _skill_embedding_tuning_override: dict[str, float] | None = None
 _skill_embedding_tuning_lock = threading.Lock()
 
@@ -432,16 +416,13 @@ def _weights(profile: str | None = None) -> dict[str, float]:
 
     `profile` (JobDocument.scoring_profile, a per-job recruiter choice
     among _SCORING_PROFILES) takes precedence when set -- it's a more
-    specific, deliberate choice for THIS job than the global learned-
-    weights override below. Falls back to the platform default when the
-    profile name is unrecognized (e.g. a stale value from a removed
-    profile) rather than raising.
+    specific, deliberate choice for THIS job than the platform default.
+    Falls back to the platform default when the profile name is
+    unrecognized (e.g. a stale value from a removed profile) rather than
+    raising.
     """
     if profile and profile in _SCORING_PROFILES:
         return dict(_SCORING_PROFILES[profile])
-    with _learned_weights_lock:
-        if _learned_weights is not None:
-            return _learned_weights.copy()
     return dict(_DEFAULT_W)
 
 
