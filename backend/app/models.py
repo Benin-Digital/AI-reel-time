@@ -316,6 +316,14 @@ class MatchResult(Base):
     # the full auto-detected skill set), so persisting the names here adds
     # negligible row size for a real UI win.
     priority_keywords_missing: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The job's auto-detected required skills NOT found in the CV
+    # (comma-joined, like common_keywords) -- was already computed every
+    # time (matcher.MatchScore.missing_skills) but only ever surfaced as
+    # prose buried in /explain's "vigilance" list, never as its own field
+    # like priority_keywords_missing already is. Requested fix
+    # (2026-10-05): show found vs. missing structured lists for the
+    # general skill match too, not just when priority keywords are set.
+    missing_skills: Mapped[str | None] = mapped_column(Text, nullable=True)
     match_domain: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

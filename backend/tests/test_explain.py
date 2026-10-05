@@ -51,6 +51,18 @@ def test_explanation_missing_skills_match_persisted_score():
         )
 
 
+def test_explanation_exposes_missing_skills_as_a_structured_list():
+    """Demande (2026-10-05) : les competences manquantes cote general
+    etaient uniquement noyees dans une phrase de la section 'vigilance' --
+    desormais exposees comme leur propre liste structuree (comme
+    priority_keywords_missing l'est deja), que le job ait ou non des
+    mots-cles prioritaires configures."""
+    match = match_cv_to_job(CV_TEXT, JOB_TEXT)
+    details = build_match_explanation(CV_TEXT, JOB_TEXT, match.score, match.common_skills)
+
+    assert set(details["missing_skills"]) == set(match.missing_skills)
+
+
 def test_explanation_surfaces_priority_keywords_distinctly():
     """L'explication doit afficher la couverture des mots-cles prioritaires
     separement de la couverture generale de competences (ex: "2/3 trouves"),

@@ -255,6 +255,35 @@ def test_list_matches_priority_keywords_missing_defaults_to_empty_list(session_f
     assert results[0].priority_keywords_missing == []
 
 
+def test_list_matches_includes_missing_skills(session_factory, member_user):
+    """Demande (2026-10-05) : montrer les competences manquantes cote
+    general, pas seulement pour les mots-cles prioritaires -- meme
+    traitement structure (liste persistee), que le job ait ou non des
+    mots-cles prioritaires configures."""
+    with session_factory() as session:
+        cv = CvDocument(path="/cv/1.pdf", status="ready")
+        job = JobDocument(path="/job/1.pdf", status="ready")
+        session.add_all([cv, job])
+        session.commit()
+        session.add(MatchResult(
+            cv_id=cv.id, job_id=job.id, score=70.0, score_skills=0.6,
+            missing_skills="Kubernetes,Terraform",
+        ))
+        session.commit()
+
+    results = matches_router.list_matches(_fake_request(member_user))
+
+    assert set(results[0].missing_skills) == {"Kubernetes", "Terraform"}
+
+
+def test_list_matches_missing_skills_defaults_to_empty_list(session_factory, member_user):
+    _seed_match(session_factory)
+
+    results = matches_router.list_matches(_fake_request(member_user))
+
+    assert results[0].missing_skills == []
+
+
 def _read_csv_body(response) -> str:
     import asyncio
 

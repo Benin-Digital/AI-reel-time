@@ -273,6 +273,7 @@ class MatchRead(BaseModel):
     priority_keywords_matched_count: int | None = None
     priority_keywords_total: int | None = None
     priority_keywords_missing: list[str] = []
+    missing_skills: list[str] = []
     match_domain: str | None = None
     feedback_decision: str | None = None
     feedback_rating: int | None = None
@@ -467,6 +468,7 @@ class MatchExplainRead(BaseModel):
     score_priority_keywords: float | None = None
     priority_keywords_matched: list[str] = []
     priority_keywords_missing: list[str] = []
+    missing_skills: list[str] = []
     match_domain: str | None = None
 
 

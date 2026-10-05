@@ -163,4 +163,10 @@ def build_match_explanation(
         "keyword_hits": keyword_hits,
         "priority_keywords_matched": sorted(priority_matched),
         "priority_keywords_missing": priority_missing,
+        # Requested fix (2026-10-05): the general required-skills gap was
+        # already computed (missing_required, line above) but only ever
+        # folded into a "vigilance" prose sentence -- expose it as its own
+        # structured list too, same treatment as priority keywords get,
+        # regardless of whether the job has any priority keywords set.
+        "missing_skills": missing_required,
     }

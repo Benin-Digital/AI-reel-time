@@ -103,6 +103,7 @@ def _to_match_read(
         priority_keywords_matched_count=row.priority_keywords_matched_count,
         priority_keywords_total=row.priority_keywords_total,
         priority_keywords_missing=deserialize_keywords(row.priority_keywords_missing),
+        missing_skills=deserialize_keywords(row.missing_skills),
         feedback_decision=fb.decision if fb else None,
         feedback_rating=fb.rating if fb else None,
         feedback_comment=fb.comment if fb else None,
@@ -426,7 +427,7 @@ _CSV_COLUMNS = [
     "score_education", "score_languages", "score_contract",
     "score_priority_keywords", "priority_keywords_matched_count",
     "priority_keywords_total", "priority_keywords_missing",
-    "common_keywords", "feedback_decision", "feedback_rating",
+    "common_keywords", "missing_skills", "feedback_decision", "feedback_rating",
     "feedback_comment", "created_at", "updated_at",
 ]
 
@@ -452,6 +453,7 @@ def _match_csv_row(row: MatchResult, cv_labels: dict, job_labels: dict, feedback
         row.priority_keywords_total,
         "; ".join(deserialize_keywords(row.priority_keywords_missing)),
         "; ".join(deserialize_keywords(row.common_keywords)),
+        "; ".join(deserialize_keywords(row.missing_skills)),
         fb.decision if fb else "",
         fb.rating if fb else "",
         fb.comment if fb else "",
@@ -586,5 +588,6 @@ def explain_match(match_id: int, request: Request) -> MatchExplainRead:
             score_priority_keywords=match.score_priority_keywords,
             priority_keywords_matched=list(details["priority_keywords_matched"]),
             priority_keywords_missing=list(details["priority_keywords_missing"]),
+            missing_skills=list(details["missing_skills"]),
             match_domain=match.match_domain,
         )

@@ -400,6 +400,17 @@ function _renderMatchCard(match) {
         ${missingKeywords.map((k) => `<span class="chip chip--missing" title="Mot-clé prioritaire absent de ce CV">${escapeHtml(k)}</span>`).join("")}
       </div>`
     : "";
+  // Competences requises par l'offre mais absentes du CV -- deja calcule a
+  // chaque scoring (matcher.py's MatchScore.missing_skills), mais jusqu'ici
+  // seulement noye dans la narration de "Analyser". Montre ici au meme
+  // titre que les mots-cles communs ci-dessous, avec ou sans mots-cles
+  // prioritaires configures sur l'offre.
+  const missingSkills = (match.missing_skills ?? []).filter(Boolean);
+  const missingSkillsRow = missingSkills.length
+    ? `<div class="chip-row" style="margin-top:var(--space-2)">
+        ${missingSkills.map((k) => `<span class="chip chip--missing" title="Compétence requise absente de ce CV">${escapeHtml(k)}</span>`).join("")}
+      </div>`
+    : "";
   const current  = _feedbackCache.get(String(match.id)) ?? null;
   const cvLabel  = escapeHtml(match.cv_label || `CV ${match.cv_id}`);
   const jobLabel = escapeHtml(match.job_label || `Offre ${match.job_id}`);
@@ -446,6 +457,7 @@ function _renderMatchCard(match) {
     ${missingKeywordsRow}
     ${_renderComponentScores(match)}
     <div class="match-card__meta">${renderKeywordChips(keywords)}</div>
+    ${missingSkillsRow}
     ${_renderFeedbackBar(match.id, current)}
   </div>
 </article>`.trim();
@@ -545,7 +557,8 @@ async function _loadExplain(matchId) {
 function _renderExplainContent(data) {
   const score     = clampScore(data.score);
   const tone      = scoreTone(score);
-  const keywords  = (data.common_keywords ?? data.top_keywords ?? []).filter(Boolean).slice(0, 12);
+  const keywords      = (data.common_keywords ?? data.top_keywords ?? []).filter(Boolean).slice(0, 12);
+  const missingSkills = (data.missing_skills ?? []).filter(Boolean);
   const why       = (data.why_match  ?? []).filter(Boolean);
   const vigilance = (data.vigilance  ?? []).filter(Boolean);
   const evidence  = (data.evidence   ?? []).filter(Boolean);
@@ -571,6 +584,14 @@ function _renderExplainContent(data) {
     <div class="divider-label" style="margin-bottom:var(--space-3)">Mots-clés communs</div>
     ${renderKeywordChips(keywords)}
   </div>
+  ${missingSkills.length
+    ? `<div>
+        <div class="divider-label" style="margin-bottom:var(--space-3)">Compétences manquantes</div>
+        <div class="chip-row">
+          ${missingSkills.map((k) => `<span class="chip chip--missing" title="Compétence requise absente de ce CV">${escapeHtml(k)}</span>`).join("")}
+        </div>
+       </div>`
+    : ""}
   ${why.length
     ? `<div>
         <div class="divider-label" style="margin-bottom:var(--space-3)">Pourquoi ce match</div>
@@ -803,6 +824,9 @@ function _buildExplainText(data) {
 
   const keywords = (data.common_keywords ?? data.top_keywords ?? []).filter(Boolean).slice(0, 12);
   if (keywords.length) lines.push("", "Mots-clés : " + keywords.join(", "));
+
+  const missingSkills = (data.missing_skills ?? []).filter(Boolean);
+  if (missingSkills.length) lines.push("", "Compétences manquantes : " + missingSkills.join(", "));
 
   const why = (data.why_match ?? []).filter(Boolean);
   if (why.length) { lines.push("", "Pourquoi ce match :"); why.forEach((s) => lines.push("  - " + s)); }
