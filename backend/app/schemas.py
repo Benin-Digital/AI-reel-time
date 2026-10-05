@@ -134,6 +134,25 @@ class SessionAssignRequest(BaseModel):
     job_ids: list[int] = Field(default_factory=list)
 
 
+class SessionUnassignResult(BaseModel):
+    """Result of POST /sessions/{id}/unassign -- shape depends on whether
+    the caller owns the archive (see deps.is_archive_owner):
+    - mode="unarchived": the caller's own archive was dissolved in place,
+      its documents are now active in the caller's own workspace (the
+      original, pre-2026-10-05 behavior). cv_count/job_count are always 0
+      here (the archive no longer exists).
+    - mode="copied": the archive belonged to someone else (visible via
+      the role hierarchy) -- the ORIGINAL archive and its documents are
+      untouched, and cv_count/job_count/match are independent copies now
+      active in the caller's own workspace instead.
+    """
+    mode: Literal["unarchived", "copied"]
+    session_id: int
+    session_name: str
+    cv_count: int = 0
+    job_count: int = 0
+
+
 class AnalysisSessionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

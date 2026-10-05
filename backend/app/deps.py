@@ -5,6 +5,7 @@ et les operations de cleanup DB partagees entre plusieurs routers/workers.
 """
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from fastapi import HTTPException, Request
@@ -171,3 +172,86 @@ def cleanup_removed_file(path: Path, role: str) -> None:
                 session.delete(doc)
             session.execute(delete(ScoreResult).where(ScoreResult.job_path == str(path)))
         session.commit()
+
+
+def is_archive_owner(archive_owner_id: int | None, current_user: User) -> bool:
+    """Is `current_user` allowed to directly mutate/dissolve this archive,
+    as opposed to only being able to see it via the role hierarchy?
+    Legacy/unclaimed (owner NULL) archives count as "owned" by anyone who
+    can see them at all -- same shared-pool reasoning as everywhere else.
+    """
+    return archive_owner_id is None or archive_owner_id == current_user.id
+
+
+def _disambiguated_path_for_new_owner(
+    session: OrmSession, model: type, target_dir: Path, original_filename: str, owner_id: int
+) -> Path:
+    """Same naming scheme as main.py's _disambiguate_filename_for_owner
+    (stem__u<id>), duplicated here rather than imported to avoid a
+    circular import (main.py imports this module) -- keep both in sync if
+    the naming scheme ever changes.
+    """
+    stem, suffix = Path(original_filename).stem, Path(original_filename).suffix
+    candidate = f"{stem}__u{owner_id}{suffix}"
+    attempt = 2
+    while True:
+        existing = session.scalar(select(model).where(model.path == str(target_dir / candidate)))
+        if existing is None:
+            return target_dir / candidate
+        candidate = f"{stem}__u{owner_id}-{attempt}{suffix}"
+        attempt += 1
+
+
+def clone_document_for_new_owner(session: OrmSession, model: type, doc, new_owner_id: int):
+    """Copy `doc` (a CvDocument or JobDocument row, and its file on disk)
+    into a brand-new row+file owned by `new_owner_id`, leaving `doc`
+    itself completely untouched.
+
+    Real bug reported live (2026-10-05): unarchiving a session mutated
+    CvDocument/JobDocument.session_id in place -- fine when the archive
+    belongs to the person unarchiving it, but when an admin unarchived
+    another profile's archive (visible via the role hierarchy, see
+    deps.visible_owner_ids), it ripped the documents out of that OTHER
+    profile's archive instead, with no way to make the unarchived copy
+    show up only in the admin's own active workspace. Cloning gives the
+    admin their own independent, active copy; the original archive and
+    its true owner are never touched.
+    """
+    original_path = Path(doc.path)
+    target_dir = original_path.parent
+    new_path = _disambiguated_path_for_new_owner(session, model, target_dir, original_path.name, new_owner_id)
+    shutil.copy2(original_path, new_path)
+
+    fields = {
+        "path": str(new_path),
+        "content_hash": doc.content_hash,
+        "status": doc.status,
+        "created_by_user_id": new_owner_id,
+        "session_id": None,
+    }
+    if hasattr(doc, "priority_keywords"):
+        fields["priority_keywords"] = doc.priority_keywords
+    if hasattr(doc, "scoring_profile"):
+        fields["scoring_profile"] = doc.scoring_profile
+    new_doc = model(**fields)
+    session.add(new_doc)
+    session.flush()
+
+    # Copy the cached extraction too (keyed by file_path) so the clone
+    # doesn't need a redundant re-extraction/OCR pass before it can be
+    # matched -- the bytes on disk are identical.
+    original_extract = session.scalar(select(ExtractedText).where(ExtractedText.file_path == str(original_path)))
+    if original_extract is not None:
+        session.add(ExtractedText(
+            file_path=str(new_path),
+            content_hash=original_extract.content_hash,
+            extracted_text=original_extract.extracted_text,
+            extraction_method=original_extract.extraction_method,
+            extraction_success=original_extract.extraction_success,
+            error_message=original_extract.error_message,
+            parsed_profile=original_extract.parsed_profile,
+            parsed_profile_hash=original_extract.parsed_profile_hash,
+            parsed_profile_updated_at=original_extract.parsed_profile_updated_at,
+        ))
+
+    return new_doc

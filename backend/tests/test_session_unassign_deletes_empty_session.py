@@ -70,9 +70,9 @@ def test_unassign_deletes_the_now_empty_session(session_factory, admin_user):
 
     result = sessions_router.unassign_session_documents(session_id, _fake_request(admin_user))
 
+    assert result.mode == "unarchived"
     assert result.cv_count == 0
     assert result.job_count == 0
-    assert result.status == "open"
 
     with session_factory() as session:
         assert session.get(AnalysisSession, session_id) is None, (

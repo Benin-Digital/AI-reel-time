@@ -207,18 +207,38 @@ async function _loadDetail(sessionId) {
     // Wire action buttons
     detailEl.querySelector("[data-action='unarchive']")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget;
+
+      // Avertir si le profil courant a deja une section active : desarchiver
+      // mélangerait ces nouveaux CV/offres avec le travail en cours, sans
+      // que ce soit forcement voulu -- propose d'archiver d'abord, ou de
+      // continuer malgre tout (2026-10-05).
+      let hasActiveWork = false;
+      try {
+        const progress = await safeFetch("/matches/progress");
+        hasActiveWork = (progress?.active_cv_count ?? 0) > 0 || (progress?.active_job_count ?? 0) > 0;
+      } catch { /* si la verification echoue, on ne bloque pas le desarchivage */ }
+
       const confirmed = await openConfirm(
         "Désarchiver la session",
-        `Désarchiver "${s.name}" ? Les CV et offres redeviendront actifs dans l'espace de travail.`,
-        "Désarchiver"
+        hasActiveWork
+          ? `Vous avez déjà des CV/offres actifs dans votre espace de travail. Désarchiver "${s.name}" va s'y ajouter et mélanger les deux. Archivez d'abord votre section active, ou continuez quand même.`
+          : `Désarchiver "${s.name}" ? Les CV et offres redeviendront actifs dans l'espace de travail.`,
+        hasActiveWork ? "Désarchiver quand même" : "Désarchiver"
       );
       if (!confirmed) return;
       btn.disabled = true;
       try {
-        await safeFetch(`/sessions/${sessionId}/unassign`, { method: "POST", json: true });
+        const result = await safeFetch(`/sessions/${sessionId}/unassign`, { method: "POST", json: true });
         window.dispatchEvent(new CustomEvent("load-matches"));
         _loadSessions();
         hide(detailEl);
+        if (result?.mode === "copied") {
+          setBanner(
+            $("#archiveCreateFeedback"),
+            `${result.cv_count} CV et ${result.job_count} offre(s) copiés dans votre espace actif -- l'archive "${result.session_name}" reste inchangée pour son propriétaire.`,
+            "success"
+          );
+        }
       } catch (err) {
         detailEl.insertAdjacentHTML("beforeend", `<div class="banner banner--error" style="margin-top:var(--space-3)">${escapeHtml(err.message)}</div>`);
       } finally {

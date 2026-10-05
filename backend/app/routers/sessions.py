@@ -9,7 +9,14 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
-from ..deps import can_see_unclaimed_archives, cleanup_removed_file, require_user, visible_owner_ids
+from ..deps import (
+    can_see_unclaimed_archives,
+    cleanup_removed_file,
+    clone_document_for_new_owner,
+    is_archive_owner,
+    require_user,
+    visible_owner_ids,
+)
 from ..models import AnalysisSession, CvDocument, JobDocument, MatchResult, User
 from ..schemas import (
     AnalysisSessionCreate,
@@ -19,6 +26,7 @@ from ..schemas import (
     CvDocumentRead,
     JobDocumentRead,
     SessionAssignRequest,
+    SessionUnassignResult,
 )
 
 router = APIRouter(tags=["sessions"])
@@ -278,11 +286,12 @@ def assign_documents_to_session(session_id: int, payload: SessionAssignRequest, 
         )
 
 
-@router.post("/sessions/{session_id}/unassign", response_model=AnalysisSessionDetailRead)
-def unassign_session_documents(session_id: int, request: Request) -> AnalysisSessionDetailRead:
-    """Detach every CV/offre from this archive session and delete the
-    now-empty session record.
+@router.post("/sessions/{session_id}/unassign", response_model=SessionUnassignResult)
+def unassign_session_documents(session_id: int, request: Request) -> SessionUnassignResult:
+    """Unarchive this session -- behavior depends on who's asking.
 
+    Owner (or the archive is legacy/unclaimed, see deps.is_archive_owner):
+    detach every CV/offre and dissolve the now-empty session record.
     Real bug reported live (2026-09-15): this used to only detach the
     documents and reopen the session (status="open"), leaving the empty
     AnalysisSession row behind forever -- the Archives list kept showing
@@ -292,33 +301,56 @@ def unassign_session_documents(session_id: int, request: Request) -> AnalysisSes
     unarchiving now dissolves it entirely instead of leaving a ghost
     entry -- matching delete_analysis_session's own behavior when
     delete_documents is requested, just without touching the files.
+
+    Not the owner (visible only via the role hierarchy, e.g. an admin
+    looking at a member's archive): real bug reported live (2026-10-05)
+    -- unarchiving used to mutate the documents in place, which ripped
+    them out of the TRUE owner's archive instead of the caller's own
+    workspace, silently turning that other profile's archive into "0 CV,
+    0 offres" the moment someone else unarchived it. Clone each document
+    (deps.clone_document_for_new_owner) into the caller's own active
+    workspace instead -- the original archive and its owner are never
+    touched, and a watch event is queued per clone so it gets matched
+    against the caller's own eligible counterparts like any fresh upload.
     """
     current_user = require_user(request)
     with SessionLocal() as session:
         session_obj = _visible_session_or_404(session, session_id, current_user)
-        session.execute(
-            update(CvDocument).where(CvDocument.session_id == session_id).values(session_id=None)
-        )
-        session.execute(
-            update(JobDocument).where(JobDocument.session_id == session_id).values(session_id=None)
-        )
-        result = AnalysisSessionDetailRead(
-            id=session_obj.id,
-            name=session_obj.name,
-            description=session_obj.description,
-            status="open",
-            closed_at=None,
-            cv_count=0,
-            job_count=0,
-            match_count=0,
-            created_at=session_obj.created_at,
-            updated_at=session_obj.updated_at,
-            cv_documents=[],
-            job_documents=[],
-        )
-        session.delete(session_obj)
+
+        if is_archive_owner(session_obj.created_by_user_id, current_user):
+            session.execute(
+                update(CvDocument).where(CvDocument.session_id == session_id).values(session_id=None)
+            )
+            session.execute(
+                update(JobDocument).where(JobDocument.session_id == session_id).values(session_id=None)
+            )
+            name = session_obj.name
+            session.delete(session_obj)
+            session.commit()
+            return SessionUnassignResult(
+                mode="unarchived", session_id=session_id, session_name=name, cv_count=0, job_count=0,
+            )
+
+        name = session_obj.name
+        cv_docs = session.scalars(select(CvDocument).where(CvDocument.session_id == session_id)).all()
+        job_docs = session.scalars(select(JobDocument).where(JobDocument.session_id == session_id)).all()
+        cloned_cv_paths = [
+            clone_document_for_new_owner(session, CvDocument, doc, current_user.id).path for doc in cv_docs
+        ]
+        cloned_job_paths = [
+            clone_document_for_new_owner(session, JobDocument, doc, current_user.id).path for doc in job_docs
+        ]
         session.commit()
-        return result
+
+        from ..main import WatchEvent, _on_watch_event  # local import: avoids a circular import with main.py
+
+        for p in cloned_cv_paths + cloned_job_paths:
+            _on_watch_event(WatchEvent(path=Path(p), event_type="ingest", observed_at=datetime.utcnow().timestamp()))
+
+        return SessionUnassignResult(
+            mode="copied", session_id=session_id, session_name=name,
+            cv_count=len(cloned_cv_paths), job_count=len(cloned_job_paths),
+        )
 
 
 @router.delete("/sessions/{session_id}", status_code=204, response_model=None)
