@@ -21,7 +21,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from .parser import ParsedDocument, parse_document
-from .taxonomy import normalize_skill
+from .taxonomy import find_skills, normalize_skill
 
 logger = logging.getLogger(__name__)
 
@@ -1036,38 +1036,69 @@ def _core_keyword_coverage(cv: ParsedDocument, job: ParsedDocument) -> float:
       single, non-alternation title (the "SAS" case this mechanism was
       built for) is unambiguous and keeps using it.
 
+    Independently of all of the above (2026-10-06): any skill find_skills()
+    recognizes directly in the job's title line is ALSO emphasized, whether
+    or not the recruiter configured priority keywords at all -- a title is
+    recruiter-authored and reliably names the headline specialization(s)
+    ("Expert IA – DevSecOps"), and recruiters are expected to stop using
+    the priority-keywords field over time, so this is the mechanism meant
+    to keep working without it. Same alternation-title opt-out as above.
+
     Returns 1.0 (no penalty) when no keyword qualifies as emphasized, so
     an ordinary, non-repeated priority-keyword list for a job whose title
-    doesn't mention any of them is entirely unaffected by this mechanism.
+    doesn't mention any of them (and whose title has no recognizable skill
+    of its own) is entirely unaffected by this mechanism.
     """
-    if not job.priority_keyword_terms:
-        return 1.0
-    counts = Counter(_normalize_priority_keyword(t) or t for t in job.priority_keyword_terms)
-    core = {canonical for canonical, n in counts.items() if n >= _CORE_KEYWORD_MIN_REPEATS}
-
-    title_folded = "" if _TITLE_ALTERNATION_RE.search(job.title_line) else _fold(job.title_line)
     cv_skills = set(cv.skill_terms)
-    matched = {c for c in core if c in cv_skills}
-    if title_folded:
-        for raw_term in job.priority_keyword_terms:
-            canonical = _normalize_priority_keyword(raw_term) or raw_term
-            if canonical in core:
-                continue
-            term_folded = _fold(raw_term)
-            # Word-boundary match, not a plain substring check: a short
-            # keyword (e.g. "BI") can otherwise match inside an unrelated
-            # title word by pure coincidence ("...bi..." inside a French
-            # word like "bienveillant") and get wrongly flagged as the
-            # job's headline requirement.
-            if not term_folded or not re.search(rf"\b{re.escape(term_folded)}\b", title_folded):
-                continue
-            core.add(canonical)
-            if canonical in cv_skills or raw_term in cv_skills:
-                matched.add(canonical)
+    core: set[str] = set()
+    matched: set[str] = set()
+    title_has_alternation = bool(_TITLE_ALTERNATION_RE.search(job.title_line))
+    title_folded = "" if title_has_alternation else _fold(job.title_line)
+
+    if job.priority_keyword_terms:
+        counts = Counter(_normalize_priority_keyword(t) or t for t in job.priority_keyword_terms)
+        core |= {canonical for canonical, n in counts.items() if n >= _CORE_KEYWORD_MIN_REPEATS}
+        matched |= {c for c in core if c in cv_skills}
+
+        if title_folded:
+            for raw_term in job.priority_keyword_terms:
+                canonical = _normalize_priority_keyword(raw_term) or raw_term
+                if canonical in core:
+                    continue
+                term_folded = _fold(raw_term)
+                # Word-boundary match, not a plain substring check: a short
+                # keyword (e.g. "BI") can otherwise match inside an unrelated
+                # title word by pure coincidence ("...bi..." inside a French
+                # word like "bienveillant") and get wrongly flagged as the
+                # job's headline requirement.
+                if not term_folded or not re.search(rf"\b{re.escape(term_folded)}\b", title_folded):
+                    continue
+                core.add(canonical)
+                if canonical in cv_skills or raw_term in cv_skills:
+                    matched.add(canonical)
+
+    if not title_has_alternation:
+        title_skills = set(find_skills(job.title_line))
+        core |= title_skills
+        matched |= {c for c in title_skills if c in cv_skills}
 
     if not core:
         return 1.0
-    return len(matched) / len(core)
+
+    # Same semantic-credit safety net the main skills score already uses
+    # (2026-10-06) -- without it, a core requirement is all-or-nothing on
+    # exact lexical match, and the title-derived path above (unlike the
+    # recruiter-typed priority-keyword path, hand-reviewed per job) can
+    # flag almost any role title as "core", making this exact-match-only
+    # gate hit far more often and far more harshly. Real case that exposed
+    # this: CV wrote "Pilotage de projets" (plural) against a job titled
+    # ...Chef de Projet..., which resolves to "Gestion de projet" -- but
+    # the singular-only alias missed it, collapsing a near-exact match to
+    # a full core penalty. Credit is capped at 1.0 unmatched-but-credited
+    # equivalent per skill, same ceiling behaviour as _skill_score.
+    unmatched = core - matched
+    semantic_credit = _semantic_skill_credit(unmatched, cv_skills) if unmatched else 0.0
+    return min(1.0, (len(matched) + semantic_credit) / len(core))
 
 
 def match_parsed_documents(cv: ParsedDocument, job: ParsedDocument) -> MatchScore:

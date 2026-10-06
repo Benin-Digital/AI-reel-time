@@ -219,17 +219,21 @@ def test_keyword_mentioned_once_but_present_in_job_title_becomes_core():
     job = parse_document("Data Analyst Expert SAS.\nOffre technique.", kind="job")
     job.priority_keyword_terms = split_priority_keywords(pk_raw)
 
-    # Deux concepts-coeur distincts ici : le mot-cle court "SAS" (nomme
-    # dans le titre) et le canonique "SAS (logiciel)" (issu des 3 variantes
-    # repetees). Un candidat qui n'ecrit que "SAS" en satisfait un sur
-    # deux -- c'est correct : il n'a demontre aucune des variantes
-    # precises, seulement la mention generique.
+    # Trois concepts-coeur distincts ici (2026-10-06, +1 depuis que le titre
+    # est aussi scanne par find_skills() independamment des mots-cles
+    # prioritaires) : le mot-cle court "SAS" (nomme dans le titre), le
+    # canonique "SAS (logiciel)" (issu des 3 variantes repetees), et "Data
+    # Analyst" (trouve directement dans le titre "Data Analyst Expert SAS"
+    # par find_skills()). Un candidat qui n'ecrit que "SAS" en satisfait un
+    # sur trois -- le credit semantique ne le sauve pas ici : "Data Analyst"
+    # n'est pas semantiquement proche de "SAS"/"Python".
     cv_bare_sas = parse_document("Competences: SAS, Python.", kind="cv")
     _apply_priority_keywords(cv_bare_sas, job)
-    assert _core_keyword_coverage(cv_bare_sas, job) == 0.5, (
+    assert _core_keyword_coverage(cv_bare_sas, job) == pytest.approx(1 / 3), (
         "le mot-cle court 'SAS' (tape tel quel par le recruteur, nomme dans le titre) "
         "doit etre credite meme sans les variantes precises -- mais reste a 1 concept "
-        "sur 2 puisque 'SAS (logiciel)' (issu des variantes repetees) n'est pas satisfait"
+        "sur 3 puisque 'SAS (logiciel)' et 'Data Analyst' (issu du titre) ne sont pas "
+        "satisfaits"
     )
 
     cv_no_sas = parse_document("Competences: Python.", kind="cv")
@@ -351,15 +355,61 @@ def test_non_slash_title_still_triggers_the_core_mechanism_unchanged():
     assert _core_keyword_coverage(cv_no_sas, job) == 0.0
 
 
-def test_job_title_does_not_affect_a_cv_without_repeated_or_titled_keywords():
-    """Une offre dont le titre ne nomme aucun mot-cle prioritaire, et sans
-    repetition, ne doit declencher aucune penalite -- cas le plus courant."""
+def test_job_title_names_a_role_independently_of_priority_keywords():
+    """2026-10-06 : find_skills() tourne desormais sur le titre de l'offre
+    independamment de toute configuration de mots-cles prioritaires par le
+    recruteur (qui est amene a disparaitre cote RH) -- un titre nomme de
+    maniere fiable la specialisation centrale du poste ("Expert IA –
+    DevSecOps", "Chef de Projet IT"...). Avant ce changement, cette offre
+    (titre "Chef de Projet IT", mots-cles prioritaires non repetes et non
+    nommes litteralement dans le titre) ne declenchait AUCUNE penalite
+    coeur -- desormais, "Chef de Projet" dans le titre resout au canonical
+    "Gestion de projet" et devient lui-meme une exigence coeur, meme sans
+    configuration recruteur. Un candidat sans aucune competence proche de
+    la gestion de projet (juste "Excel") est correctement penalise."""
     from app.services.matcher import split_priority_keywords, _apply_priority_keywords
 
     job = parse_document("Chef de Projet IT.\nOffre generaliste.", kind="job")
     job.priority_keyword_terms = split_priority_keywords("Gestion de projet\nAgile\n")
     cv = parse_document("Competences: Excel.", kind="cv")
     _apply_priority_keywords(cv, job)
+    assert _core_keyword_coverage(cv, job) == 0.0
+
+
+def test_job_title_derived_skill_is_not_penalized_when_the_cv_covers_it():
+    """Meme offre que ci-dessus, mais le CV demontre bien la gestion de
+    projet -- verrouille qu'il n'y a pas de faux positif quand la
+    competence nommee dans le titre est reellement couverte."""
+    from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    job = parse_document("Chef de Projet IT.\nOffre generaliste.", kind="job")
+    job.priority_keyword_terms = split_priority_keywords("Gestion de projet\nAgile\n")
+    cv = parse_document("Competences: Gestion de projet, Agile, Excel.", kind="cv")
+    _apply_priority_keywords(cv, job)
+    assert _core_keyword_coverage(cv, job) == 1.0
+
+
+def test_job_title_names_the_headline_specialization_without_any_priority_keywords():
+    """Le cas motivant de cette fonctionnalite : une offre "Expert IA –
+    DevSecOps" sans aucun mot-cle prioritaire configure (les RH sont
+    amenes a ne plus utiliser ce champ). "DevSecOps" nomme dans le titre
+    doit a lui seul devenir une exigence coeur."""
+    job = parse_document(
+        "Expert IA – DevSecOps.\nMission : IA agentique, LLM, agents, RAG, MCP.",
+        kind="job",
+    )
+    cv_with = parse_document("Expertise DevSecOps, CI/CD, Kubernetes.", kind="cv")
+    cv_without = parse_document("Consultant generaliste, gestion de projet, Excel.", kind="cv")
+    assert _core_keyword_coverage(cv_with, job) == 1.0
+    assert _core_keyword_coverage(cv_without, job) == 0.0
+
+
+def test_job_title_with_no_recognizable_skill_triggers_no_penalty():
+    """Un titre qui ne nomme explicitement aucune competence/role reconnu
+    par la taxonomie ne doit toujours declencher aucune penalite -- le
+    mecanisme ne doit pas halluciner une exigence coeur a partir de rien."""
+    job = parse_document("Rejoignez-nous !\nOffre generaliste.", kind="job")
+    cv = parse_document("Competences: Excel.", kind="cv")
     assert _core_keyword_coverage(cv, job) == 1.0
 
 

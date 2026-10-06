@@ -198,6 +198,7 @@ _SKILLS: dict[str, list[str]] = {
                                "plan de reprise d activite", "disaster recovery"],
     "Cloud Computing": ["cloud", "cloud computing", "informatique en nuage"],
     "DevOps": ["devops", "dev ops"],
+    "DevSecOps": ["devsecops", "dev sec ops"],
     "RPA": ["rpa", "robotic process automation", "automatisation robotisee des processus"],
     "GPO": ["gpo", "group policy object", "strategie de groupe"],
     "BPM": ["bpm", "business process management", "gestion des processus metier"],
@@ -343,7 +344,11 @@ _SKILLS: dict[str, list[str]] = {
     "WebRTC": ["webrtc"],
 
     # ── GESTION DE PROJET & MANAGEMENT ────────────────────────────────────
-    "Gestion de projet": ["gestion de projet", "project management", "chef de projet", "pilotage de projet", "project manager"],
+    # "pilotage de projets" (pluriel) ajoute 2026-10-06 : find_skills() fait
+    # une correspondance exacte par n-gramme, pas de stemming -- "pilotage
+    # de projet" (l'alias existant) ne reconnaissait pas le pluriel, trouve
+    # sur un CV reel qui ecrivait "Pilotage de projets" (au pluriel).
+    "Gestion de projet": ["gestion de projet", "project management", "chef de projet", "pilotage de projet", "pilotage de projets", "project manager"],
     "Leadership": ["leadership", "direction d equipe", "team leadership", "encadrement"],
     "Management d'équipe": ["management d equipe", "team management", "encadrement d equipe", "gestion d equipe", "people management"],
     "Conduite du changement": ["conduite du changement", "change management", "transformation organisationnelle"],
