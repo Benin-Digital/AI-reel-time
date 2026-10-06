@@ -108,9 +108,18 @@ def _cross_encode(query: str, document: str) -> float:
 # tokenizer's ~4 chars/token) leaves headroom rather than betting the whole
 # budget on a single side.
 _CHUNK_CHARS = 800
-# Hard cap on chunks per side: bounds worst-case cross-encoder calls for one
-# pathological document (a huge OCR dump) instead of scaling unboundedly.
-_MAX_CHUNKS = 8
+# NOT a practical cap (2026-10-06): used to be 8, which silently dropped
+# anything past ~6400 chars/side -- real CVs on file run up to ~20 pages,
+# so that cap was routinely hit, not a theoretical edge case. Explicit
+# choice: correctness over latency here. _cross_encode_best() below scores
+# every (query_chunk, document_chunk) combination and keeps the max, so a
+# missed chunk is a missed potential best-match, not a rounding error --
+# approximating (e.g. pre-filtering pairs with a cheap bi-encoder pass
+# before cross-encoding, which risks the bi-encoder ranking the true best
+# pair low) trades a correctness risk for a latency win this project does
+# not want. This number only guards against a truly pathological document
+# (a multi-MB OCR/garbage dump) hanging the worker, not real content.
+_MAX_CHUNKS = 500
 
 
 def _chunk_text(text: str, chunk_size: int = _CHUNK_CHARS) -> list[str]:
@@ -692,12 +701,13 @@ def _semantic_repr(doc: ParsedDocument) -> str:
     regardless of doc.kind, so the CV and job sides stay symmetric (see the
     comment in match_cv_to_job for why symmetry matters).
 
-    Capped at 12000 chars as a safety ceiling (a pathological OCR dump),
-    NOT at the cross-encoder's single-pass window: _cross_encode_best()
-    chunks and scores the full text instead of betting everything on one
-    ~2000-char window, since real CVs in this project average ~9-10k
-    characters and a manual check found most exceed a single window even
-    after this section-priority selection.
+    Capped at 200000 chars as a pathological-input safety ceiling only
+    (2026-10-06, raised from 12000) -- not a real content limit anymore.
+    _cross_encode_best() now scores every chunk of the full text (its own
+    _MAX_CHUNKS is likewise a safety-only ceiling, not a practical one),
+    so there is no more reason to pre-truncate here: real CVs on file run
+    up to ~20 pages, well past the old 12000-char cutoff, and this project
+    chose correctness over latency for long documents.
 
     Falls back to cleaned_text when the structured sections are empty, so a
     document whose sections were all mis-parsed still gets a representation.
@@ -724,7 +734,7 @@ def _semantic_repr(doc: ParsedDocument) -> str:
         if tail and tail not in seen:
             combined = (combined + "\n" + tail).strip()
 
-    return combined[:12000]
+    return combined[:200000]
 
 
 def match_cv_to_job(

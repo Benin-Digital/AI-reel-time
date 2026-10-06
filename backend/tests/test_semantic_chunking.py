@@ -65,6 +65,26 @@ def test_cross_encode_best_takes_the_max_across_chunk_pairs(monkeypatch):
     assert result == 0.95
 
 
+def test_cross_encode_best_finds_a_match_in_the_last_chunk_of_a_long_document(monkeypatch):
+    # 2026-10-06 : _MAX_CHUNKS valait 8 (6400 car.) -- tout CV reel au-dela
+    # (certains font jusqu'a ~20 pages, largement plus que 6400 caracteres)
+    # etait silencieusement invisible au cross-encoder, quel que soit son
+    # contenu. Desormais un garde-fou large (500 fenetres), pas une limite
+    # pratique : ce test construit un document dont SEUL le tout dernier
+    # fragment contient un bon score, bien au-dela de l'ancien plafond, et
+    # verrouille qu'il est quand meme trouve.
+    chunk_count = 20  # 20 * 800 = 16000 car., largement > l'ancien plafond (6400)
+    document = " ".join(f"filler{i}" * 100 for i in range(chunk_count))
+    document += " dernier-fragment-pertinent"
+
+    def fake_cross_encode(query, doc_chunk):
+        return 0.99 if "dernier-fragment-pertinent" in doc_chunk else 0.1
+
+    monkeypatch.setattr(matcher, "_cross_encode", fake_cross_encode)
+
+    assert _cross_encode_best("requete", document) == 0.99
+
+
 def test_cross_encode_best_matches_plain_cross_encode_for_short_pairs(monkeypatch):
     """Quand les deux cotes tiennent dans une seule fenetre, le resultat
     doit etre identique a un appel _cross_encode direct (pas de fenetre
