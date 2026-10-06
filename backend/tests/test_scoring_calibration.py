@@ -204,13 +204,22 @@ def test_core_penalty_scales_the_score_instead_of_flooring_it():
 # bien plus fiable que la repetition seule. Cote CV, la premiere ligne
 # n'est PAS utilisee de la meme facon (souvent juste le nom du candidat).
 
-def test_keyword_mentioned_once_but_present_in_job_title_becomes_core():
+def test_keyword_mentioned_once_but_present_in_job_title_becomes_core(monkeypatch):
     """Regression reelle (offre "Data Analyst Expert SAS", 2026-09-11) :
     un candidat ecrivant simplement "SAS" (sans variante) restait en dehors
     du canonique "SAS (logiciel)" (bare "SAS" exclu de la taxonomie, voir
     taxonomy.py) meme quand le titre du poste nommait explicitement SAS.
     Le titre doit permettre de detecter ce candidat correctement."""
+    from app.services import matcher as matcher_module
     from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    # Ce test verrouille le comptage lexical (1 concept core sur 3), pas le
+    # credit semantique (teste ailleurs, voir test_hybrid_skill_score.py) --
+    # sans ce monkeypatch, le resultat depend de la disponibilite reelle du
+    # modele d'embedding (absent/indisponible en local selon l'environnement,
+    # actif sur CI), rendant l'assertion non-deterministe d'un environnement
+    # a l'autre.
+    monkeypatch.setattr(matcher_module, "_semantic_skill_credit", lambda unmatched, cv_skills: 0.0)
 
     # "SAS" est tape par le recruteur comme sa PROPRE ligne (en plus des
     # variantes) -- cas reel : le recruteur liste a la fois le nom court et
@@ -355,7 +364,7 @@ def test_non_slash_title_still_triggers_the_core_mechanism_unchanged():
     assert _core_keyword_coverage(cv_no_sas, job) == 0.0
 
 
-def test_job_title_names_a_role_independently_of_priority_keywords():
+def test_job_title_names_a_role_independently_of_priority_keywords(monkeypatch):
     """2026-10-06 : find_skills() tourne desormais sur le titre de l'offre
     independamment de toute configuration de mots-cles prioritaires par le
     recruteur (qui est amene a disparaitre cote RH) -- un titre nomme de
@@ -367,7 +376,13 @@ def test_job_title_names_a_role_independently_of_priority_keywords():
     "Gestion de projet" et devient lui-meme une exigence coeur, meme sans
     configuration recruteur. Un candidat sans aucune competence proche de
     la gestion de projet (juste "Excel") est correctement penalise."""
+    from app.services import matcher as matcher_module
     from app.services.matcher import split_priority_keywords, _apply_priority_keywords
+
+    # Meme raison que le test SAS plus haut : isole le comptage lexical de
+    # la disponibilite reelle (variable selon l'environnement) du modele
+    # d'embedding.
+    monkeypatch.setattr(matcher_module, "_semantic_skill_credit", lambda unmatched, cv_skills: 0.0)
 
     job = parse_document("Chef de Projet IT.\nOffre generaliste.", kind="job")
     job.priority_keyword_terms = split_priority_keywords("Gestion de projet\nAgile\n")
@@ -389,11 +404,18 @@ def test_job_title_derived_skill_is_not_penalized_when_the_cv_covers_it():
     assert _core_keyword_coverage(cv, job) == 1.0
 
 
-def test_job_title_names_the_headline_specialization_without_any_priority_keywords():
+def test_job_title_names_the_headline_specialization_without_any_priority_keywords(monkeypatch):
     """Le cas motivant de cette fonctionnalite : une offre "Expert IA –
     DevSecOps" sans aucun mot-cle prioritaire configure (les RH sont
     amenes a ne plus utiliser ce champ). "DevSecOps" nomme dans le titre
     doit a lui seul devenir une exigence coeur."""
+    from app.services import matcher as matcher_module
+
+    # Meme raison que les tests precedents : isole le comptage lexical de
+    # la disponibilite reelle (variable selon l'environnement) du modele
+    # d'embedding.
+    monkeypatch.setattr(matcher_module, "_semantic_skill_credit", lambda unmatched, cv_skills: 0.0)
+
     job = parse_document(
         "Expert IA – DevSecOps.\nMission : IA agentique, LLM, agents, RAG, MCP.",
         kind="job",
