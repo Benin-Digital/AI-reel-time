@@ -868,7 +868,19 @@ _SKILLS: dict[str, list[str]] = {
     "Procédures de sauvegarde des données": ["procedures de sauvegarde des donnees"],
     "Protection des données": ["protection des donnees"],
     "Routage": ["routage"],
-    "Règles de sécurité": ["regles de securite"],
+    # Alias ajoutes 2026-10-06 : "regles de securite" seul ratait des CV qui
+    # demontrent clairement la pratique sans jamais ecrire ce libelle exact
+    # (ex: "Secure-by-Design" trouve verbatim dans un CV reel). Ne reprend
+    # PAS les noms de pratiques specifiques deja indexees comme leur propre
+    # competence distincte (Zero Trust, OWASP, Cybersecurite...) -- juste
+    # des formulations generiques equivalentes a "regles/pratiques de
+    # securite", pour eviter une collision d'alias qui ecraserait leur
+    # propre detection (voir _build_lookup : un alias = un seul canonical).
+    "Règles de sécurité": [
+        "regles de securite", "secure by design", "secure-by-design",
+        "security by design", "bonnes pratiques de securite",
+        "politique de securite", "security policy", "security best practices",
+    ],
     "SharePoint": ["sharepoint"],
     "Spring Framework": ["spring framework"],
     "Stockage de données": ["stockage de donnees"],
