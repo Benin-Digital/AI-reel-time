@@ -587,12 +587,29 @@
                 <p class="view__subtitle">Gérez vos sessions d'analyse et rouvrez-les plus tard.</p>
               </div>
             </div>
-            <div style="display:grid;grid-template-columns:400px 1fr;gap:var(--space-4)">
-              <div class="card">
-                <div class="card__header">
-                  <div class="card__title">Créer une archive</div>
+            <div class="card">
+              <div class="card__header">
+                <div class="card__title">Sessions archivées</div>
+                <button class="btn btn--primary btn--sm" type="button" data-open-archive-create>+ Nouvelle archive</button>
+              </div>
+              <div id="archiveListFeedback" class="banner" hidden role="status"></div>
+              <div class="filters-bar" style="margin-bottom:var(--space-3)">
+                <input id="archiveSearch" class="filters-bar__search" type="search" placeholder="Rechercher une archive par nom ou description…" />
+              </div>
+              <div class="stack" id="archiveSessionsList"></div>
+            </div>
+
+            <!-- Modal: Créer une archive -->
+            <div id="archiveCreateModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="archiveCreateTitle">
+              <div class="modal__backdrop" data-modal-close></div>
+              <div class="modal__card">
+                <div class="modal__header">
+                  <h3 class="modal__title" id="archiveCreateTitle">Créer une archive</h3>
+                  <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
                 </div>
-                <form id="archiveCreateForm" class="stack" style="gap:var(--space-4)">
+                <form id="archiveCreateForm" class="modal__body stack" style="gap:var(--space-4)">
                   <div class="form-group">
                     <label class="form-label" for="archiveName">Nom de l'archive *</label>
                     <input id="archiveName" type="text" placeholder="Batch de recrutement juin 2026" required />
@@ -605,17 +622,21 @@
                   <div id="archiveCreateFeedback" class="banner" hidden role="alert"></div>
                 </form>
               </div>
-              <div class="card">
-                <div class="card__header">
-                  <div class="card__title">Sessions archivées</div>
+            </div>
+
+            <!-- Modal: Détail d'une archive -->
+            <div id="archiveDetailModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="archiveDetailTitle">
+              <div class="modal__backdrop" data-modal-close></div>
+              <div class="modal__card modal__card--wide">
+                <div class="modal__header">
+                  <h3 class="modal__title" id="archiveDetailTitle">Détail de l'archive</h3>
+                  <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </button>
                 </div>
-                <div class="filters-bar" style="margin-bottom:var(--space-3)">
-                  <input id="archiveSearch" class="filters-bar__search" type="search" placeholder="Rechercher une archive par nom ou description…" />
-                </div>
-                <div class="stack" id="archiveSessionsList"></div>
+                <div id="archiveDetails" class="modal__body"></div>
               </div>
             </div>
-            <div id="archiveDetails" class="card" hidden></div>
           </section>
 
           <!-- ── PANEL: Évaluations ── -->

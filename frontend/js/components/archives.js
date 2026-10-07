@@ -1,5 +1,5 @@
 import { safeFetch } from "../api.js";
-import { $, setBanner, show, hide, escapeHtml } from "../utils/dom.js";
+import { $, setBanner, openModal, closeModal, escapeHtml } from "../utils/dom.js";
 import { formatDate, scoreTone } from "../utils/format.js";
 import { openDeleteConfirm, openConfirm } from "../utils/upload.js";
 import { store } from "../store.js";
@@ -52,11 +52,28 @@ export function initArchives() {
 
       setBanner(feedback, "Archive créée.", "success");
       e.target.reset();
+      closeModal($("#archiveCreateModal"));
       _loadSessions();
     } catch (err) {
       setBanner(feedback, err.message, "error");
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = "Créer l'archive"; }
+    }
+  });
+
+  // "Créer une archive" et le détail d'une archive vivent en modale --
+  // demande explicite : les 3 cartes permanentes (formulaire de création +
+  // liste + détail poussé en dessous) encombraient la page pour une action
+  // occasionnelle (créer) et une consultation ponctuelle (détail). Une
+  // seule carte "Sessions archivées" reste affichée en continu.
+  $("[data-open-archive-create]")?.addEventListener("click", () => openModal($("#archiveCreateModal")));
+
+  // Fermeture générique des modales de ce panneau (fond cliqué ou bouton
+  // ×) -- même pattern que matches.js pour explainModal.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-modal-close]")) {
+      const modal = e.target.closest(".modal");
+      if (modal && (modal.id === "archiveCreateModal" || modal.id === "archiveDetailModal")) closeModal(modal);
     }
   });
 
@@ -308,7 +325,9 @@ async function _loadDetail(sessionId) {
   const detailEl = $("#archiveDetails");
   if (!detailEl) return;
 
-  show(detailEl);
+  const titleEl = $("#archiveDetailTitle");
+  if (titleEl) titleEl.textContent = "Détail de l'archive";
+  openModal($("#archiveDetailModal"));
   detailEl.innerHTML = `<div class="skeleton skeleton--card"></div>`;
 
   try {
@@ -342,13 +361,12 @@ async function _loadDetail(sessionId) {
         }).join("")
       : `<span class="text-xs text-muted">Aucune correspondance trouvée.</span>`;
 
+    if (titleEl) titleEl.textContent = s.name;
+
     detailEl.innerHTML = `
-      <div class="card__header">
-        <div class="card__title">${escapeHtml(s.name)}</div>
-        <span class="badge badge--${statusVariant}">${statusLabel}</span>
-      </div>
       ${s.description ? `<p class="text-sm text-secondary" style="margin-bottom:var(--space-3)">${escapeHtml(s.description)}</p>` : ""}
       <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center;margin-bottom:var(--space-4)">
+        <span class="badge badge--${statusVariant}">${statusLabel}</span>
         <span class="text-sm text-muted">${s.cv_count ?? 0} CV</span>
         <span class="text-sm text-muted">${s.job_count ?? 0} offres</span>
         <span class="text-sm text-muted">${s.match_count ?? 0} correspondances</span>
@@ -405,10 +423,14 @@ async function _loadDetail(sessionId) {
         const result = await safeFetch(`/sessions/${sessionId}/unassign`, { method: "POST", json: true });
         window.dispatchEvent(new CustomEvent("load-matches"));
         _loadSessions();
-        hide(detailEl);
+        closeModal($("#archiveDetailModal"));
         if (result?.mode === "copied") {
+          // #archiveCreateFeedback vit dans la modale de création, repliée
+          // à ce stade -- ce message doit rester visible après la
+          // fermeture de la modale de détail, donc la bannière toujours
+          // affichée du panneau principal, pas celle du formulaire.
           setBanner(
-            $("#archiveCreateFeedback"),
+            $("#archiveListFeedback"),
             `${result.cv_count} CV et ${result.job_count} offre(s) copiés dans votre espace actif -- l'archive "${result.session_name}" reste inchangée pour son propriétaire.`,
             "success"
           );
@@ -429,7 +451,7 @@ async function _loadDetail(sessionId) {
         await safeFetch(`/sessions/${sessionId}?delete_documents=true`, { method: "DELETE" });
         window.dispatchEvent(new CustomEvent("load-matches"));
         _loadSessions();
-        hide(detailEl);
+        closeModal($("#archiveDetailModal"));
       } catch (err) {
         detailEl.insertAdjacentHTML("beforeend", `<div class="banner banner--error" style="margin-top:var(--space-3)">${escapeHtml(err.message)}</div>`);
       } finally {
