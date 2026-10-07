@@ -598,45 +598,6 @@
               </div>
               <div class="stack" id="archiveSessionsList"></div>
             </div>
-
-            <!-- Modal: Créer une archive -->
-            <div id="archiveCreateModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="archiveCreateTitle">
-              <div class="modal__backdrop" data-modal-close></div>
-              <div class="modal__card">
-                <div class="modal__header">
-                  <h3 class="modal__title" id="archiveCreateTitle">Créer une archive</h3>
-                  <button class="btn btn--icon" data-modal-close aria-label="Fermer">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                  </button>
-                </div>
-                <form id="archiveCreateForm" class="modal__body stack" style="gap:var(--space-4)">
-                  <div class="form-group">
-                    <label class="form-label" for="archiveName">Nom de l'archive *</label>
-                    <input id="archiveName" type="text" placeholder="Batch de recrutement juin 2026" required />
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label" for="archiveDescription">Description</label>
-                    <textarea id="archiveDescription" rows="3" placeholder="Ex. lot CV / offres pour mission A"></textarea>
-                  </div>
-                  <button class="btn btn--primary" type="submit">Créer l'archive</button>
-                  <div id="archiveCreateFeedback" class="banner" hidden role="alert"></div>
-                </form>
-              </div>
-            </div>
-
-            <!-- Modal: Détail d'une archive -->
-            <div id="archiveDetailModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="archiveDetailTitle">
-              <div class="modal__backdrop" data-modal-close></div>
-              <div class="modal__card modal__card--wide">
-                <div class="modal__header">
-                  <h3 class="modal__title" id="archiveDetailTitle">Détail de l'archive</h3>
-                  <button class="btn btn--icon" data-modal-close aria-label="Fermer">
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                  </button>
-                </div>
-                <div id="archiveDetails" class="modal__body"></div>
-              </div>
-            </div>
           </section>
 
           <!-- ── PANEL: Évaluations ── -->
@@ -766,6 +727,45 @@
           <div id="loginError" class="banner banner--error" hidden role="alert"></div>
           <button class="btn btn--primary" type="submit" style="width:100%">Se connecter</button>
         </form>
+      </div>
+    </div>
+
+    <!-- Modal: Créer une archive -->
+    <div id="archiveCreateModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="archiveCreateTitle">
+      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__card">
+        <div class="modal__header">
+          <h3 class="modal__title" id="archiveCreateTitle">Créer une archive</h3>
+          <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <form id="archiveCreateForm" class="modal__body stack" style="gap:var(--space-4)">
+          <div class="form-group">
+            <label class="form-label" for="archiveName">Nom de l'archive *</label>
+            <input id="archiveName" type="text" placeholder="Batch de recrutement juin 2026" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="archiveDescription">Description</label>
+            <textarea id="archiveDescription" rows="3" placeholder="Ex. lot CV / offres pour mission A"></textarea>
+          </div>
+          <button class="btn btn--primary" type="submit">Créer l'archive</button>
+          <div id="archiveCreateFeedback" class="banner" hidden role="alert"></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Détail d'une archive -->
+    <div id="archiveDetailModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="archiveDetailTitle">
+      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__card modal__card--wide">
+        <div class="modal__header">
+          <h3 class="modal__title" id="archiveDetailTitle">Détail de l'archive</h3>
+          <button class="btn btn--icon" data-modal-close aria-label="Fermer">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div id="archiveDetails" class="modal__body"></div>
       </div>
     </div>
 
