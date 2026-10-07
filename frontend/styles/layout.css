@@ -508,6 +508,58 @@
 }
 .doc-item:hover .doc-item__actions { opacity: 1; }
 
+/* ---- ARCHIVE GROUPS (classeur jour / semaine / année) ---- */
+.archive-group {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.archive-group + .archive-group { margin-top: var(--space-3); }
+
+.archive-group__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  list-style: none;
+  user-select: none;
+}
+.archive-group__header::-webkit-details-marker { display: none; }
+.archive-group__header::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--text-muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform var(--ease-fast);
+  flex-shrink: 0;
+}
+.archive-group[open] > .archive-group__header::before { transform: rotate(90deg); }
+
+.archive-group__count {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  color: var(--text-muted);
+  background: var(--bg-surface-raised);
+  border-radius: var(--radius-full);
+  padding: 2px 8px;
+}
+
+.archive-group__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
 /* ---- MATCH CARD ---- */
 .match-card {
   background: var(--bg-surface);

@@ -66,6 +66,15 @@ export function initArchives() {
     if (btn) _loadDetail(btn.dataset.openSession);
   });
 
+  // Recherche en direct (nom + description, déjà supporté côté API --
+  // voir GET /sessions?search=) -- débounce comme le slider de score
+  // minimum dans matches.js, pour ne pas requêter à chaque frappe.
+  let searchDebounce = null;
+  $("#archiveSearch")?.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => _loadSessions(), 300);
+  });
+
   window.addEventListener("load-archives", () => _loadSessions());
 }
 
@@ -79,29 +88,15 @@ function _updateSidebarArchivesBadge(sessions) {
   badge.hidden = openCount === 0;
 }
 
-async function _loadSessions() {
-  const list = $("#archiveSessionsList");
-  if (!list) return;
+// Archives created by someone else only ever appear here at all for
+// admin/superadmin (deps.visible_owner_ids on the backend already
+// filtered the list by role hierarchy) -- this label exists purely so
+// that view doesn't read as "my archives", which is what every role saw
+// before this fix regardless of who actually created what.
+const _isMine = (s) => s.created_by_user_id == null || s.created_by_user_id === store.authUser?.id;
 
-  try {
-    const sessions = await safeFetch("/sessions");
-    _updateSidebarArchivesBadge(sessions);
-
-    if (!sessions.length) {
-      list.innerHTML = `<div class="empty-state"><div class="empty-state__hint">Aucune archive créée.</div></div>`;
-      return;
-    }
-
-    // Archives created by someone else only ever appear here at all for
-    // admin/superadmin (deps.visible_owner_ids on the backend already
-    // filtered the list by role hierarchy) -- this label exists purely so
-    // that view doesn't read as "my archives", which is what every role
-    // saw before this fix regardless of who actually created what.
-    const isMine = (s) => s.created_by_user_id == null || s.created_by_user_id === store.authUser?.id;
-
-    list.innerHTML = sessions
-      .map(
-        (s) => `
+function _sessionCardHtml(s) {
+  return `
       <article class="doc-item" style="cursor:pointer" data-archive-id="${s.id}">
         <div class="doc-item__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="3.5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 5.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-8" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
         <div class="doc-item__body">
@@ -110,19 +105,151 @@ async function _loadSessions() {
             <span class="badge badge--${s.status === "closed" ? "default" : "success"}">
               ${s.status === "closed" ? "Fermée" : "Ouverte"}
             </span>
-            ${!isMine(s) ? `<span class="badge badge--primary" title="Archive d'un autre profil">${escapeHtml(s.created_by_label || "Propriétaire inconnu")}${s.created_by_role ? ` · ${escapeHtml(s.created_by_role)}` : ""}</span>` : ""}
+            ${!_isMine(s) ? `<span class="badge badge--primary" title="Archive d'un autre profil">${escapeHtml(s.created_by_label || "Propriétaire inconnu")}${s.created_by_role ? ` · ${escapeHtml(s.created_by_role)}` : ""}</span>` : ""}
             <span>${s.cv_count ?? 0} CV</span>
             <span>${s.job_count ?? 0} offres</span>
             <span>${s.match_count ?? 0} matches</span>
+            <span>${formatDate(s.created_at)}</span>
           </div>
         </div>
         <div class="doc-item__actions">
           <button class="btn btn--ghost btn--sm" data-open-session="${s.id}">Ouvrir</button>
         </div>
       </article>
+    `;
+}
+
+function _startOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+// Convention FR : la semaine commence lundi.
+function _startOfWeek(d) {
+  const x = _startOfDay(d);
+  const day = x.getDay();
+  x.setDate(x.getDate() + (day === 0 ? -6 : 1 - day));
+  return x;
+}
+
+const _dayDiff = (a, b) => Math.round((a - b) / 86400000);
+
+// Classeur jour / semaine / année -- demande explicite : les archives
+// récentes restent repérables une par une (Aujourd'hui/Hier), le reste se
+// range par semaine puis, au-delà, par année -- comme un vrai classeur
+// papier, où les dossiers anciens sont fermés par défaut et seuls les plus
+// récents sont ouverts d'entrée. Basé sur created_at (seule date que
+// l'API expose pour une session, voir AnalysisSessionRead).
+function _groupSessionsByDate(sessions) {
+  const now = new Date();
+  const today = _startOfDay(now);
+  const thisWeekStart = _startOfWeek(now);
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+  const order = ["Aujourd'hui", "Hier", "Cette semaine", "Semaine dernière"];
+  const buckets = new Map(order.map((label) => [label, []]));
+  const yearBuckets = new Map();
+
+  for (const s of sessions) {
+    const createdDay = _startOfDay(new Date(s.created_at));
+    const diff = _dayDiff(today, createdDay);
+
+    let label = null;
+    if (diff === 0) label = "Aujourd'hui";
+    else if (diff === 1) label = "Hier";
+    else if (createdDay >= thisWeekStart) label = "Cette semaine";
+    else if (createdDay >= lastWeekStart) label = "Semaine dernière";
+
+    if (label) {
+      buckets.get(label).push(s);
+    } else {
+      const year = createdDay.getFullYear();
+      if (!yearBuckets.has(year)) yearBuckets.set(year, []);
+      yearBuckets.get(year).push(s);
+    }
+  }
+
+  const groups = order
+    .filter((label) => buckets.get(label).length)
+    .map((label) => ({ label, sessions: buckets.get(label), defaultOpen: true }));
+
+  for (const year of [...yearBuckets.keys()].sort((a, b) => b - a)) {
+    groups.push({ label: String(year), sessions: yearBuckets.get(year), defaultOpen: false });
+  }
+
+  return groups;
+}
+
+function _groupsHtml(groups) {
+  return groups
+    .map(
+      (g) => `
+      <details class="archive-group"${g.defaultOpen ? " open" : ""}>
+        <summary class="archive-group__header">
+          <span>${escapeHtml(g.label)}</span>
+          <span class="archive-group__count">${g.sessions.length}</span>
+        </summary>
+        <div class="archive-group__body">${g.sessions.map(_sessionCardHtml).join("")}</div>
+      </details>
     `
-      )
-      .join("");
+    )
+    .join("");
+}
+
+// Pagination cumulative (page_size au maximum autorisé par l'API, 100) --
+// nécessaire pour que le classeur groupe un ensemble complet plutôt que la
+// première page seulement ; "Charger plus" apparaît uniquement si une page
+// pleine laisse supposer qu'il en reste d'autres.
+let _sessionsCache = [];
+let _sessionsNextPage = 1;
+
+async function _loadSessions({ reset = true } = {}) {
+  const list = $("#archiveSessionsList");
+  if (!list) return;
+
+  const searchValue = $("#archiveSearch")?.value.trim() ?? "";
+
+  if (reset) {
+    _sessionsCache = [];
+    _sessionsNextPage = 1;
+    list.innerHTML = `<div class="skeleton skeleton--card"></div>`;
+  }
+
+  try {
+    const params = new URLSearchParams({ page: String(_sessionsNextPage), page_size: "100" });
+    if (searchValue) params.set("search", searchValue);
+
+    const batch = await safeFetch(`/sessions?${params.toString()}`);
+    _sessionsCache = reset ? batch : [..._sessionsCache, ...batch];
+    const hasMore = batch.length === 100;
+    _sessionsNextPage += 1;
+
+    // Le badge compte les archives ouvertes toutes confondues -- n'a pas de
+    // sens pendant une recherche (ne refléterait que le sous-ensemble
+    // filtré), on laisse alors la dernière valeur connue.
+    if (!searchValue) _updateSidebarArchivesBadge(_sessionsCache);
+
+    if (!_sessionsCache.length) {
+      const hint = searchValue ? "Aucun résultat pour cette recherche." : "Aucune archive créée.";
+      list.innerHTML = `<div class="empty-state"><div class="empty-state__hint">${hint}</div></div>`;
+      return;
+    }
+
+    // Pendant une recherche, une liste plate (triée par récence, déjà
+    // l'ordre renvoyé par l'API) est plus utile que des dossiers repliés à
+    // rouvrir un par un -- le classeur ne s'applique qu'en navigation libre.
+    const bodyHtml = searchValue
+      ? `<div class="stack">${_sessionsCache.map(_sessionCardHtml).join("")}</div>`
+      : _groupsHtml(_groupSessionsByDate(_sessionsCache));
+
+    const loadMoreHtml = hasMore
+      ? `<button class="btn btn--ghost btn--sm" id="archiveLoadMore" type="button" style="margin-top:var(--space-3)">Charger plus d'archives…</button>`
+      : "";
+
+    list.innerHTML = bodyHtml + loadMoreHtml;
+    $("#archiveLoadMore")?.addEventListener("click", () => _loadSessions({ reset: false }));
   } catch (err) {
     if (err.name !== "AuthError") {
       list.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${escapeHtml(err.message)}</div></div>`;
