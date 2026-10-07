@@ -146,17 +146,26 @@ function _groupTileHtml(g) {
 
 function _archiveTileHtml(s) {
   const statusClass = s.status === "closed" ? "icon-tile__icon--closed" : "icon-tile__icon--open";
-  const ownerLine = !_isMine(s)
-    ? `\n${s.created_by_label || "Propriétaire inconnu"}${s.created_by_role ? ` (${s.created_by_role})` : ""}`
+  const ownerText = !_isMine(s)
+    ? `${s.created_by_label || "Propriétaire inconnu"}${s.created_by_role ? ` (${s.created_by_role})` : ""}`
     : "";
   const tooltip =
     `${s.name}\n${s.status === "closed" ? "Fermée" : "Ouverte"} · ${s.cv_count ?? 0} CV · ${s.job_count ?? 0} offres · ${s.match_count ?? 0} matches` +
-    `\n${formatDate(s.created_at)}${ownerLine}`;
+    `\n${formatDate(s.created_at)}${ownerText ? `\n${ownerText}` : ""}`;
+  // Visible en permanence, pas seulement dans l'infobulle -- demande
+  // explicite après un signalement : en vue icônes, l'ancien badge
+  // "archive d'un autre profil" (toujours affiché sur la liste en lignes)
+  // n'était plus visible que par un survol, un recul par rapport à ce que
+  // les admin/superadmin pouvaient voir d'un coup d'œil auparavant.
+  const ownerHtml = ownerText
+    ? `<span class="icon-tile__owner" title="Archive d'un autre profil">${escapeHtml(ownerText)}</span>`
+    : "";
   return `
       <button type="button" class="icon-tile" data-open-session="${s.id}" title="${escapeHtml(tooltip)}">
         <span class="icon-tile__icon ${statusClass}">${_folderIconSvg()}</span>
         <span class="icon-tile__label">${escapeHtml(s.name)}</span>
         <span class="icon-tile__meta">${s.cv_count ?? 0} CV · ${s.job_count ?? 0} offres</span>
+        ${ownerHtml}
       </button>
     `;
 }
