@@ -60,19 +60,33 @@ export function initArchives() {
     }
   });
 
-  // Click delegation on the sessions list
+  // Click delegation sur la grille d'icônes : un dossier (classeur) ouvre
+  // son contenu en interne (pas de requête réseau, re-rend depuis le cache
+  // déjà chargé) ; une archive ouvre son détail ; "‹ Archives" revient à
+  // la racine.
   $("#archiveSessionsList")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-open-session]");
-    if (btn) _loadDetail(btn.dataset.openSession);
+    const back = e.target.closest("#archiveBackBtn");
+    if (back) { _currentGroup = null; _render(); return; }
+
+    const groupTile = e.target.closest("[data-open-group]");
+    if (groupTile) { _currentGroup = groupTile.dataset.openGroup; _render(); return; }
+
+    const archiveTile = e.target.closest("[data-open-session]");
+    if (archiveTile) _loadDetail(archiveTile.dataset.openSession);
   });
 
   // Recherche en direct (nom + description, déjà supporté côté API --
   // voir GET /sessions?search=) -- débounce comme le slider de score
-  // minimum dans matches.js, pour ne pas requêter à chaque frappe.
+  // minimum dans matches.js, pour ne pas requêter à chaque frappe. Une
+  // recherche active ramène toujours à la racine : rouvrir le dossier où
+  // on se trouvait avant de chercher n'aurait pas de sens.
   let searchDebounce = null;
   $("#archiveSearch")?.addEventListener("input", () => {
     clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => _loadSessions(), 300);
+    searchDebounce = setTimeout(() => {
+      _currentGroup = null;
+      _loadSessions();
+    }, 300);
   });
 
   window.addEventListener("load-archives", () => _loadSessions());
@@ -95,27 +109,38 @@ function _updateSidebarArchivesBadge(sessions) {
 // before this fix regardless of who actually created what.
 const _isMine = (s) => s.created_by_user_id == null || s.created_by_user_id === store.authUser?.id;
 
-function _sessionCardHtml(s) {
+// Même tracé que .doc-item__icon ailleurs dans l'app, juste agrandi --
+// dossiers (classeur) et archives partagent cette forme, seule la couleur
+// de fond (.icon-tile__icon--*) les distingue, comme des tags de couleur
+// sur des dossiers Finder.
+const _folderIconSvg = () =>
+  `<svg width="26" height="26" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="3.5" rx="1" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 5.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-8" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 9h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+
+function _groupTileHtml(g) {
+  const count = g.sessions.length;
   return `
-      <article class="doc-item" style="cursor:pointer" data-archive-id="${s.id}">
-        <div class="doc-item__icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="3.5" rx="1" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 5.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-8" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
-        <div class="doc-item__body">
-          <div class="doc-item__name truncate">${escapeHtml(s.name)}</div>
-          <div class="doc-item__meta">
-            <span class="badge badge--${s.status === "closed" ? "default" : "success"}">
-              ${s.status === "closed" ? "Fermée" : "Ouverte"}
-            </span>
-            ${!_isMine(s) ? `<span class="badge badge--primary" title="Archive d'un autre profil">${escapeHtml(s.created_by_label || "Propriétaire inconnu")}${s.created_by_role ? ` · ${escapeHtml(s.created_by_role)}` : ""}</span>` : ""}
-            <span>${s.cv_count ?? 0} CV</span>
-            <span>${s.job_count ?? 0} offres</span>
-            <span>${s.match_count ?? 0} matches</span>
-            <span>${formatDate(s.created_at)}</span>
-          </div>
-        </div>
-        <div class="doc-item__actions">
-          <button class="btn btn--ghost btn--sm" data-open-session="${s.id}">Ouvrir</button>
-        </div>
-      </article>
+      <button type="button" class="icon-tile" data-open-group="${escapeHtml(g.label)}">
+        <span class="icon-tile__icon icon-tile__icon--folder">${_folderIconSvg()}</span>
+        <span class="icon-tile__label">${escapeHtml(g.label)}</span>
+        <span class="icon-tile__meta">${count} archive${count > 1 ? "s" : ""}</span>
+      </button>
+    `;
+}
+
+function _archiveTileHtml(s) {
+  const statusClass = s.status === "closed" ? "icon-tile__icon--closed" : "icon-tile__icon--open";
+  const ownerLine = !_isMine(s)
+    ? `\n${s.created_by_label || "Propriétaire inconnu"}${s.created_by_role ? ` (${s.created_by_role})` : ""}`
+    : "";
+  const tooltip =
+    `${s.name}\n${s.status === "closed" ? "Fermée" : "Ouverte"} · ${s.cv_count ?? 0} CV · ${s.job_count ?? 0} offres · ${s.match_count ?? 0} matches` +
+    `\n${formatDate(s.created_at)}${ownerLine}`;
+  return `
+      <button type="button" class="icon-tile" data-open-session="${s.id}" title="${escapeHtml(tooltip)}">
+        <span class="icon-tile__icon ${statusClass}">${_folderIconSvg()}</span>
+        <span class="icon-tile__label">${escapeHtml(s.name)}</span>
+        <span class="icon-tile__meta">${s.cv_count ?? 0} CV · ${s.job_count ?? 0} offres</span>
+      </button>
     `;
 }
 
@@ -138,9 +163,10 @@ const _dayDiff = (a, b) => Math.round((a - b) / 86400000);
 // Classeur jour / semaine / année -- demande explicite : les archives
 // récentes restent repérables une par une (Aujourd'hui/Hier), le reste se
 // range par semaine puis, au-delà, par année -- comme un vrai classeur
-// papier, où les dossiers anciens sont fermés par défaut et seuls les plus
-// récents sont ouverts d'entrée. Basé sur created_at (seule date que
-// l'API expose pour une session, voir AnalysisSessionRead).
+// papier rangé en dossiers qu'on ouvre un par un (voir _render(), qui
+// affiche ces dossiers en grille d'icônes plutôt qu'à plat). Basé sur
+// created_at (seule date que l'API expose pour une session, voir
+// AnalysisSessionRead).
 function _groupSessionsByDate(sessions) {
   const now = new Date();
   const today = _startOfDay(now);
@@ -173,29 +199,13 @@ function _groupSessionsByDate(sessions) {
 
   const groups = order
     .filter((label) => buckets.get(label).length)
-    .map((label) => ({ label, sessions: buckets.get(label), defaultOpen: true }));
+    .map((label) => ({ label, sessions: buckets.get(label) }));
 
   for (const year of [...yearBuckets.keys()].sort((a, b) => b - a)) {
-    groups.push({ label: String(year), sessions: yearBuckets.get(year), defaultOpen: false });
+    groups.push({ label: String(year), sessions: yearBuckets.get(year) });
   }
 
   return groups;
-}
-
-function _groupsHtml(groups) {
-  return groups
-    .map(
-      (g) => `
-      <details class="archive-group"${g.defaultOpen ? " open" : ""}>
-        <summary class="archive-group__header">
-          <span>${escapeHtml(g.label)}</span>
-          <span class="archive-group__count">${g.sessions.length}</span>
-        </summary>
-        <div class="archive-group__body">${g.sessions.map(_sessionCardHtml).join("")}</div>
-      </details>
-    `
-    )
-    .join("");
 }
 
 // Pagination cumulative (page_size au maximum autorisé par l'API, 100) --
@@ -204,6 +214,11 @@ function _groupsHtml(groups) {
 // pleine laisse supposer qu'il en reste d'autres.
 let _sessionsCache = [];
 let _sessionsNextPage = 1;
+let _hasMoreSessions = false;
+// null = racine (grille de dossiers jour/semaine/année) ; sinon le label
+// du dossier actuellement ouvert -- navigation 100% cliente, _render() ne
+// refait jamais de requête, juste un nouveau découpage de _sessionsCache.
+let _currentGroup = null;
 
 async function _loadSessions({ reset = true } = {}) {
   const list = $("#archiveSessionsList");
@@ -223,7 +238,7 @@ async function _loadSessions({ reset = true } = {}) {
 
     const batch = await safeFetch(`/sessions?${params.toString()}`);
     _sessionsCache = reset ? batch : [..._sessionsCache, ...batch];
-    const hasMore = batch.length === 100;
+    _hasMoreSessions = batch.length === 100;
     _sessionsNextPage += 1;
 
     // Le badge compte les archives ouvertes toutes confondues -- n'a pas de
@@ -231,30 +246,62 @@ async function _loadSessions({ reset = true } = {}) {
     // filtré), on laisse alors la dernière valeur connue.
     if (!searchValue) _updateSidebarArchivesBadge(_sessionsCache);
 
-    if (!_sessionsCache.length) {
-      const hint = searchValue ? "Aucun résultat pour cette recherche." : "Aucune archive créée.";
-      list.innerHTML = `<div class="empty-state"><div class="empty-state__hint">${hint}</div></div>`;
-      return;
-    }
-
-    // Pendant une recherche, une liste plate (triée par récence, déjà
-    // l'ordre renvoyé par l'API) est plus utile que des dossiers repliés à
-    // rouvrir un par un -- le classeur ne s'applique qu'en navigation libre.
-    const bodyHtml = searchValue
-      ? `<div class="stack">${_sessionsCache.map(_sessionCardHtml).join("")}</div>`
-      : _groupsHtml(_groupSessionsByDate(_sessionsCache));
-
-    const loadMoreHtml = hasMore
-      ? `<button class="btn btn--ghost btn--sm" id="archiveLoadMore" type="button" style="margin-top:var(--space-3)">Charger plus d'archives…</button>`
-      : "";
-
-    list.innerHTML = bodyHtml + loadMoreHtml;
-    $("#archiveLoadMore")?.addEventListener("click", () => _loadSessions({ reset: false }));
+    _render();
   } catch (err) {
     if (err.name !== "AuthError") {
       list.innerHTML = `<div class="empty-state"><div class="empty-state__hint text-error">${escapeHtml(err.message)}</div></div>`;
     }
   }
+}
+
+// Pure (ne touche jamais au réseau) : relit _sessionsCache/_currentGroup/
+// la recherche en cours et redessine la grille d'icônes en conséquence --
+// appelée aussi bien après un fetch que lors d'un simple clic sur un
+// dossier ou "‹ Archives".
+function _render() {
+  const list = $("#archiveSessionsList");
+  if (!list) return;
+
+  const searchValue = $("#archiveSearch")?.value.trim() ?? "";
+
+  if (!_sessionsCache.length) {
+    const hint = searchValue ? "Aucun résultat pour cette recherche." : "Aucune archive créée.";
+    list.innerHTML = `<div class="empty-state"><div class="empty-state__hint">${hint}</div></div>`;
+    return;
+  }
+
+  let bodyHtml;
+  // Pendant une recherche, une grille plate (triée par récence, déjà
+  // l'ordre renvoyé par l'API) est plus utile que des dossiers à rouvrir
+  // un par un -- le classeur ne s'applique qu'en navigation libre.
+  if (searchValue) {
+    bodyHtml = `<div class="icon-grid">${_sessionsCache.map(_archiveTileHtml).join("")}</div>`;
+  } else if (_currentGroup) {
+    const group = _groupSessionsByDate(_sessionsCache).find((g) => g.label === _currentGroup);
+    if (!group) {
+      // Le dossier a disparu (dernière archive qu'il contenait vient
+      // d'être supprimée/désarchivée) -- retour silencieux à la racine.
+      _currentGroup = null;
+      _render();
+      return;
+    }
+    bodyHtml = `
+      <div class="icon-browser__path">
+        <button type="button" class="icon-browser__back" id="archiveBackBtn">‹ Archives</button>
+        <span class="icon-browser__current">${escapeHtml(_currentGroup)}</span>
+      </div>
+      <div class="icon-grid">${group.sessions.map(_archiveTileHtml).join("")}</div>
+    `;
+  } else {
+    bodyHtml = `<div class="icon-grid">${_groupSessionsByDate(_sessionsCache).map(_groupTileHtml).join("")}</div>`;
+  }
+
+  const loadMoreHtml = _hasMoreSessions
+    ? `<button class="btn btn--ghost btn--sm" id="archiveLoadMore" type="button" style="margin-top:var(--space-3)">Charger plus d'archives…</button>`
+    : "";
+
+  list.innerHTML = bodyHtml + loadMoreHtml;
+  $("#archiveLoadMore")?.addEventListener("click", () => _loadSessions({ reset: false }));
 }
 
 async function _loadDetail(sessionId) {
