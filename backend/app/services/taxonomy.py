@@ -1309,7 +1309,13 @@ _SKILLS: dict[str, list[str]] = {
     "Développement social": ["developpement social"],
     "Développement économique": ["developpement economique"],
     "E Business": ["e business"],
-    "Eclipse IDE": ["eclipse ide", "eclipse"],
+    # "eclipse" nu retiré (2026-10-08) : régression réintroduite par
+    # erreur -- collision documentée avec le mot français "éclipse"
+    # (phénomène astronomique), voir
+    # test_words_colliding_with_common_french_usage_are_excluded
+    # (146 CV/1491, 10%, validation 2026-09-17). "Eclipse IDE" en phrase
+    # complète reste le seul alias sûr.
+    "Eclipse IDE": ["eclipse ide"],
     "Eco-conception": ["eco-conception"],
     "Ecologie": ["ecologie"],
     "Economie de la construction": ["economie de la construction"],
