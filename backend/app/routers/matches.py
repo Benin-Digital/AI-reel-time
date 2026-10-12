@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session as OrmSession
 from ..db import SessionLocal
 from ..deps import can_see_unclaimed_archives, owner_visible_to, require_user, visible_owner_ids
 from ..models import AnalysisSession, CvDocument, ExtractedText, JobDocument, MatchFeedback, MatchResult, User
+from ..services.identity import normalize_person_name
+from ..settings import get_settings
 
 
 def _cv_label(path: str, parsed_profile: dict | None) -> str:
@@ -41,6 +43,57 @@ def _build_labels(session, rows: list) -> tuple[dict[int, str], dict[int, str]]:
     cv_labels  = {i: _cv_label(cv_docs[i].path,  cv_texts.get(cv_docs[i].path))  for i in cv_ids  if i in cv_docs}
     job_labels = {i: _job_label(job_docs[i].path, job_texts.get(job_docs[i].path)) for i in job_ids if i in job_docs}
     return cv_labels, job_labels
+
+
+def _person_keys_by_cv(session, cv_ids: list[int]) -> dict[int, str]:
+    """cv_id -> person key, for the CVs whose parsed profile carries a usable
+    person name (see services.identity.normalize_person_name)."""
+    keys: dict[int, str] = {}
+    for start in range(0, len(cv_ids), 500):
+        chunk = cv_ids[start : start + 500]
+        rows = session.execute(
+            select(CvDocument.id, ExtractedText.parsed_profile)
+            .join(ExtractedText, ExtractedText.file_path == CvDocument.path)
+            .where(CvDocument.id.in_(chunk))
+        ).all()
+        for cv_id, profile in rows:
+            key = normalize_person_name((profile or {}).get("person_name"))
+            if key:
+                keys[int(cv_id)] = key
+    return keys
+
+
+def _dedupe_match_ids_by_person(session, stmt) -> list[int]:
+    """Match ids of `stmt`, in its order, keeping only the FIRST (so the best,
+    given the requested sort) match of each person. A CV without a usable
+    person name is never merged with anything."""
+    light = session.execute(
+        stmt.with_only_columns(MatchResult.id, MatchResult.cv_id, maintain_column_froms=True)
+    ).all()
+    keys = _person_keys_by_cv(session, [int(cv_id) for _, cv_id in light])
+    seen: set[str] = set()
+    kept: list[int] = []
+    for match_id, cv_id in light:
+        key = keys.get(int(cv_id))
+        if key is not None:
+            if key in seen:
+                continue
+            seen.add(key)
+        kept.append(int(match_id))
+    return kept
+
+
+def _rows_in_order(session, match_ids: list[int]) -> list[MatchResult]:
+    if not match_ids:
+        return []
+    by_id = {r.id: r for r in session.scalars(select(MatchResult).where(MatchResult.id.in_(match_ids))).all()}
+    return [by_id[i] for i in match_ids if i in by_id]
+
+
+def _dedupe_enabled(job_id: int | None, cv_id: int | None) -> bool:
+    """Only a job's ranking is one-line-per-person (a CV's own match list shows
+    one line per job)."""
+    return job_id is not None and cv_id is None and get_settings().match_dedupe_persons
 
 
 def _build_feedback_map(session, rows: list) -> dict[int, MatchFeedback]:
@@ -406,7 +459,11 @@ def list_matches(
             unassigned_only=unassigned_only, min_score=min_score, max_score=max_score,
             sort_by=sort_by, search=search,
         )
-        rows = session.scalars(stmt.offset(safe_offset).limit(safe_size)).all()
+        if _dedupe_enabled(job_id, cv_id):
+            kept_ids = _dedupe_match_ids_by_person(session, stmt)
+            rows = _rows_in_order(session, kept_ids[safe_offset : safe_offset + safe_size])
+        else:
+            rows = session.scalars(stmt.offset(safe_offset).limit(safe_size)).all()
         cv_labels, job_labels = _build_labels(session, rows)
         feedback_map = _build_feedback_map(session, rows)
         return [_to_match_read(row, cv_labels, job_labels, feedback_map) for row in rows]
@@ -490,7 +547,10 @@ def export_matches_csv(
             unassigned_only=unassigned_only, min_score=min_score, max_score=max_score,
             sort_by=sort_by, search=search,
         )
-        rows = session.scalars(stmt.limit(_CSV_EXPORT_MAX_ROWS)).all()
+        if _dedupe_enabled(job_id, cv_id):
+            rows = _rows_in_order(session, _dedupe_match_ids_by_person(session, stmt)[:_CSV_EXPORT_MAX_ROWS])
+        else:
+            rows = session.scalars(stmt.limit(_CSV_EXPORT_MAX_ROWS)).all()
         cv_labels, job_labels = _build_labels(session, rows)
         feedback_map = _build_feedback_map(session, rows)
         for row in rows:

@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     # only). Without this the page cleared ocr_min_text_length and OCR never ran.
     ocr_sparse_image_coverage: float = 0.5
     ocr_sparse_max_chars: int = 1500
+    # One person, one line in a job's ranking: candidacies whose CV carries the
+    # same person name (order, accents and case ignored) are merged, the best
+    # score kept. Applies to GET /matches and its CSV export when filtered on a
+    # job. Set to false to list every CV document.
+    match_dedupe_persons: bool = True
     # Hybrid scoring: combine vector (bi-encoder) score with structured score
     hybrid_scoring_enabled: bool = True
     hybrid_vector_weight: float = 0.3
