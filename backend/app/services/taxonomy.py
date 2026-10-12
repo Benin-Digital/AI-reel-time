@@ -2558,6 +2558,19 @@ _SKILLS: dict[str, list[str]] = {
     "Entity Framework": ["entity framework", "efcore"],
     "Siebel": ["siebel", "oracle siebel"],
     "Cacti": ["cacti"],
+
+    # ── AJOUTS 2026-10-12 (lot 7) -- audit de ~25 offres d'emploi reelles
+    # (secteurs infra/DevOps/cloud, data/IA, securite, assurance) -- portes
+    # a l'identique cote Keoni. La plupart des outils cites dans ces offres
+    # etaient deja couverts (OpenShift, Kubernetes, ArgoCD, Tekton, Helm,
+    # Hive/HBase/Solr, Talend, ServiceNow, Selenium, Postman...), confirmant
+    # une bonne largeur de couverture deja en place.
+    "Kerberos": ["kerberos"],
+    "Azure Data Factory": ["azure data factory", "data factory"],
+    "Samba": ["samba"],
+    "GraphTalk": ["graphtalk", "graphtalk aia"],
+    "ITBM": ["itbm"],
+    "Clarity PPM": ["clarity ppm"],
 }
 
 
