@@ -2835,6 +2835,33 @@ _SKILLS: dict[str, list[str]] = {
     "Vercel": ["vercel"],
     "Netlify": ["netlify"],
     "Cloudflare": ["cloudflare"],
+
+    # ── AJOUTS 2026-10-12 (lot 11) -- demande explicite : couvrir les
+    # technologies les plus recentes (IA generative/agents, outils dev
+    # 2025-2026) -- portes a l'identique cote Keoni. Ecartes
+    # deliberement (meme classe de risque) : Cursor/Whisper/Render/
+    # Railway/Modal/Make/Flux/Drizzle/Perplexity (mots usuels
+    # francais/anglais : curseur, chuchoter, rendre, chemin de fer,
+    # faire, flux, bruine, perplexite), Llama/Sora (collision
+    # animal/prenom), v0/Nx/Zod (trop courts/ambigus).
+    "GitHub Copilot": ["github copilot"],
+    "Replit": ["replit"],
+    "LangGraph": ["langgraph"],
+    "CrewAI": ["crewai"],
+    "AutoGPT": ["autogpt"],
+    "DALL-E": ["dall-e", "dalle"],
+    "DeepSeek": ["deepseek"],
+    "Grok": ["grok"],
+    "htmx": ["htmx"],
+    "Turborepo": ["turborepo"],
+    "tRPC": ["trpc"],
+    "Prisma": ["prisma orm", "prisma"],
+    "Fly.io": ["fly.io"],
+    "Metabase": ["metabase"],
+    "Claude Code": ["claude code"],
+    "n8n": ["n8n"],
+    "Fine-tuning": ["fine-tuning", "fine tuning"],
+    "Embeddings": ["embeddings"],
 }
 
 
