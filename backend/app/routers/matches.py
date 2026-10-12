@@ -649,5 +649,6 @@ def explain_match(match_id: int, request: Request) -> MatchExplainRead:
             priority_keywords_matched=list(details["priority_keywords_matched"]),
             priority_keywords_missing=list(details["priority_keywords_missing"]),
             missing_skills=list(details["missing_skills"]),
+            low_confidence_components=list(details.get("low_confidence_components", [])),
             match_domain=match.match_domain,
         )

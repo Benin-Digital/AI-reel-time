@@ -706,6 +706,33 @@ def _contract_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, boo
     return (1.0 if cv.contract_type == job.contract_type else 0.0), True
 
 
+def low_confidence_components_for(cv: ParsedDocument, job: ParsedDocument) -> list[str]:
+    """Components of the pair whose neutral/default value comes from MISSING
+    information rather than a real comparison (has_signal=False): they are
+    excluded from the weighted average and their weight goes to the others.
+
+    Cheap -- no model is called -- so it can be computed on demand for a stored
+    match (the persisted MatchResult does not keep it). The names are the ones
+    match_parsed_documents() puts in MatchScore.low_confidence_components.
+    """
+    low: list[str] = []
+    if not (job.required_skill_terms or job.skill_terms):
+        low.append("skills")
+    elif not cv.skill_terms:
+        pass  # no skill extracted from the CV: zero coverage WITH signal (see _skill_score)
+    if not job.priority_keyword_terms:
+        low.append("priority_keywords")
+    if not _experience_score(cv, job)[1]:
+        low.append("experience")
+    if not _education_score(cv, job)[1]:
+        low.append("education")
+    if not _language_score(cv, job)[1]:
+        low.append("languages")
+    if not _contract_score(cv, job)[1]:
+        low.append("contract")
+    return low
+
+
 # ── Result dataclass ──────────────────────────────────────────────────────────
 
 @dataclass

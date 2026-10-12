@@ -470,6 +470,9 @@ class MatchExplainRead(BaseModel):
     priority_keywords_missing: list[str] = []
     missing_skills: list[str] = []
     match_domain: str | None = None
+    # Components not evaluated for lack of data on either side (see
+    # matcher.low_confidence_components_for).
+    low_confidence_components: list[str] = []
 
 
 class AnalyzeRequest(BaseModel):

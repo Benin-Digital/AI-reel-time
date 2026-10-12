@@ -81,3 +81,43 @@ def test_scores_unchanged_by_confidence_tracking():
                  result.score_education, result.score_languages,
                  result.score_contract, result.score_semantic):
         assert 0.0 <= comp <= 1.0
+
+
+# ── Composantes non evaluees exposees par l'explication d'un match ─────────────
+#
+# low_confidence_components etait calcule par le moteur (dfab3b6) mais jamais
+# persiste ni expose pour un match enregistre, et aucun ecran ne l'affichait :
+# un score "construit sur les competences et le semantique seulement" ne disait
+# pas que l'experience, la formation, les langues et le contrat n'avaient pas
+# pu etre compares.
+
+from app.schemas import MatchExplainRead  # noqa: E402
+from app.services.explain import build_match_explanation  # noqa: E402
+from app.services.matcher import low_confidence_components_for  # noqa: E402
+from app.services.parser import parse_document  # noqa: E402
+
+
+def test_explanation_lists_components_without_data():
+    details = build_match_explanation(CV_MINIMAL, JOB_MINIMAL, 60.0, [])
+    low = details["low_confidence_components"]
+    for comp in ("experience", "education", "languages", "contract"):
+        assert comp in low
+    assert "skills" not in low
+
+
+def test_explanation_of_a_complete_pair_lists_fewer_components():
+    complete = build_match_explanation(CV_COMPLETE, JOB_COMPLETE, 80.0, [])["low_confidence_components"]
+    minimal = build_match_explanation(CV_MINIMAL, JOB_MINIMAL, 60.0, [])["low_confidence_components"]
+    assert len(complete) < len(minimal)
+
+
+def test_low_confidence_helper_matches_the_matcher_for_the_same_pair():
+    cv = parse_document(CV_MINIMAL, kind="cv")
+    job = parse_document(JOB_MINIMAL, kind="job")
+    from_helper = set(low_confidence_components_for(cv, job))
+    from_matcher = set(match_cv_to_job(CV_MINIMAL, JOB_MINIMAL).low_confidence_components)
+    assert from_helper == from_matcher
+
+
+def test_the_api_schema_carries_the_field():
+    assert "low_confidence_components" in MatchExplainRead.model_fields

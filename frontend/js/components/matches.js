@@ -664,11 +664,31 @@ function _renderComponentScoresDetailed(data) {
     </div>`;
   }).join("");
 
+  // Components with no data to compare on either side: excluded from the
+  // average, their weight goes to the others (matcher.low_confidence_components_for).
+  // "Mots-clés prio" is not listed: it is optional by design (offers without
+  // priority keywords are the norm), so its absence is not a reading failure.
+  const notEvaluated = (data.low_confidence_components ?? [])
+    .map((name) => _NOT_EVALUATED_LABELS[name])
+    .filter(Boolean);
+  const note = notEvaluated.length
+    ? `<p class="score-breakdown__note">Non évalué (information absente) : ${notEvaluated.map(escapeHtml).join(", ")}. Leur poids est reporté sur les autres composantes.</p>`
+    : "";
+
   return `<div>
     <div class="divider-label" style="margin-bottom:var(--space-3)">Détail des scores${domain}</div>
     <div class="score-breakdown">${rows}</div>
+    ${note}
   </div>`;
 }
+
+const _NOT_EVALUATED_LABELS = {
+  skills: "Compétences",
+  experience: "Expérience",
+  education: "Formation",
+  languages: "Langues",
+  contract: "Contrat",
+};
 
 // ---------------------------------------------------------------------------
 // Feedback helpers

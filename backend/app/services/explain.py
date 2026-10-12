@@ -3,7 +3,12 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from ..settings import get_settings
-from .matcher import _apply_priority_keywords, _resolve_priority_keywords, split_priority_keywords
+from .matcher import (
+    _apply_priority_keywords,
+    _resolve_priority_keywords,
+    low_confidence_components_for,
+    split_priority_keywords,
+)
 from .parser import parse_document
 from .structured import fold_text
 
@@ -176,4 +181,8 @@ def build_match_explanation(
         # structured list too, same treatment as priority keywords get,
         # regardless of whether the job has any priority keywords set.
         "missing_skills": missing_required,
+        # Components with no data to compare (excluded from the average, their
+        # weight goes to the others) -- previously computed by the matcher but
+        # never persisted nor shown (dfab3b6).
+        "low_confidence_components": low_confidence_components_for(cv_profile, job_profile),
     }
