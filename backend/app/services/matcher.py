@@ -21,7 +21,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from .parser import ParsedDocument, parse_document
-from .taxonomy import normalize_skill
+from .taxonomy import WEAK_SKILL_CANONICALS, find_skills, normalize_skill
 
 logger = logging.getLogger(__name__)
 
@@ -445,6 +445,33 @@ def _weights(profile: str | None = None) -> dict[str, float]:
 # components) so a recruiter can tell a legitimately-neutral 0.5 apart from a
 # 0.5 that just means "we couldn't read this".
 
+# Weight of a required skill in the coverage. A skill from the job TITLE is the
+# job's subject ("DevSecOps" for a DevSecOps job); a low-discrimination skill
+# (taxonomy.WEAK_SKILL_CANONICALS: Cycle, Compliance, Agile...) is cited in
+# almost every IT CV. Without these weights "Cycle" counted as much as
+# "DevSecOps": the top-ranked candidate had 16 of 21 required skills without
+# DevSecOps, Python or OpenShift.
+_EMPHASIZED_SKILL_WEIGHT = 3.0
+_WEAK_SKILL_WEIGHT = 0.25
+
+
+def _build_skill_weights(
+    skills: set[str], title_skills: set[str], weak_skills: frozenset[str]
+) -> dict[str, float]:
+    """3.0 if the skill is in the job title, else 0.25 if it is a weak skill,
+    else 1.0. A weak skill in the title keeps the full emphasis (a "Product
+    Owner" job must be able to require "Product Owner")."""
+    weights: dict[str, float] = {}
+    for skill in skills:
+        if skill in title_skills:
+            weights[skill] = _EMPHASIZED_SKILL_WEIGHT
+        elif skill in weak_skills:
+            weights[skill] = _WEAK_SKILL_WEIGHT
+        else:
+            weights[skill] = 1.0
+    return weights
+
+
 def _skill_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     """Coverage of required job skills by CV skills.
 
@@ -476,13 +503,26 @@ def _skill_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
     matched = cv_skills & required
     unmatched = required - matched
 
-    # Base credit: one point per exactly-matched required skill.
-    credit = float(len(matched))
+    title_skills = set(find_skills(getattr(job, "title_line", "") or ""))
+    weights = _build_skill_weights(required, title_skills, WEAK_SKILL_CANONICALS)
 
-    # Semantic top-up for the unmatched required skills (best-effort).
-    credit += _semantic_skill_credit(unmatched, cv_skills)
+    if all(w == 1.0 for w in weights.values()):
+        # Legacy path: every required skill weighs 1.
+        # Base credit: one point per exactly-matched required skill.
+        credit = float(len(matched))
 
-    coverage = credit / len(required)
+        # Semantic top-up for the unmatched required skills (best-effort).
+        credit += _semantic_skill_credit(unmatched, cv_skills)
+
+        coverage = credit / len(required)
+    else:
+        total_weight = sum(weights.values())
+        credit = sum(weights[s] for s in matched)
+        # Semantic credit computed skill by skill so it is weighted like the
+        # skill itself (the function returns the sum of its credits).
+        for skill in unmatched:
+            credit += weights[skill] * _semantic_skill_credit({skill}, cv_skills)
+        coverage = credit / total_weight
 
     # Nice-to-have bonus (15 % weight) — kept lexical, unchanged.
     nice = set(job.nice_skill_terms)

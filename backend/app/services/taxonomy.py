@@ -3178,6 +3178,46 @@ _GENERIC_SKILL_CANONICALS: frozenset[str] = frozenset({
 
 _EXCLUDED_FROM_HARD_SKILLS = SOFT_SKILL_CANONICALS | _GENERIC_SKILL_CANONICALS
 
+# Language names detected as "skills" by the ROME vocabulary. They are already
+# scored by the languages component (job: required languages, CV: languages
+# found), so counting them as a skill too handed free coverage to any CV
+# written in French (a job saying "Langues : Français" gained a "required
+# skill" everybody has). Dropped from BOTH the hard and the soft lists.
+LANGUAGE_CANONICALS: frozenset[str] = frozenset({
+    "Français",
+    "Espagnol",
+    "Allemand",
+    "Arabe",
+    "Italien",
+    "Portugais",
+    "Chinois",
+    "Néerlandais",
+    "Russe",
+    "Japonais",
+})
+
+# Skills with LOW discriminating power: process / organisation concepts cited
+# in almost every IT job and CV, that do not tell one profile from another.
+# Observed on the sister platform (Keoni) on 2026-10-12 on a DevSecOps job: 8
+# of the 16 "aligned skills" of the top-ranked candidate were of this kind
+# (Cycle, Compliance, Product Owner, SGBD, Scrum, Agile, Systèmes
+# d'exploitation...), while he had no DevSecOps, Python or OpenShift -- each
+# term counted as much as "DevSecOps" itself. They are NOT removed (a "Product
+# Owner" job must still be able to require them): they weigh
+# WEAK_SKILL_WEIGHT instead of 1 in the coverage, unless they appear in the
+# job title (see matcher.build_skill_weights).
+WEAK_SKILL_CANONICALS: frozenset[str] = frozenset({
+    "Cycle",
+    "Compliance",
+    "Parties prenantes",
+    "Systèmes d’exploitation",
+    "SGBD",
+    "Architecture",
+    "Agile",
+    "Scrum",
+    "Product Owner",
+})
+
 
 def is_soft_skill(canonical: str) -> bool:
     return canonical in SOFT_SKILL_CANONICALS
@@ -3188,7 +3228,7 @@ def partition_skills(skills: list[str]) -> tuple[list[str], list[str]]:
     "soft" here also absorbs _GENERIC_SKILL_CANONICALS (see comment above) --
     both are excluded from hard-skill coverage for the same reason, even
     though not all of them are behavioural traits."""
-    hard = [s for s in skills if s not in _EXCLUDED_FROM_HARD_SKILLS]
+    hard = [s for s in skills if s not in _EXCLUDED_FROM_HARD_SKILLS and s not in LANGUAGE_CANONICALS]
     soft = [s for s in skills if s in _EXCLUDED_FROM_HARD_SKILLS]
     return hard, soft
 
