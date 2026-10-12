@@ -461,7 +461,17 @@ def _skill_score(cv: ParsedDocument, job: ParsedDocument) -> tuple[float, bool]:
         return 0.5, False  # job lists no extractable required skills
     cv_skills = set(cv.skill_terms)
     if not cv_skills:
-        return 0.0, False  # nothing extracted from the CV to compare
+        # Nothing detected in the CV although the job lists required skills:
+        # ZERO coverage, WITH signal. Excluding it from the average (the
+        # previous has_signal=False) handed such a CV the semantic component
+        # alone -- ~0.73 for almost everyone, since the cross-encoder output
+        # barely varies across candidates (see _DEFAULT_W) -- and let a CV
+        # whose text is missing, unreadable (PDF font without a Unicode map)
+        # or truncated outrank genuinely relevant profiles with partial
+        # coverage. Observed on the sister platform (Keoni) on 2026-10-12:
+        # ~40 badly extracted CVs filled the top of every ranking. With
+        # signal, the coverage cap below applies (score <= 30).
+        return 0.0, True
 
     matched = cv_skills & required
     unmatched = required - matched

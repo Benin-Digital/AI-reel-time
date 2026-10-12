@@ -42,12 +42,14 @@ def test_exact_match_is_full_score():
     assert ok is True
 
 
-def test_no_cv_skills_is_zero():
+def test_no_cv_skills_is_zero_with_signal():
+    # Absence d'information != bonne nouvelle : couverture nulle, avec signal,
+    # pour que le plafond de couverture s'applique (voir _skill_score).
     cv = _Doc([])
     job = _Doc(["Python"])
     score, ok = matcher._skill_score(cv, job)
     assert score == 0.0
-    assert ok is False
+    assert ok is True
 
 
 def test_semantic_credit_disabled_falls_back_to_lexical(monkeypatch):

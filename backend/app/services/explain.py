@@ -136,6 +136,13 @@ def build_match_explanation(
     if missing_required:
         vigilance.append(f"Competences manquantes cote offre: {_format_keywords(missing_required)}.")
 
+    if required_terms and not cv_skill_terms:
+        vigilance.insert(
+            0,
+            "Aucune competence detectee dans le CV : texte absent, illisible ou incomplet. "
+            "Score plafonne, a verifier manuellement.",
+        )
+
     cv_len = len((cv_text or "").strip())
     job_len = len((job_text or "").strip())
     if cv_len < settings.ocr_min_text_length:
