@@ -71,8 +71,16 @@ export const safeFetch = async (path, options = {}) => {
         throw new Error(`${res.status} : ${msg}`.trim());
       }
 
+      // A 204 (e.g. DELETE /sessions/{id}) has no body, yet FastAPI still sends
+      // `content-type: application/json` with it: calling res.json() on it threw
+      // "Unexpected end of JSON input" AFTER the deletion had succeeded, so the
+      // UI showed an error for an operation that had worked.
+      if (res.status === 204 || res.status === 205) return null;
+
       const ct = res.headers.get("content-type") ?? "";
-      return ct.includes("application/json") ? res.json() : res.text();
+      if (!ct.includes("application/json")) return res.text();
+      const raw = await res.text();
+      return raw ? JSON.parse(raw) : null;
 
     } catch (err) {
       lastError = err;
