@@ -557,7 +557,7 @@ async function _loadExplain(matchId) {
 function _renderExplainContent(data) {
   const score     = clampScore(data.score);
   const tone      = scoreTone(score);
-  const keywords      = (data.common_keywords ?? data.top_keywords ?? []).filter(Boolean).slice(0, 12);
+  const keywords      = (data.keyword_hits ?? data.common_keywords ?? data.top_keywords ?? []).filter(Boolean).slice(0, 12);
   const missingSkills = (data.missing_skills ?? []).filter(Boolean);
   const why       = (data.why_match  ?? []).filter(Boolean);
   const vigilance = (data.vigilance  ?? []).filter(Boolean);
@@ -842,7 +842,7 @@ function _buildExplainText(data) {
   const lines    = [`Score : ${score}% (${tone.label})`];
   if (data.summary) lines.push("", data.summary);
 
-  const keywords = (data.common_keywords ?? data.top_keywords ?? []).filter(Boolean).slice(0, 12);
+  const keywords = (data.keyword_hits ?? data.common_keywords ?? data.top_keywords ?? []).filter(Boolean).slice(0, 12);
   if (keywords.length) lines.push("", "Mots-clés : " + keywords.join(", "));
 
   const missingSkills = (data.missing_skills ?? []).filter(Boolean);

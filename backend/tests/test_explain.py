@@ -92,3 +92,30 @@ def test_explanation_without_priority_keywords_omits_the_section():
     assert details["priority_keywords_matched"] == []
     assert details["priority_keywords_missing"] == []
     assert "mots-cles prioritaires" not in " ".join(details["why_match"]).lower()
+
+
+# ── Contrat API / interface : "Mots-cles communs" de la fenetre d'analyse ─────
+#
+# GET /matches/{id}/explain renvoie les mots-cles communs dans `keyword_hits`,
+# mais l'interface lisait `common_keywords` / `top_keywords` (champs d'AUTRES
+# reponses) : la section "Mots-cles communs" affichait donc toujours "Aucun
+# mot-cle detecte", meme quand les mots-cles etaient bien detectes et stockes.
+
+def test_explanation_returns_the_stored_keywords_as_keyword_hits():
+    details = build_match_explanation(CV_TEXT, JOB_TEXT, 70.0, ["python", "django", ""])
+    assert details["keyword_hits"] == ["python", "django"]
+
+
+def test_frontend_reads_the_field_the_explain_endpoint_returns():
+    from pathlib import Path
+
+    from app.schemas import MatchExplainRead
+
+    assert "keyword_hits" in MatchExplainRead.model_fields
+    source = Path(__file__).resolve().parents[2].joinpath(
+        "frontend", "js", "components", "matches.js"
+    ).read_text(encoding="utf-8")
+    # chaque lecture des mots-cles d'une explication doit inclure keyword_hits
+    reads = [line for line in source.splitlines() if "data.common_keywords" in line]
+    assert reads, "lecture des mots-cles de l'explication introuvable"
+    assert all("data.keyword_hits" in line for line in reads)
