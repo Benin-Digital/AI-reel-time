@@ -119,6 +119,12 @@ class Settings(BaseSettings):
     # in the single event worker thread.
     ocr_max_pages: int = 20
     ocr_page_timeout_seconds: int = 25
+    # A page is "sparse" when a large image covers it and little text was
+    # extracted: a CV body rendered as an image with only a few lines in the
+    # text layer (observed on Keoni, 2026-10-12: 928 chars of civil status
+    # only). Without this the page cleared ocr_min_text_length and OCR never ran.
+    ocr_sparse_image_coverage: float = 0.5
+    ocr_sparse_max_chars: int = 1500
     # Hybrid scoring: combine vector (bi-encoder) score with structured score
     hybrid_scoring_enabled: bool = True
     hybrid_vector_weight: float = 0.3

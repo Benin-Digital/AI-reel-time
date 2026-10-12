@@ -25,6 +25,19 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+# Above this many characters, a text with almost no common word is considered
+# unreadable (see looks_unreadable).
+_UNREADABLE_MIN_CHARS = 120
+
+# Common French and English words that identify a readable text: a normal CV
+# page contains a high share of them, a text whose PDF font was decoded wrongly
+# contains almost none.
+_COMMON_WORDS = frozenset(
+    """de du des la le les un une et en au aux pour par sur avec dans que qui est sont ce cette ces son sa ses
+    leur the and of to in for with on at by from is are as an or be this that it je ai suis nous vous il elle
+    ils mon ma mes ou mais plus entre sans chez vers sous ans année années depuis""".split()
+)
+
 # Lines longer than this are treated as candidates for the repeated-page-
 # header/footer dedup below; short lines never are. A page header/footer
 # ("Curriculum Vitae - Jean Dupont", "Document confidentiel") is almost
@@ -312,6 +325,60 @@ def _line_center_in_bbox(line_bbox: tuple[float, float, float, float], table_bbo
     return table_bbox[0] <= cx <= table_bbox[2] and table_bbox[1] <= cy <= table_bbox[3]
 
 
+def looks_unreadable(text: str) -> bool:
+    """True for text that is PRESENT but unusable: typically a PDF whose font has
+    no Unicode mapping, which comes out as shifted characters ("DWDDQDO\\VW",
+    "3\\WKRQ64/" for "Data Analyst", "Python SQL"). Length alone cannot detect it,
+    which is why OCR -- triggered only on nearly-empty pages -- missed these CVs,
+    which then had no detected skill at all.
+
+    Criteria: enough characters, almost no common French/English word, AND either
+    abnormally long words (spaces are gone) or symbols inside words. A plain list
+    of tools ("Python, SQL, Docker...") or a civil-status block meets neither."""
+    t = text.strip()
+    if len(t) < _UNREADABLE_MIN_CHARS:
+        return False
+    words = re.findall(r"[^\W\d_]{2,}", t.lower())
+    if len(words) < 8:
+        return len(t) >= 400  # many characters, almost no word
+    common_share = sum(1 for w in words if w in _COMMON_WORDS) / len(words)
+    long_tokens = sum(1 for w in words if len(w) >= 15) / len(words)
+    odd_symbols = len(re.findall(r"[A-Za-z][\[\\\]«»¬\^{}|~][A-Za-z]", t)) / len(words)
+    return common_share < 0.03 and (long_tokens > 0.15 or odd_symbols > 0.05)
+
+
+def page_ocr_reason(text: str, image_coverage: float) -> str | None:
+    """Why a page must go through OCR, or None when its text is reliable:
+    "empty" (almost no characters), "unreadable" (wrongly decoded text) or
+    "sparse" (large image, little text). Pure function, tested on its own."""
+    stripped = text.strip()
+    if len(stripped) < settings.ocr_min_text_length:
+        return "empty"
+    if looks_unreadable(stripped):
+        return "unreadable"
+    if image_coverage >= settings.ocr_sparse_image_coverage and len(stripped) < settings.ocr_sparse_max_chars:
+        return "sparse"
+    return None
+
+
+def _image_coverage(page) -> float:
+    """Share of the page area covered by images (0.0 to 1.0)."""
+    try:
+        rect = page.rect
+        page_area = float(rect.width * rect.height)
+        if page_area <= 0:
+            return 0.0
+        covered = 0.0
+        for info in page.get_image_info():
+            x0, y0, x1, y1 = info.get("bbox", (0, 0, 0, 0))
+            width = max(0.0, min(x1, rect.x1) - max(x0, rect.x0))
+            height = max(0.0, min(y1, rect.y1) - max(y0, rect.y0))
+            covered += width * height
+        return min(1.0, covered / page_area)
+    except Exception:  # noqa: BLE001 -- a page without image info is never "sparse"
+        return 0.0
+
+
 def extract_text_from_pdf(path: Path) -> str:
     """Extract PDF text via PyMuPDF with column-aware ordering; OCR fallback for scanned pages.
 
@@ -345,7 +412,8 @@ def extract_text_from_pdf(path: Path) -> str:
     try:
         doc = fitz.open(str(path))
         page_texts: list[str] = []
-        weak_pages: list[int] = []  # 0-indexed pages below the OCR threshold
+        weak_pages: list[int] = []  # 0-indexed pages to run through OCR
+        weak_reasons: dict[int, str] = {}
         for i, page in enumerate(doc):
             raw = page.get_text("dict")
             blocks = [b for b in raw.get("blocks", []) if b.get("type") == 0]
@@ -369,8 +437,10 @@ def extract_text_from_pdf(path: Path) -> str:
             ordered = _order_lines_by_column(lines, raw.get("width") or page.rect.width)
             t = "\n".join(ln["text"] for ln in ordered)
             page_texts.append(t)
-            if len(t.strip()) < settings.ocr_min_text_length:
+            reason = page_ocr_reason(t, _image_coverage(page))
+            if reason:
                 weak_pages.append(i)
+                weak_reasons[i] = reason
         doc.close()
 
         if weak_pages:
@@ -384,15 +454,22 @@ def extract_text_from_pdf(path: Path) -> str:
                 weak_pages = weak_pages[: settings.ocr_max_pages]
 
             logger.info(
-                "PDF %s: %d page(s) below OCR threshold (%d chars), running OCR on those pages only",
+                "PDF %s: %d page(s) to re-read by OCR (%s), running OCR on those pages only",
                 path.name,
                 len(weak_pages),
-                settings.ocr_min_text_length,
+                ", ".join(f"p{i + 1}:{weak_reasons[i]}" for i in weak_pages),
             )
             ocr_by_page = _ocr_pdf_pages(path, weak_pages)
             for i in weak_pages:
                 ocr_text = ocr_by_page.get(i, "")
-                if len(ocr_text.strip()) > len(page_texts[i].strip()):
+                if not ocr_text.strip():
+                    continue
+                if weak_reasons[i] == "unreadable":
+                    # The original text is noise: OCR is preferable even when
+                    # shorter, as long as it is itself readable.
+                    if not looks_unreadable(ocr_text):
+                        page_texts[i] = ocr_text
+                elif len(ocr_text.strip()) > len(page_texts[i].strip()):
                     page_texts[i] = ocr_text
 
         return clean_text("\n".join(page_texts))
